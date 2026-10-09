@@ -47,7 +47,7 @@ Each task keeps `pnpm verify` green once T1 exists. Tests named here are the pro
 
 ## Observability foundations
 
-- [ ] **T7. Logger with trace correlation and redaction**
+- [x] **T7. Logger with trace correlation and redaction**
   - ACs: AC-7
   - Do: pino factory; `mixin` adds `trace_id`/`span_id` from the active span; redact `req.headers.authorization`, `req.headers["x-api-key"]`; accepts a destination stream for tests.
   - Test: `test/unit/telemetry/logger.test.ts` › `adds trace ids inside an active span`, `omits trace ids outside spans`, `redacts authorization header`.
