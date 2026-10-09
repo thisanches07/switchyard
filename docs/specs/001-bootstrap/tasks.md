@@ -87,7 +87,7 @@ Each task keeps `pnpm verify` green once T1 exists. Tests named here are the pro
 
 ## Process lifecycle
 
-- [ ] **T13. Graceful shutdown**
+- [x] **T13. Graceful shutdown**
   - ACs: AC-9
   - Do: `installShutdown({ app, closers, timeoutMs, exit })` per design §3.3 (close app, then closers in order, forced exit on timeout, second signal exits immediately); `exit` injectable for tests.
   - Test: `test/unit/lifecycle/shutdown.test.ts` › `closes app then closers in order`, `forces exit after timeout`, `second signal exits immediately`; `test/unit/lifecycle/shutdown.process.test.ts` › `exits within 10s on SIGTERM` (skipped on win32).
