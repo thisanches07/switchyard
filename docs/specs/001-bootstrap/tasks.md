@@ -27,7 +27,7 @@ Each task keeps `pnpm verify` green once T1 exists. Tests named here are the pro
   - Test: `test/unit/config/errors.test.ts` › `formats issues with path and source`.
   - Files: `src/config/errors.ts`
 
-- [ ] **T4. Environment schema**
+- [x] **T4. Environment schema**
   - ACs: AC-6
   - Do: Zod schema from design §4.2 (`DATABASE_URL`, `REDIS_URL` required; defaults; `SHUTDOWN_TIMEOUT_MS < 10000`); `loadEnv(env)` returns typed env or throws `ConfigError`.
   - Test: `test/unit/config/env.test.ts` › `applies defaults`, `rejects missing DATABASE_URL`, `rejects invalid PORT`, `rejects SHUTDOWN_TIMEOUT_MS >= 10000`.
