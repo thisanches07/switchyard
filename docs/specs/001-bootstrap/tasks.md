@@ -39,7 +39,7 @@ Each task keeps `pnpm verify` green once T1 exists. Tests named here are the pro
   - Test: `test/unit/config/schema.test.ts` › `accepts config/switchyard.example.yaml`, `rejects unknown top-level key`, `rejects alias with unknown provider`, `rejects baseUrl and baseUrlEnv together`, `rejects similarityThreshold > 1`.
   - Files: `src/config/schema.ts`
 
-- [ ] **T6. Config loader**
+- [x] **T6. Config loader**
   - ACs: AC-6, AC-2
   - Do: `loadConfig(path, env)`: read file, parse with `yaml` (syntax errors → `ConfigError` with line/column), validate, resolve `baseUrlEnv` from env (missing env var → `ConfigError`).
   - Test: `test/unit/config/load.test.ts` › `loads example config`, `reports YAML syntax error with position`, `reports missing file`, `resolves baseUrlEnv to host Ollama URL`, `fails when baseUrlEnv variable is unset`.

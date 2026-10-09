@@ -1,0 +1,4 @@
+providers:
+  ollama:
+    type: openai-compatible
+    baseUrl: [unclosed

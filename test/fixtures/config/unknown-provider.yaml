@@ -1,0 +1,8 @@
+providers:
+  ollama:
+    type: openai-compatible
+    baseUrlEnv: OLLAMA_BASE_URL
+aliases:
+  fast:
+    strategy: priority
+    candidates: [grok/llama-3]
