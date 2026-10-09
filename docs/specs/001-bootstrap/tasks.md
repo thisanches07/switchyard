@@ -73,7 +73,7 @@ Each task keeps `pnpm verify` green once T1 exists. Tests named here are the pro
   - Test: `test/unit/telemetry/correlation.test.ts` › `request span traceId equals log trace_id`.
   - Files: `test/helpers/telemetry.ts`, `test/unit/telemetry/correlation.test.ts`
 
-- [ ] **T11. Readiness aggregation**
+- [x] **T11. Readiness aggregation**
   - ACs: AC-5
   - Do: `runReadiness(checks, timeoutMs)`: parallel checks with `AbortSignal.timeout`, statuses `ok | error | timeout`, `switchyard.readyz.check` spans, `switchyard_readiness_check_failures_total` counter; `GET /readyz` returning 200 or 503 per design §4.1.
   - Test: `test/unit/health/readiness.test.ts` › `all ok → ready`, `one failing → not_ready lists it`, `hanging check → timeout within budget`; `routes.test.ts` › `GET /readyz returns 503 with failing list`.
