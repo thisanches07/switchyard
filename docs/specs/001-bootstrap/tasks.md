@@ -21,7 +21,7 @@ Each task keeps `pnpm verify` green once T1 exists. Tests named here are the pro
 
 ## Configuration
 
-- [ ] **T3. Config errors and formatting**
+- [x] **T3. Config errors and formatting**
   - ACs: AC-6
   - Do: `ConfigError` holding `{ path, message }[]` + source label; `formatConfigError()` producing the multi-line message from design §4.3.
   - Test: `test/unit/config/errors.test.ts` › `formats issues with path and source`.
