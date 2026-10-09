@@ -1,0 +1,12 @@
+# USD per 1M tokens. Keep in sync with each provider's official pricing page.
+# Values marked TODO must be filled from the provider's docs before relying on cost numbers.
+# `verifiedAt` documents when a price was last checked.
+
+models:
+  ollama/llama3.2:          { input: 0, output: 0, verifiedAt: 2026-10-09 }
+  ollama/nomic-embed-text:  { input: 0, output: 0, verifiedAt: 2026-10-09 }
+  mock/*:                   { input: 1.0, output: 2.0, note: "synthetic prices for tests" }
+  groq/llama-3.1-8b-instant:      { input: TODO, output: TODO }
+  gemini/gemini-2.5-flash:        { input: TODO, output: TODO }
+  gemini/gemini-2.5-pro:          { input: TODO, output: TODO }
+  claude/claude-sonnet-5-5:       { input: TODO, output: TODO, cachedInput: TODO }
