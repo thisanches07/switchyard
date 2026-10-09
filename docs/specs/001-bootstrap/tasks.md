@@ -33,7 +33,7 @@ Each task keeps `pnpm verify` green once T1 exists. Tests named here are the pro
   - Test: `test/unit/config/env.test.ts` › `applies defaults`, `rejects missing DATABASE_URL`, `rejects invalid PORT`, `rejects SHUTDOWN_TIMEOUT_MS >= 10000`.
   - Files: `src/config/env.ts`
 
-- [ ] **T5. Config file schema**
+- [x] **T5. Config file schema**
   - ACs: AC-6, AC-2
   - Do: Zod schema for all top-level sections (design §4.3): `.strict()` top level, provider `type` enum, exactly one of `baseUrl`/`baseUrlEnv` for `openai-compatible`, alias candidates reference known providers, positive numbers, `similarityThreshold` in (0, 1].
   - Test: `test/unit/config/schema.test.ts` › `accepts config/switchyard.example.yaml`, `rejects unknown top-level key`, `rejects alias with unknown provider`, `rejects baseUrl and baseUrlEnv together`, `rejects similarityThreshold > 1`.
