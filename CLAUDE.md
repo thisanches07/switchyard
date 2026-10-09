@@ -10,7 +10,7 @@ Switchyard is a self-hosted, OpenAI-compatible LLM gateway (Node.js 24 + TypeScr
 5. **Stay in scope.** Don't refactor or add features outside the current task. Put ideas in the spec's "Open questions" or the backlog.
 6. **Verify before done.** A task is done only when `pnpm verify` passes; then tick it in `tasks.md` and commit.
 7. **Keep the backlog current.** Update the status column in `docs/specs/README.md` when a spec changes state.
-8. **English only** in code, comments, docs and commits. `PLANO_DO_PROJETO.md` and `IDEIAS_DE_PROJETOS.md` are the owner's local pt-BR notes (git-ignored): read them for context, never commit them.
+8. **English only** in code, comments, docs and commits. `PLANO_DO_PROJETO.md` is the owner's local pt-BR plan (git-ignored): read it for context, never commit it.
 
 ## Commands
 - `pnpm dev`: gateway in watch mode · `pnpm dev:worker`: usage worker

@@ -31,7 +31,6 @@ deploy/terraform/.terraform/
 
 # Personal planning notes (pt-BR), kept local only
 PLANO_DO_PROJETO.md
-IDEIAS_DE_PROJETOS.md
 
 # Claude Code local settings
 .claude/settings.local.json
