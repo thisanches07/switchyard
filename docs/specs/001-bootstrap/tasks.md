@@ -53,7 +53,7 @@ Each task keeps `pnpm verify` green once T1 exists. Tests named here are the pro
   - Test: `test/unit/telemetry/logger.test.ts` › `adds trace ids inside an active span`, `omits trace ids outside spans`, `redacts authorization header`.
   - Files: `src/infra/logger.ts`, `src/infra/telemetry/tracing.ts`
 
-- [ ] **T8. Telemetry registration**
+- [x] **T8. Telemetry registration**
   - ACs: AC-7
   - Do: `src/infra/telemetry/register.ts` starting `NodeSDK` (OTLP HTTP exporters for traces and metrics, HTTP/undici/pg/ioredis instrumentations, `service.name` from env), honouring `OTEL_SDK_DISABLED`; export `shutdownTelemetry()`.
   - Test: `test/unit/telemetry/register.test.ts` › `does not start when OTEL_SDK_DISABLED=true`, `shutdownTelemetry resolves when SDK not started`.
