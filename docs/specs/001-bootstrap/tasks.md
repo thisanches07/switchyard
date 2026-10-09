@@ -67,7 +67,7 @@ Each task keeps `pnpm verify` green once T1 exists. Tests named here are the pro
   - Test: `test/unit/health/routes.test.ts` › `GET /healthz returns ok`, `unknown route returns OpenAI-style 404`.
   - Files: `src/app.ts`, `src/modules/health/routes.ts`, `src/core/health.ts`
 
-- [ ] **T10. Trace/log correlation proof**
+- [x] **T10. Trace/log correlation proof**
   - ACs: AC-7
   - Do: wire the in-memory span exporter into a test helper.
   - Test: `test/unit/telemetry/correlation.test.ts` › `request span traceId equals log trace_id`.
