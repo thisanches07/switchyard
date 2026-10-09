@@ -3,7 +3,8 @@ import { ConfigError } from "./errors.js";
 import { toConfigIssues } from "./zod-issues.js";
 
 const envSchema = z.object({
-  PORT: z.coerce.number().int().min(1).max(65535).default(8080),
+  // 0 asks the OS for a free port (used by tests).
+  PORT: z.coerce.number().int().min(0).max(65535).default(8080),
   HOST: z.string().min(1).default("0.0.0.0"),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
   SWITCHYARD_CONFIG: z.string().min(1).default("config/switchyard.yaml"),

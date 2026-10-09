@@ -108,7 +108,7 @@ Unknown routes return 404 in the OpenAI error shape: `{"error":{"message":"Route
 ### 4.2 Environment variables (`src/config/env.ts`)
 | Var | Required | Default | Notes |
 |---|---|---|---|
-| `PORT` | no | `8080` | int 1–65535 |
+| `PORT` | no | `8080` | int 0–65535 (0 = ephemeral, for tests) |
 | `HOST` | no | `0.0.0.0` | |
 | `LOG_LEVEL` | no | `info` | pino levels |
 | `SWITCHYARD_CONFIG` | no | `config/switchyard.yaml` | path to YAML |

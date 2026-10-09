@@ -93,7 +93,7 @@ Each task keeps `pnpm verify` green once T1 exists. Tests named here are the pro
   - Test: `test/unit/lifecycle/shutdown.test.ts` › `closes app then closers in order`, `forces exit after timeout`, `second signal exits immediately`; `test/unit/lifecycle/shutdown.process.test.ts` › `exits within 10s on SIGTERM` (skipped on win32).
   - Files: `src/lifecycle/shutdown.ts`, test files above
 
-- [ ] **T14. Server entry point**
+- [x] **T14. Server entry point**
   - ACs: AC-6, AC-9
   - Do: `src/server.ts` `main()`: loadEnv → loadConfig → logger → clients → buildApp → listen → installShutdown; on `ConfigError` print formatted message to stderr and exit 1; listen errors exit 1.
   - Test: `test/unit/server/boot.test.ts` › `exits non-zero with readable error on invalid config`, `exits non-zero when DATABASE_URL is missing` (spawns the built server).
