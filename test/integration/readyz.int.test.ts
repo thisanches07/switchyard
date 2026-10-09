@@ -18,8 +18,8 @@ describe("/readyz with real dependencies", () => {
 
   beforeAll(async () => {
     [postgres, redisContainer] = await Promise.all([
-      new PostgreSqlContainer("pgvector/pgvector:pg17").start(),
-      new RedisContainer("redis:7-alpine").start(),
+      new PostgreSqlContainer("pgvector/pgvector:0.8.7-pg17").start(),
+      new RedisContainer("redis:7.4.11-alpine").start(),
     ]);
     pool = createPostgresPool(postgres.getConnectionUri());
     redis = createRedisClient(redisContainer.getConnectionUrl());
