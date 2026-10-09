@@ -61,9 +61,9 @@ Each task keeps `pnpm verify` green once T1 exists. Tests named here are the pro
 
 ## HTTP app
 
-- [ ] **T9. App factory, 404 shape and health endpoint**
+- [x] **T9. App factory, 404 shape and health endpoint**
   - ACs: AC-4, AC-7
-  - Do: `buildApp(deps)` with injected logger and checks; register `@fastify/otel`; OpenAI-shaped 404 handler; `GET /healthz`; health routes log at `debug`.
+  - Do: `buildApp(deps)` with injected logger and checks; register `@fastify/otel`; OpenAI-shaped 404 handler; `GET /healthz`; health routes use log level `warn`.
   - Test: `test/unit/health/routes.test.ts` › `GET /healthz returns ok`, `unknown route returns OpenAI-style 404`.
   - Files: `src/app.ts`, `src/modules/health/routes.ts`, `src/core/health.ts`
 
