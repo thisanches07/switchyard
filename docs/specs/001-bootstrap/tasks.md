@@ -107,7 +107,7 @@ Each task keeps `pnpm verify` green once T1 exists. Tests named here are the pro
   - Test: CI `compose-smoke` (T17) builds and runs it; local check `docker build .` succeeds.
   - Files: `Dockerfile`, `.dockerignore`
 
-- [ ] **T16. Docker Compose stack**
+- [x] **T16. Docker Compose stack**
   - ACs: AC-1, AC-2, AC-3
   - Do: services and settings from design §4.4 with pinned tags, healthchecks, named volumes, `ollama` profile, `extra_hosts` for `host.docker.internal`.
   - Test: local `docker compose up -d --wait` then `curl /healthz` and `/readyz`; automated in T17.
