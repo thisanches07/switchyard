@@ -79,7 +79,7 @@ Each task keeps `pnpm verify` green once T1 exists. Tests named here are the pro
   - Test: `test/unit/health/readiness.test.ts` › `all ok → ready`, `one failing → not_ready lists it`, `hanging check → timeout within budget`; `routes.test.ts` › `GET /readyz returns 503 with failing list`.
   - Files: `src/modules/health/readiness.ts`, `src/modules/health/routes.ts`
 
-- [ ] **T12. Postgres and Redis dependency checks**
+- [x] **T12. Postgres and Redis dependency checks**
   - ACs: AC-5
   - Do: `pg` Pool factory + `SELECT 1` check; `ioredis` factory (`lazyConnect`, bounded retries) + `PING` check; both honour the abort signal.
   - Test: `test/integration/readyz.int.test.ts` › `ready with real Postgres and Redis`, `503 listing redis after Redis container stops` (Testcontainers).
