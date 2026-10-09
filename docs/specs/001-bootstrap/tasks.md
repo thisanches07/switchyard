@@ -101,7 +101,7 @@ Each task keeps `pnpm verify` green once T1 exists. Tests named here are the pro
 
 ## Containers and CI
 
-- [ ] **T15. Dockerfile**
+- [x] **T15. Dockerfile**
   - ACs: AC-1
   - Do: multi-stage `node:24-bookworm-slim` per design §4.5; `.dockerignore`; non-root; `--import` telemetry preload.
   - Test: CI `compose-smoke` (T17) builds and runs it; local check `docker build .` succeeds.
