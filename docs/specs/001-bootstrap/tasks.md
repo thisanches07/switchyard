@@ -1,13 +1,13 @@
 # Tasks 001: Project bootstrap
 
-- **Status:** Draft (review, then change to Approved)
+- **Status:** Approved (2026-10-09)
 - **Spec:** [spec.md](spec.md) · **Design:** [design.md](design.md)
 
 Each task keeps `pnpm verify` green once T1 exists. Tests named here are the proof for the linked ACs. One commit per task, ending in `[spec-001]`.
 
 ## Tooling
 
-- [ ] **T1. Initialise the package and toolchain** (ADR-0013)
+- [x] **T1. Initialise the package and toolchain** (ADR-0013)
   - ACs: AC-8 (foundation), AC-10
   - Do: `package.json` (`"type": "module"`, `engines.node >=24`, `packageManager` pnpm pinned), scripts `dev`, `build`, `typecheck`, `lint`, `test`, `test:int`, `verify`; `tsconfig.json` (NodeNext, strict, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `outDir: dist`); `tsconfig.build.json` excluding tests; `biome.json`; `vitest.config.ts` with `unit` and `integration` projects and v8 coverage.
   - Test: `test/unit/smoke.test.ts` › `toolchain runs` (trivial assertion so `pnpm verify` has something to run).
