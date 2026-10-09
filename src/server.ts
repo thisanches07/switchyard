@@ -1,2 +1,70 @@
-// Entry point. Implemented in task T14 of spec 001.
-export {};
+import { buildApp } from "./app.js";
+import { loadEnv } from "./config/env.js";
+import { ConfigError, formatConfigError } from "./config/errors.js";
+import { loadConfig } from "./config/load.js";
+import { createPostgresPool, postgresCheck } from "./infra/db/postgres.js";
+import { createLogger } from "./infra/logger.js";
+import { createRedisClient, redisCheck } from "./infra/redis/client.js";
+import { shutdownTelemetry } from "./infra/telemetry/sdk.js";
+import { installShutdown } from "./lifecycle/shutdown.js";
+
+function loadSettings() {
+  try {
+    const env = loadEnv(process.env);
+    const config = loadConfig(env.SWITCHYARD_CONFIG, process.env);
+    return { env, config };
+  } catch (error) {
+    if (error instanceof ConfigError) {
+      process.stderr.write(`${formatConfigError(error)}\n`);
+      process.exit(1);
+    }
+    throw error;
+  }
+}
+
+async function main(): Promise<void> {
+  const { env, config } = loadSettings();
+  const logger = createLogger({ level: env.LOG_LEVEL });
+
+  // Clients connect lazily: the gateway starts even if a dependency is down,
+  // and /readyz reports it (spec 001, AC-5).
+  const pool = createPostgresPool(env.DATABASE_URL);
+  pool.on("error", (error) => logger.warn({ err: error.message }, "postgres pool error"));
+
+  const redis = createRedisClient(env.REDIS_URL);
+  let redisDown = false;
+  redis.on("error", (error: Error) => {
+    if (!redisDown) logger.warn({ err: error.message }, "redis connection error");
+    redisDown = true;
+  });
+  redis.on("ready", () => {
+    if (redisDown) logger.info("redis connection restored");
+    redisDown = false;
+  });
+
+  const app = await buildApp({
+    logger,
+    checks: [postgresCheck(pool), redisCheck(redis)],
+    bodyLimitBytes: config.server.bodyLimitBytes,
+  });
+
+  installShutdown({
+    app,
+    closers: [
+      { name: "redis", close: async () => redis.disconnect() },
+      { name: "postgres", close: () => pool.end() },
+      { name: "telemetry", close: shutdownTelemetry },
+    ],
+    timeoutMs: env.SHUTDOWN_TIMEOUT_MS,
+    logger,
+  });
+
+  try {
+    await app.listen({ port: env.PORT, host: env.HOST });
+  } catch (error) {
+    logger.fatal({ err: error }, "failed to start HTTP server");
+    process.exit(1);
+  }
+}
+
+await main();
