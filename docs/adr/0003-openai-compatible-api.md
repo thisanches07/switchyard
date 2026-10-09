@@ -1,6 +1,6 @@
 # 0003. Expose an OpenAI-compatible API as the public surface
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-09
 - **Related specs:** 002, 003, 014
 

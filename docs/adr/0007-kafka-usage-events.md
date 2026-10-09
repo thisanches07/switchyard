@@ -1,6 +1,6 @@
 # 0007. Publish usage events to Kafka (Redpanda) and persist them with an idempotent consumer
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-09
 - **Related specs:** 006, 007
 

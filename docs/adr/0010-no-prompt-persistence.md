@@ -1,6 +1,6 @@
 # 0010. Do not persist or log prompt and response content by default
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-09
 - **Related specs:** 006, 010, 011
 

@@ -1,6 +1,6 @@
 # 0005. Use PostgreSQL + pgvector for state and the semantic cache
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-09
 - **Related specs:** 004, 006, 009
 

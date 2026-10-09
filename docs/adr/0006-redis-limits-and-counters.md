@@ -1,6 +1,6 @@
 # 0006. Use Redis with Lua scripts for rate limits, budget counters and the exact cache
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-09
 - **Related specs:** 005, 007, 009
 
