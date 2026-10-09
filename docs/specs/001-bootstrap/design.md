@@ -1,6 +1,6 @@
 # Design 001: Project bootstrap
 
-- **Status:** Draft (review, then change to Approved)
+- **Status:** Approved (2026-10-09)
 - **Spec:** [spec.md](spec.md)
 - **Related ADRs:** [0002](../../adr/0002-node-typescript-fastify.md), [0011](../../adr/0011-opentelemetry.md), [0013](../../adr/0013-toolchain.md) (new, Proposed)
 

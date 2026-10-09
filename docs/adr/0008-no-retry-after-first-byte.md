@@ -1,6 +1,6 @@
 # 0008. Never retry or fall back after the first streamed byte
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-09
 - **Related specs:** 003, 008
 

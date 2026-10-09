@@ -1,6 +1,6 @@
 # 0009. Scope the semantic cache by team, model and parameter shape
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-09
 - **Related specs:** 009
 

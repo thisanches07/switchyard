@@ -1,6 +1,6 @@
 # 0012. Deploy the public demo to Oracle Cloud Always Free with Terraform
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-09
 - **Related specs:** 013
 

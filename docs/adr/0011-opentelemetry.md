@@ -1,6 +1,6 @@
 # 0011. Use OpenTelemetry as the single telemetry API
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-09
 - **Related specs:** 001, 011
 

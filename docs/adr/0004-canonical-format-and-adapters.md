@@ -1,6 +1,6 @@
 # 0004. Use a canonical internal format with provider adapters
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-09
 - **Related specs:** 002, 003, 008, 014
 

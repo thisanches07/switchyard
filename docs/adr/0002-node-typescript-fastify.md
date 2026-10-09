@@ -1,6 +1,6 @@
 # 0002. Use Node.js 24 LTS, TypeScript (strict) and Fastify 5
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-09
 - **Related specs:** 001, 002, 003
 

@@ -1,6 +1,6 @@
 # 0013. Toolchain: pnpm, ESM, tsc build, tsx for dev, Vitest, Biome, Testcontainers
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-09
 - **Related specs:** 001
 
