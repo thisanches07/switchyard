@@ -8,7 +8,7 @@ Status: `planned` → `draft` → `approved` → `in progress` → `done`.
 
 | # | Spec | Scope (what the full spec must cover) | Depends on | Status |
 |---|---|---|---|---|
-| 001 | bootstrap | Repo tooling, Docker Compose (Postgres+pgvector, Redis, Redpanda, otel-lgtm, optional Ollama profile), Fastify skeleton with `/healthz` `/readyz`, config loading + Zod validation, pino + OTel wiring, graceful shutdown, CI (lint, typecheck, unit, build) | n/a | draft |
+| 001 | bootstrap | Repo tooling, Docker Compose (Postgres+pgvector, Redis, Redpanda, otel-lgtm, optional Ollama profile), Fastify skeleton with `/healthz` `/readyz`, config loading + Zod validation, pino + OTel wiring, graceful shutdown, CI (lint, typecheck, unit, build) | n/a | approved |
 | 002 | chat-proxy | Canonical types (ADR-0004), `openai-compatible` and `mock` adapters, `POST /v1/chat/completions` **non-streaming**, `GET /v1/models`, OpenAI error shape, `x-switchyard-*` response headers, contract test with the official OpenAI Node SDK against `mock` and Ollama | 001 | planned |
 | 003 | streaming | SSE streaming pass-through with backpressure, `stream_options.include_usage` handling and token estimation fallback, client disconnect aborts upstream, TTFB metric, contract tests (Node + Python SDK) for streams, `POST /v1/embeddings` | 002 | planned |
 | 004 | keys-and-teams | Drizzle schema + migrations for `teams` and `api_keys`, key format `sk-sy-…`, SHA-256 + pepper hashing, constant-time compare, in-memory LRU auth cache, allowed models per key, Admin API (`/admin/teams`, `/admin/keys`, revoke) behind `ADMIN_TOKEN`, OpenAPI at `/docs` | 002 | planned |
