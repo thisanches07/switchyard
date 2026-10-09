@@ -8,6 +8,7 @@ export interface AppDeps {
   logger: FastifyBaseLogger;
   checks: DependencyCheck[];
   bodyLimitBytes?: number;
+  readinessTimeoutMs?: number;
 }
 
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
@@ -31,6 +32,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       );
   });
 
-  await app.register(healthRoutes);
+  await app.register(healthRoutes, {
+    checks: deps.checks,
+    readinessTimeoutMs: deps.readinessTimeoutMs ?? 1_000,
+  });
   return app;
 }
