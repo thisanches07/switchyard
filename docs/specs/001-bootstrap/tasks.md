@@ -13,7 +13,7 @@ Each task keeps `pnpm verify` green once T1 exists. Tests named here are the pro
   - Test: `test/unit/smoke.test.ts` › `toolchain runs` (trivial assertion so `pnpm verify` has something to run).
   - Files: `package.json`, `pnpm-lock.yaml`, `tsconfig*.json`, `biome.json`, `vitest.config.ts`, `test/unit/smoke.test.ts`
 
-- [ ] **T2. Repository hygiene files check**
+- [x] **T2. Repository hygiene files check**
   - ACs: AC-10
   - Do: add `.vscode/extensions.json` (Biome, EditorConfig); verify existing `.gitattributes`, `.editorconfig`, `.nvmrc`, `.gitignore`, `.env.example`, `LICENSE`, `config/switchyard.example.yaml`.
   - Test: `test/unit/repo/files.test.ts` › `required repository files exist`, `gitattributes enforces LF`.
