@@ -16,3 +16,4 @@ Format: [MADR](0000-template.md). New ADRs start as **Proposed** and become **Ac
 | [0010](0010-no-prompt-persistence.md) | Do not persist or log prompt content by default | Proposed |
 | [0011](0011-opentelemetry.md) | OpenTelemetry as the single telemetry API | Proposed |
 | [0012](0012-deploy-oracle-always-free.md) | Demo on Oracle Cloud Always Free via Terraform | Proposed |
+| [0013](0013-toolchain.md) | Toolchain: pnpm, ESM, tsc, tsx, Vitest, Biome, Testcontainers | Proposed |
