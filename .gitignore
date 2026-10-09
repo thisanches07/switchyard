@@ -1,0 +1,37 @@
+# Dependencies & builds
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Env & secrets
+.env
+.env.*
+!.env.example
+
+# Local config (copy from config/switchyard.example.yaml)
+config/switchyard.yaml
+
+# Benchmark raw output (curated results live in docs/benchmarks.md)
+bench/results/raw/
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Terraform
+deploy/terraform/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+
+# Personal planning notes (pt-BR), kept local only
+PLANO_DO_PROJETO.md
+IDEIAS_DE_PROJETOS.md
+
+# Claude Code local settings
+.claude/settings.local.json

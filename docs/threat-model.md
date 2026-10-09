@@ -1,0 +1,29 @@
+# Threat model
+
+> Living document (STRIDE). Each spec that touches a listed asset updates the relevant rows.
+
+## Assets
+- Provider API keys (in env / secret store)
+- Switchyard virtual keys and the admin token
+- Prompt and response content in transit
+- Semantic cache entries (stored responses)
+- Budgets and usage data
+
+## Threats and mitigations
+
+| STRIDE | Threat | Mitigation | Spec |
+|---|---|---|---|
+| Spoofing | Stolen or guessed virtual key | High-entropy keys, hashed at rest with pepper, constant-time compare, revocation, per-key limits | 004, 005 |
+| Spoofing | Admin API abuse | Separate admin token, admin routes can be bound to a private interface | 004 |
+| Tampering | Malicious config (e.g. provider URL pointing to attacker) | Config is operator-owned, validated with Zod, never accepted from requests | 001, 008 |
+| Repudiation | Disputed usage/cost | Immutable usage events with request id, key id and timestamps | 006 |
+| Information disclosure | Cross-tenant answers through the semantic cache | Cache scoped by team + model + params; explicit isolation test | 009 |
+| Information disclosure | PII sent to third-party providers | PII redaction modes `mask` / `block` per key | 010 |
+| Information disclosure | Content leaking via logs or traces | Content never logged; span attributes sanitized | 001, 011 |
+| Denial of service | Request floods or huge bodies | Body size limits, timeouts, RPM/TPM limits | 001, 005 |
+| Denial of service | Budget exhaustion ("denial of wallet") | Hard budgets per key and team; public demo uses capped keys | 007, 013 |
+| Elevation of privilege | Key used for models it isn't allowed | Allowed-models check after alias resolution | 004, 008 |
+
+## Out of scope (documented, not mitigated)
+- Prompt injection against downstream apps: the gateway does not interpret prompts.
+- Compromise of the host or of provider accounts.

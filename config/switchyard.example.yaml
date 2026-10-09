@@ -1,0 +1,62 @@
+# Switchyard configuration. Copy to config/switchyard.yaml.
+# Validated with Zod at boot; hot-reloaded on change (spec 008).
+# Model IDs below are examples: check each provider's docs for current names.
+
+server:
+  bodyLimitBytes: 1048576
+  timeouts:
+    connectMs: 5000
+    ttfbMs: 30000
+    totalMs: 120000
+
+providers:
+  ollama:
+    type: openai-compatible
+    baseUrlEnv: OLLAMA_BASE_URL          # host.docker.internal:11434 from containers
+  groq:
+    type: openai-compatible
+    baseUrl: https://api.groq.com/openai/v1
+    apiKeyEnv: GROQ_API_KEY
+  gemini:
+    type: openai-compatible
+    baseUrl: https://generativelanguage.googleapis.com/v1beta/openai
+    apiKeyEnv: GEMINI_API_KEY
+  claude:
+    type: anthropic
+    apiKeyEnv: ANTHROPIC_API_KEY
+  mock:
+    type: mock                           # tests and benchmarks only
+    latencyMs: 50
+    errorRate: 0
+
+aliases:
+  local:
+    strategy: priority
+    candidates: [ollama/llama3.2]
+  fast:
+    strategy: priority
+    candidates: [groq/llama-3.1-8b-instant, gemini/gemini-2.5-flash, ollama/llama3.2]
+  smart:
+    strategy: lowest-latency
+    candidates: [claude/claude-sonnet-5-5, gemini/gemini-2.5-pro]
+
+retry:
+  maxAttempts: 3
+  baseDelayMs: 200
+  maxDelayMs: 2000
+
+circuitBreaker:
+  failureThreshold: 5        # consecutive failures to open
+  openMs: 30000              # time before half-open probe
+
+cache:
+  exact:
+    enabled: true
+    ttlSeconds: 3600
+  semantic:
+    enabled: false           # opt-in per key as well
+    embeddingModel: ollama/nomic-embed-text   # 768 dims, see ADR-0005
+    similarityThreshold: 0.95
+    ttlSeconds: 86400
+
+pricingFile: config/pricing.yaml
