@@ -5,6 +5,7 @@ import type { ChatProvider } from "../../core/provider.js";
 import { listModels } from "../routing/models.js";
 import { resolveModel } from "../routing/resolve.js";
 import { parseChatRequest } from "./schema.js";
+import { tracedUpstreamCall } from "./telemetry.js";
 
 export interface ProxyRoutesOptions {
   config: LoadedConfig;
@@ -31,7 +32,10 @@ export async function proxyRoutes(app: FastifyInstance, opts: ProxyRoutesOptions
     const signal = abortOnClientDisconnect(reply);
     const started = performance.now();
     try {
-      const result = await provider.chat({ ...body, model: resolved.model }, { signal });
+      const result = await tracedUpstreamCall(
+        { provider, model: resolved.model, logger: request.log },
+        () => provider.chat({ ...body, model: resolved.model }, { signal }),
+      );
       return result.body;
     } finally {
       reply.header("x-switchyard-upstream-ms", Math.round(performance.now() - started));

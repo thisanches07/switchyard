@@ -59,7 +59,7 @@ One commit per task, ending in `[spec-002]`. `pnpm verify` green after each.
   - Test: `test/unit/proxy/chat.test.ts` › alias success, direct provider/model, unknown model 404 (provider not called), missing messages 400 naming field, stream true 400, headers on success and on upstream error, GET /v1/models.
   - Files: `src/modules/proxy/{schema,routes}.ts`, `src/app.ts`
 
-- [ ] **T10. Upstream span and metrics**
+- [x] **T10. Upstream span and metrics**
   - ACs: AC-9
   - Do: `telemetry.ts` (span + counter + histogram), used by routes; warn log on 5xx/timeout without content.
   - Test: `test/unit/proxy/telemetry.test.ts` › span name/kind/gen_ai attributes and usage; error status on failure; no attribute contains message content; counter and histogram recorded with labels (in-memory metric reader).
