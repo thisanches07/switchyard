@@ -10,7 +10,7 @@
   },
   "packageManager": "pnpm@12.10.1",
   "scripts": {
-    "dev": "tsx watch --import ./src/infra/telemetry/register.ts src/server.ts",
+    "dev": "tsx watch --env-file-if-exists=.env --import ./src/infra/telemetry/register.ts src/server.ts",
     "build": "tsc -p tsconfig.build.json",
     "start": "node --import ./dist/infra/telemetry/register.js dist/server.js",
     "typecheck": "tsc --noEmit",

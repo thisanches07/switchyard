@@ -48,10 +48,12 @@ Switchyard sits between your apps and model providers and handles all of this in
 
 ## 🚀 Quickstart
 
+> 🚧 **Status: early development.** The v0.1 milestone is in progress. Today the stack boots with validated config, health/readiness endpoints, traces and CI ([spec 001](docs/specs/001-bootstrap/spec.md)); the `/v1/*` and admin API shown below arrive with specs 002–008 ([backlog](docs/specs/README.md)).
+
 ```bash
 git clone https://github.com/thisanches07/switchyard && cd switchyard
 cp .env.example .env
-docker compose up -d        # gateway, worker, Postgres, Redis, Redpanda, Grafana
+docker compose up -d --wait # gateway, Postgres, Redis, Redpanda, Grafana (LGTM)
 ollama pull llama3.2 && ollama pull nomic-embed-text   # local models (or: docker compose --profile ollama up -d)
 ```
 
@@ -149,6 +151,25 @@ aliases:                # model IDs below are examples; check each provider's do
 - Chaos tests (injected 5xx, timeouts, latency) and k6 load tests in CI
 - Strict TypeScript, Biome, CodeQL, Dependabot
 
+## 🛠 Development
+
+| Tool | Version | Notes |
+|---|---|---|
+| Node.js | 24 LTS | `.nvmrc`; on Windows use [fnm](https://github.com/Schniz/fnm) |
+| pnpm | via Corepack | `corepack enable` |
+| Docker | Desktop or Engine with Compose v2 | the default stack uses about 1 GB of RAM at idle |
+| Ollama | optional | runs on the host to use the GPU; or `docker compose --profile ollama up -d` |
+
+```bash
+pnpm install
+pnpm verify          # lint + typecheck + unit tests + build
+pnpm test:int        # integration tests on real Postgres/Redis (Testcontainers, needs Docker)
+pnpm test:smoke      # boots the Compose stack and checks health, readiness, bad config, memory, SIGTERM
+pnpm dev             # gateway in watch mode (copy .env.example to .env and config/switchyard.example.yaml to config/switchyard.yaml)
+```
+
+Traces: run the stack, send a few requests to `http://localhost:8080/readyz`, then open Grafana at http://localhost:3000 → Explore → Tempo and search for service `switchyard-gateway`.
+
 ## 📚 Documentation
 
 - [Architecture](docs/architecture.md)
@@ -161,6 +182,7 @@ aliases:                # model IDs below are examples; check each provider's do
 
 ## 🗺 Roadmap
 
+- [x] Project bootstrap: validated config, health/readiness, traces + correlated logs, graceful shutdown, Compose stack, CI
 - [ ] OpenAI-compatible proxy + streaming
 - [ ] Virtual keys, teams, rate limiting
 - [ ] Usage pipeline (Kafka) + budgets
