@@ -41,7 +41,7 @@ One commit per task, ending in `[spec-002]`. `pnpm verify` green after each.
   - Test: `test/unit/providers/registry.test.ts` › builds one adapter per provider, anthropic → 501, missing key → 503 naming the variable (no value leaked).
   - Files: `src/modules/providers/{registry,not-implemented}.ts`
 
-- [ ] **T7. undici HTTP client**
+- [x] **T7. undici HTTP client**
   - ACs: AC-6
   - Do: `createUndiciClient(timeouts)` with shared `Agent`; normalise errors to `UpstreamNetworkError` / `UpstreamTimeoutError`.
   - Test: `test/integration/upstream-http.int.test.ts` › local `node:http` server: JSON 200, 500 status returned, headers timeout → timeout error, refused port → network error, abort signal honoured.
