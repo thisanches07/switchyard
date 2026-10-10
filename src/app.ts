@@ -19,6 +19,7 @@ import {
 import type { DependencyCheck } from "./core/health.js";
 import type { ChatProvider } from "./core/provider.js";
 import { healthRoutes } from "./modules/health/routes.js";
+import { proxyRoutes } from "./modules/proxy/routes.js";
 
 export interface AppDeps {
   logger: FastifyBaseLogger;
@@ -69,6 +70,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   await app.register(healthRoutes, {
     checks: deps.checks,
     readinessTimeoutMs: deps.readinessTimeoutMs ?? 1_000,
+  });
+  await app.register(proxyRoutes, {
+    config: deps.config,
+    providers: deps.providers,
+    startedAt: Math.floor(Date.now() / 1000),
   });
   return app;
 }

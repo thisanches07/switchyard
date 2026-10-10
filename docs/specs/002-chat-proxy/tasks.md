@@ -53,7 +53,7 @@ One commit per task, ending in `[spec-002]`. `pnpm verify` green after each.
   - Test: `test/unit/app/errors.test.ts` › invalid JSON → 400 invalid_json, oversized body → 413, unexpected error → 500 generic message; `health/routes.test.ts` › request id header present.
   - Files: `src/app.ts`, `src/server.ts`, `test/helpers/app.ts`
 
-- [ ] **T9. Chat and models routes**
+- [x] **T9. Chat and models routes**
   - ACs: AC-1, AC-2, AC-3, AC-4, AC-7, AC-8
   - Do: `schema.ts` + `routes.ts`; replace `model`, call adapter with request abort signal, set headers, return body.
   - Test: `test/unit/proxy/chat.test.ts` › alias success, direct provider/model, unknown model 404 (provider not called), missing messages 400 naming field, stream true 400, headers on success and on upstream error, GET /v1/models.
