@@ -25,7 +25,12 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       include: ["src/**/*.ts"],
-      reporter: ["text", "html"],
+      reporter: ["text-summary", "html"],
+      // Spec 002 AC-12: business logic must stay covered by unit tests.
+      thresholds: {
+        "src/core/**": { lines: 80 },
+        "src/modules/**": { lines: 80 },
+      },
     },
   },
 });
