@@ -35,7 +35,7 @@ One commit per task, ending in `[spec-002]`. `pnpm verify` green after each.
   - Test: `test/unit/providers/openai-compatible.test.ts` (fake client) › URL and body with resolved model, unknown fields passed through, auth header present/absent, 4xx passthrough with upstream error fields, 5xx→502 without upstream body, network→502, timeout→504, non-JSON 200→502, usage/model extracted.
   - Files: `src/core/provider.ts`, `src/modules/providers/openai-compatible.ts`
 
-- [ ] **T6. Provider registry**
+- [x] **T6. Provider registry**
   - ACs: AC-5 (keys), spec non-goal (anthropic 501)
   - Do: `createProviderRegistry(config, env, deps)`; anthropic → not-implemented adapter; missing key → adapter that fails 503 `provider_not_configured`.
   - Test: `test/unit/providers/registry.test.ts` › builds one adapter per provider, anthropic → 501, missing key → 503 naming the variable (no value leaked).
