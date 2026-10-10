@@ -17,7 +17,7 @@ One commit per task, ending in `[spec-002]`. `pnpm verify` green after each.
   - Test: `test/unit/core/errors.test.ts` › helpers produce status/type/code from design §4.2; `toBody()` returns OpenAI shape.
   - Files: `src/core/{chat,provider,errors}.ts`
 
-- [ ] **T3. Model resolution and model list**
+- [x] **T3. Model resolution and model list**
   - ACs: AC-1, AC-2, AC-3, AC-8
   - Do: `resolveModel` and `listModels` (pure).
   - Test: `test/unit/routing/resolve.test.ts` › alias → first candidate, provider/model with slashes, unknown provider, unknown alias; `test/unit/routing/models.test.ts` › aliases first, distinct candidates, owned_by.
