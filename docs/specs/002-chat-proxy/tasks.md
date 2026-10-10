@@ -11,7 +11,7 @@ One commit per task, ending in `[spec-002]`. `pnpm verify` green after each.
   - Test: `pnpm verify` fails if the threshold is lowered below current coverage (checked once manually), passes now.
   - Files: `vitest.config.ts`, `package.json`
 
-- [ ] **T2. Canonical types and gateway errors**
+- [x] **T2. Canonical types and gateway errors**
   - ACs: AC-3, AC-4, AC-6 (foundation)
   - Do: `src/core/chat.ts`, `src/core/provider.ts`; `GatewayError` + helpers in `src/core/errors.ts`.
   - Test: `test/unit/core/errors.test.ts` › helpers produce status/type/code from design §4.2; `toBody()` returns OpenAI shape.
