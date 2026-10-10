@@ -29,7 +29,7 @@ One commit per task, ending in `[spec-002]`. `pnpm verify` green after each.
   - Test: `test/unit/providers/mock.test.ts` › deterministic body and usage, no content echo, latency honoured, `error-500`/`error-429`, `errorRate` with fixed random, abort.
   - Files: `src/modules/providers/mock.ts`
 
-- [ ] **T5. OpenAI-compatible adapter and HttpClient port**
+- [x] **T5. OpenAI-compatible adapter and HttpClient port**
   - ACs: AC-5, AC-6
   - Do: `HttpClient` port in core; adapter mapping status/errors per §4.2; bearer key only when configured.
   - Test: `test/unit/providers/openai-compatible.test.ts` (fake client) › URL and body with resolved model, unknown fields passed through, auth header present/absent, 4xx passthrough with upstream error fields, 5xx→502 without upstream body, network→502, timeout→504, non-JSON 200→502, usage/model extracted.
