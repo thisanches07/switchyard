@@ -146,10 +146,10 @@ aliases:                # model IDs below are examples; check each provider's do
 
 ## 🧪 Quality
 
-- Unit tests (Vitest), integration tests on real Postgres/Redis/Redpanda (Testcontainers)
-- **Contract tests with the official OpenAI SDKs** (Node + Python), streaming included
-- Chaos tests (injected 5xx, timeouts, latency) and k6 load tests in CI
-- Strict TypeScript, Biome, CodeQL, Dependabot
+- Unit tests (Vitest) and integration tests on real Postgres/Redis (Testcontainers)
+- Compose smoke test: health, readiness, invalid config, memory budget, graceful SIGTERM
+- Strict TypeScript, Biome, Dependabot, CI on every PR
+- Planned: contract tests with the official OpenAI SDKs (spec 002–003), chaos tests (spec 008), k6 benchmarks (spec 012), CodeQL
 
 ## 🛠 Development
 
