@@ -71,8 +71,32 @@ One commit per task, ending in `[spec-002]`. `pnpm verify` green after each.
   - Test: `test/contract/openai-sdk.contract.test.ts` › chat via alias on mock, `models.list()` includes aliases, SDK surfaces 404 as `NotFoundError`, chat on Ollama (conditional).
   - Files: `vitest.config.ts`, `package.json`, `.github/workflows/ci.yml`, `test/contract/*`
 
-- [ ] **T12. Local-only port binding, docs and verification**
+- [x] **T12. Local-only port binding, docs and verification**
   - ACs: spec non-goal (unauthenticated until 004), DoD
   - Do: compose ports bound to `127.0.0.1`; README: try-it section with curl and SDK against `local`/`mock`, unauthenticated warning; backlog status; verification table.
   - Test: `pnpm verify`, `pnpm test:int`, `pnpm test:contract`, `pnpm test:smoke` green.
   - Files: `docker-compose.yml`, `README.md`, `docs/specs/README.md`, this file
+
+## Verification (2026-10-10)
+
+| AC | Proven by | Result |
+|---|---|---|
+| AC-1 | `test/unit/proxy/chat.test.ts` › alias resolves to the first candidate; contract › completes a chat through an alias | ✅ |
+| AC-2 | `test/unit/routing/resolve.test.ts`; `chat.test.ts` › direct provider/model keeps slashes | ✅ |
+| AC-3 | `chat.test.ts` › unknown model → 404, no provider called; contract › NotFoundError | ✅ |
+| AC-4 | `chat.test.ts` › invalid bodies name the field, stream true → 400; `test/unit/app/errors.test.ts` › invalid JSON, 413, 415 | ✅ |
+| AC-5 | `test/unit/providers/openai-compatible.test.ts` › unknown fields passed through, bearer key; `registry.test.ts` › key from env, missing key → 503 | ✅ |
+| AC-6 | `openai-compatible.test.ts` › 4xx passthrough, 5xx → 502 without body, network → 502, timeout → 504; `test/integration/upstream-http.int.test.ts` (real undici + local server) | ✅ |
+| AC-7 | `chat.test.ts` › headers on success and on upstream error; `errors.test.ts` › request id on every response | ✅ |
+| AC-8 | `test/unit/routing/models.test.ts`; `chat.test.ts` › GET /v1/models; contract › lists models | ✅ |
+| AC-9 | `test/unit/proxy/telemetry.test.ts` › span kind/attributes/usage, error status + warn log, no content in spans or logs, counter and histogram labels | ✅ |
+| AC-10 | `test/unit/providers/mock.test.ts` | ✅ |
+| AC-11 | `test/contract/openai-sdk.contract.test.ts` (mock: 4 passed; Ollama case skipped: Ollama not installed on the dev machine) | ✅ mock · ⏳ Ollama case not yet run against a real model |
+| AC-12 | `vitest.config.ts` thresholds; `pnpm verify` fails at 101% (checked) and passes at 82.6% lines | ✅ |
+
+Also run: `pnpm test:smoke` (8/8 steps, now including a chat request through the mock provider inside Docker); `pnpm verify` + `pnpm test:contract` in a `node:24.21.0-bookworm-slim` container (132/132).
+
+Deviations and fixes recorded here:
+- `text/plain` body parser removed so non-JSON requests get 415 (Fastify accepts text/plain by default).
+- Compose publishes Postgres on host port **55432** (configurable `POSTGRES_HOST_PORT`) because a native PostgreSQL service occupies 5432 on the dev machine; `.env.example` updated. All ports bound to `127.0.0.1`.
+- Fixed a race in the spec 001 shutdown process-test fixture (signal handlers now installed before `listen`).

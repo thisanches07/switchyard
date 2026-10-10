@@ -48,7 +48,9 @@ Switchyard sits between your apps and model providers and handles all of this in
 
 ## 🚀 Quickstart
 
-> 🚧 **Status: early development.** The v0.1 milestone is in progress. Today the stack boots with validated config, health/readiness endpoints, traces and CI ([spec 001](docs/specs/001-bootstrap/spec.md)); the `/v1/*` and admin API shown below arrive with specs 002–008 ([backlog](docs/specs/README.md)).
+> 🚧 **Status: early development (v0.1 in progress).** Working today: non-streaming `POST /v1/chat/completions` and `GET /v1/models` over OpenAI-compatible providers (Ollama, Groq, Gemini, OpenRouter, OpenAI) and a mock provider, with traces, metrics and CI ([specs 001–002](docs/specs/README.md)). Streaming, API keys, limits, budgets and fallback arrive with specs 003–008.
+>
+> ⚠️ **The `/v1` API has no authentication yet** (spec 004). Docker Compose publishes ports on `127.0.0.1` only; do not expose the gateway publicly.
 
 ```bash
 git clone https://github.com/thisanches07/switchyard && cd switchyard
@@ -57,7 +59,23 @@ docker compose up -d --wait # gateway, Postgres, Redis, Redpanda, Grafana (LGTM)
 ollama pull llama3.2 && ollama pull nomic-embed-text   # local models (or: docker compose --profile ollama up -d)
 ```
 
-Create a key:
+### Try it today
+
+```bash
+# Mock provider (no model needed)
+curl -s localhost:8080/v1/chat/completions -H "content-type: application/json" \n  -d '{"model":"mock/demo","messages":[{"role":"user","content":"Hi"}]}'
+
+# A real local model through Ollama (alias "local" → ollama/llama3.2)
+curl -s localhost:8080/v1/chat/completions -H "content-type: application/json" \n  -d '{"model":"local","messages":[{"role":"user","content":"Explain circuit breakers in one sentence."}]}'
+
+curl -s localhost:8080/v1/models
+```
+
+Responses carry `x-switchyard-provider`, `x-switchyard-model`, `x-switchyard-upstream-ms` and `x-switchyard-request-id` headers.
+
+### Coming in v0.1
+
+Create a key (spec 004):
 
 ```bash
 curl -s localhost:8080/admin/keys \
@@ -149,7 +167,8 @@ aliases:                # model IDs below are examples; check each provider's do
 - Unit tests (Vitest) and integration tests on real Postgres/Redis (Testcontainers)
 - Compose smoke test: health, readiness, invalid config, memory budget, graceful SIGTERM
 - Strict TypeScript, Biome, Dependabot, CI on every PR
-- Planned: contract tests with the official OpenAI SDKs (spec 002–003), chaos tests (spec 008), k6 benchmarks (spec 012), CodeQL
+- Contract tests with the official OpenAI Node SDK; 80% line coverage gate on core and modules
+- Planned: Python SDK contract tests and streaming (spec 003), chaos tests (spec 008), k6 benchmarks (spec 012), CodeQL
 
 ## 🛠 Development
 
@@ -164,7 +183,8 @@ aliases:                # model IDs below are examples; check each provider's do
 pnpm install
 pnpm verify          # lint + typecheck + unit tests + build
 pnpm test:int        # integration tests on real Postgres/Redis (Testcontainers, needs Docker)
-pnpm test:smoke      # boots the Compose stack and checks health, readiness, bad config, memory, SIGTERM
+pnpm test:contract   # official OpenAI SDK against the gateway (mock always; Ollama when running)
+pnpm test:smoke      # boots the Compose stack and checks health, readiness, chat, bad config, memory, SIGTERM
 pnpm dev             # gateway in watch mode (copy .env.example to .env and config/switchyard.example.yaml to config/switchyard.yaml)
 ```
 
@@ -183,7 +203,8 @@ Traces: run the stack, send a few requests to `http://localhost:8080/readyz`, th
 ## 🗺 Roadmap
 
 - [x] Project bootstrap: validated config, health/readiness, traces + correlated logs, graceful shutdown, Compose stack, CI
-- [ ] OpenAI-compatible proxy + streaming
+- [x] OpenAI-compatible chat proxy (non-streaming) + `/v1/models`, mock provider, OpenAI SDK contract tests
+- [ ] Streaming (SSE) + embeddings
 - [ ] Virtual keys, teams, rate limiting
 - [ ] Usage pipeline (Kafka) + budgets
 - [ ] Routing, fallback, circuit breakers
