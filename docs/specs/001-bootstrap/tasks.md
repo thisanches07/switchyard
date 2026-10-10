@@ -113,11 +113,11 @@ Each task keeps `pnpm verify` green once T1 exists. Tests named here are the pro
   - Test: local `docker compose up -d --wait` then `curl /healthz` and `/readyz`; automated in T17.
   - Files: `docker-compose.yml`
 
-- [ ] **T17. CI workflow**
+- [x] **T17. CI workflow**
   - ACs: AC-8, AC-1, AC-3, AC-4, AC-5, AC-6
   - Do: `.github/workflows/ci.yml` with `verify`, `integration` and `compose-smoke` jobs (design §4.6): smoke asserts `/healthz` 200, `/readyz` 200, `--profile ollama config` lists `ollama`, broken config exits non-zero, `docker stats` total < 4 GB; `concurrency` group; `.github/dependabot.yml` for npm, docker and github-actions.
   - Test: the workflow itself; green on the first PR after the GitHub remote exists.
-  - Files: `.github/workflows/ci.yml`, `.github/dependabot.yml`, `scripts/check-stack-memory.mjs`
+  - Files: `.github/workflows/ci.yml`, `.github/dependabot.yml`, `scripts/compose-smoke.ts`, `scripts/lib/stack-memory.ts` (cross-platform smoke script, also runnable locally with `node scripts/compose-smoke.ts`)
 
 ## Docs
 

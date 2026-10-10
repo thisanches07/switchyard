@@ -18,7 +18,8 @@
     "forceConsistentCasingInFileNames": true,
     "sourceMap": true,
     "rootDir": ".",
-    "outDir": "dist"
+    "outDir": "dist",
+    "allowImportingTsExtensions": true
   },
   "include": ["src", "test", "scripts", "vitest.config.ts"]
 }
