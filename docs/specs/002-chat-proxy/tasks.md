@@ -47,7 +47,7 @@ One commit per task, ending in `[spec-002]`. `pnpm verify` green after each.
   - Test: `test/integration/upstream-http.int.test.ts` › local `node:http` server: JSON 200, 500 status returned, headers timeout → timeout error, refused port → network error, abort signal honoured.
   - Files: `src/infra/http/undici-client.ts`
 
-- [ ] **T8. App wiring: error handler, request id header, deps**
+- [x] **T8. App wiring: error handler, request id header, deps**
   - ACs: AC-4, AC-7
   - Do: `AppDeps` from design §3; `genReqId` → `req_<uuid>`; `onSend` adds `x-switchyard-request-id`; `setErrorHandler` maps `GatewayError`, Fastify body errors (invalid JSON, 413, 415) and unknown errors per §4.2; update test helper and `server.ts`.
   - Test: `test/unit/app/errors.test.ts` › invalid JSON → 400 invalid_json, oversized body → 413, unexpected error → 500 generic message; `health/routes.test.ts` › request id header present.
