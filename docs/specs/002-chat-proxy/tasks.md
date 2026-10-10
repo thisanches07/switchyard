@@ -5,7 +5,7 @@
 
 One commit per task, ending in `[spec-002]`. `pnpm verify` green after each.
 
-- [ ] **T1. Coverage gate**
+- [x] **T1. Coverage gate**
   - ACs: AC-12
   - Do: coverage thresholds (lines ≥ 80%) for `src/core/**` and `src/modules/**` in `vitest.config.ts`; `verify` runs `test:coverage` instead of `test`.
   - Test: `pnpm verify` fails if the threshold is lowered below current coverage (checked once manually), passes now.
