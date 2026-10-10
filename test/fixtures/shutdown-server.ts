@@ -6,5 +6,6 @@ import { installShutdown } from "../../src/lifecycle/shutdown.js";
 const logger = createLogger({ level: "info" });
 const app = Fastify({ loggerInstance: logger });
 app.get("/", async () => "ok");
-await app.listen({ port: 0, host: "127.0.0.1" });
+// Handlers must exist before "Server listening" is logged: the test signals as soon as it sees it.
 installShutdown({ app, closers: [], timeoutMs: 9_000, logger });
+await app.listen({ port: 0, host: "127.0.0.1" });
