@@ -1,4 +1,4 @@
-// Smoke test for the Docker Compose stack (spec 001: AC-1, AC-2, AC-3, AC-4, AC-5, AC-6, AC-9).
+// Smoke test for the Docker Compose stack (spec 001: AC-1..AC-6, AC-9; spec 002: chat via mock).
 // Cross-platform: `node scripts/compose-smoke.ts [--down]` locally (Windows or Linux) and in CI.
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
@@ -61,6 +61,18 @@ try {
     const body = await getWithRetry("/readyz", 200);
     const checks = JSON.parse(body).checks;
     if (checks.postgres !== "ok" || checks.redis !== "ok") throw new Error(body);
+  });
+
+  await step("POST /v1/chat/completions through the mock provider returns 200", async () => {
+    const res = await fetch(`${GATEWAY}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: "mock/smoke", messages: [{ role: "user", content: "hi" }] }),
+    });
+    const body = await res.text();
+    if (res.status !== 200) throw new Error(`${res.status} ${body}`);
+    if (res.headers.get("x-switchyard-provider") !== "mock")
+      throw new Error("missing provider header");
   });
 
   await step("ollama profile adds the ollama service", () => {

@@ -1,6 +1,6 @@
 # Spec 002: Chat proxy (non-streaming)
 
-- **Status:** Approved (2026-10-10)
+- **Status:** Done (2026-10-10); Ollama contract case pending a local model, CI run pending first push
 - **Owner:** @thisanches07
 - **Release:** v0.1
 - **Depends on:** 001
