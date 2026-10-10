@@ -121,8 +121,29 @@ Each task keeps `pnpm verify` green once T1 exists. Tests named here are the pro
 
 ## Docs
 
-- [ ] **T18. README and docs update**
+- [x] **T18. README and docs update**
   - ACs: all (Definition of done)
   - Do: README "Development" section (prereqs table from spec, Docker Desktop ≥ 6 GB to WSL2, `pnpm verify`, how to see a trace in Grafana); mark spec 001 `Done` in `docs/specs/README.md`; tick roadmap if applicable.
   - Test: `pnpm verify` green; `/verify 001` AC → test table complete.
   - Files: `README.md`, `docs/specs/README.md`, `docs/specs/001-bootstrap/spec.md`
+
+## Verification (2026-10-10)
+
+| AC | Proven by | Result |
+|---|---|---|
+| AC-1 | `scripts/compose-smoke.ts` › stack starts (`docker compose up --wait`) | ✅ local (Windows, Docker Desktop) |
+| AC-2 | `test/unit/config/load.test.ts` › resolves baseUrlEnv to host Ollama URL; smoke › ollama profile adds the ollama service | ✅ |
+| AC-3 | smoke › stack memory at idle stays under 4 GiB (measured 0.81–0.97 GiB, 5 containers) | ✅ local |
+| AC-4 | `test/unit/health/routes.test.ts` › GET /healthz returns ok; smoke › GET /healthz | ✅ |
+| AC-5 | `test/unit/health/readiness.test.ts`; `routes.test.ts` › GET /readyz returns 503 with failing list; `test/integration/readyz.int.test.ts` (Testcontainers) | ✅ |
+| AC-6 | `test/unit/config/{env,schema,load}.test.ts`; `test/unit/server/boot.test.ts`; smoke › invalid config exits non-zero | ✅ |
+| AC-7 | `test/unit/telemetry/correlation.test.ts`; `logger.test.ts`; traces seen in Tempo for `switchyard-gateway` (manual) | ✅ |
+| AC-8 | `.github/workflows/ci.yml` (`verify`, `integration`, `compose-smoke`) | ⏳ pending: no GitHub remote yet. `pnpm verify` passed inside a `node:24.21.0-bookworm-slim` container (61/61 tests) as a stand-in |
+| AC-9 | `test/unit/lifecycle/shutdown.test.ts`; `shutdown.process.test.ts` (Linux container: 664 ms); smoke › gateway exits 0 within 10 s on SIGTERM (≈ 0.7 s) | ✅ |
+| AC-10 | `test/unit/repo/files.test.ts` | ✅ |
+
+Deviations from design, recorded here:
+- Health routes use route log level `warn` instead of `debug` (Fastify route levels can only filter, not demote).
+- `PORT` accepts `0` (ephemeral port) for tests.
+- The memory check lives in `scripts/compose-smoke.ts` + `scripts/lib/stack-memory.ts` (Node, cross-platform) instead of a separate `.mjs` script.
+- The smoke test triggers the invalid-config path by clearing `OLLAMA_BASE_URL` rather than bind-mounting a fixture (Windows bind mounts of the fixture dropped the Docker Desktop connection).
