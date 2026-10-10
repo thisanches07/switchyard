@@ -65,7 +65,7 @@ One commit per task, ending in `[spec-002]`. `pnpm verify` green after each.
   - Test: `test/unit/proxy/telemetry.test.ts` › span name/kind/gen_ai attributes and usage; error status on failure; no attribute contains message content; counter and histogram recorded with labels (in-memory metric reader).
   - Files: `src/modules/proxy/telemetry.ts`, `src/modules/proxy/routes.ts`, `test/helpers/metrics.ts`
 
-- [ ] **T11. Contract tests with the official OpenAI SDK**
+- [x] **T11. Contract tests with the official OpenAI SDK**
   - ACs: AC-11
   - Do: `contract` Vitest project and `pnpm test:contract`; gateway listening on port 0 with mock provider; Ollama case skipped when `OLLAMA_BASE_URL` (default `http://localhost:11434/v1`) is unreachable; CI step in `verify` job.
   - Test: `test/contract/openai-sdk.contract.test.ts` › chat via alias on mock, `models.list()` includes aliases, SDK surfaces 404 as `NotFoundError`, chat on Ollama (conditional).
