@@ -1,6 +1,6 @@
 # Spec 002: Chat proxy (non-streaming)
 
-- **Status:** Draft (review, then change to Approved)
+- **Status:** Approved (2026-10-10)
 - **Owner:** @thisanches07
 - **Release:** v0.1
 - **Depends on:** 001
