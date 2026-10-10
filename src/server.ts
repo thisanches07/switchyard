@@ -3,10 +3,12 @@ import { loadEnv } from "./config/env.js";
 import { ConfigError, formatConfigError } from "./config/errors.js";
 import { loadConfig } from "./config/load.js";
 import { createPostgresPool, postgresCheck } from "./infra/db/postgres.js";
+import { createUndiciClient } from "./infra/http/undici-client.js";
 import { createLogger } from "./infra/logger.js";
 import { createRedisClient, redisCheck } from "./infra/redis/client.js";
 import { shutdownTelemetry } from "./infra/telemetry/sdk.js";
 import { installShutdown } from "./lifecycle/shutdown.js";
+import { createProviderRegistry } from "./modules/providers/registry.js";
 
 function loadSettings() {
   try {
@@ -42,15 +44,20 @@ async function main(): Promise<void> {
     redisDown = false;
   });
 
+  const http = createUndiciClient(config.server.timeouts);
+  const providers = createProviderRegistry(config, process.env, { http });
+
   const app = await buildApp({
     logger,
     checks: [postgresCheck(pool), redisCheck(redis)],
-    bodyLimitBytes: config.server.bodyLimitBytes,
+    config,
+    providers,
   });
 
   installShutdown({
     app,
     closers: [
+      { name: "upstream-http", close: () => http.close() },
       { name: "redis", close: async () => redis.disconnect() },
       { name: "postgres", close: () => pool.end() },
       { name: "telemetry", close: shutdownTelemetry },
