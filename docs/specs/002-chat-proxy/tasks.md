@@ -23,7 +23,7 @@ One commit per task, ending in `[spec-002]`. `pnpm verify` green after each.
   - Test: `test/unit/routing/resolve.test.ts` › alias → first candidate, provider/model with slashes, unknown provider, unknown alias; `test/unit/routing/models.test.ts` › aliases first, distinct candidates, owned_by.
   - Files: `src/modules/routing/{resolve,models}.ts`
 
-- [ ] **T4. Mock provider**
+- [x] **T4. Mock provider**
   - ACs: AC-10
   - Do: adapter per design §4.4 with injectable `random` and abortable latency.
   - Test: `test/unit/providers/mock.test.ts` › deterministic body and usage, no content echo, latency honoured, `error-500`/`error-429`, `errorRate` with fixed random, abort.
