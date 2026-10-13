@@ -62,7 +62,7 @@ export function loadUsageConfig(path: string): UsageConfig {
 }
 
 /** Reads and parses a YAML file; syntax errors become a ConfigError with line and column. */
-function readYaml(path: string): unknown {
+export function readYaml(path: string): unknown {
   const doc = parseDocument(readSource(path));
   if (doc.errors.length > 0) {
     throw new ConfigError(

@@ -1,0 +1,4 @@
+models:
+  mock/*: { input: 1.0, output: -2 }
+  groq/x: { input: TODO, output: free }
+  gemini/y: { input: 1, output: 1, discount: 5 }

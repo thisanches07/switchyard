@@ -57,6 +57,17 @@ describe("server boot", () => {
     expect(stderr).not.toMatch(/at .*\.ts:\d+/); // no stack trace
   }, 60_000);
 
+  it("exits non-zero naming the pricing file and entry when prices are invalid (spec 007)", async () => {
+    const run = start({
+      ...baseEnv,
+      SWITCHYARD_CONFIG: resolve(root, "test/fixtures/config/bad-pricing.yaml"),
+    });
+    expect(await run.exited).toBe(1);
+    const { stderr } = run.output();
+    expect(stderr).toContain("Invalid configuration in test/fixtures/pricing/invalid.yaml");
+    expect(stderr).toContain("models.mock/*.output");
+  }, 60_000);
+
   it("exits non-zero when DATABASE_URL is missing", async () => {
     const run = start({ ...baseEnv, DATABASE_URL: undefined });
     expect(await run.exited).toBe(1);
@@ -116,6 +127,14 @@ describe("server boot warnings (spec 004)", () => {
     const stdout = await bootLogs({ KEY_PEPPER: "dev-only-pepper-change-me-0123456789abcdef" });
     expect(stdout).toContain("dev-only");
     expect(stdout).toContain("admin API disabled");
+  }, 60_000);
+
+  it("warns once about alias candidates without a known price (spec 007)", async () => {
+    const stdout = await bootLogs({});
+    const warnings = stdout.split(/\r?\n/).filter((line) => line.includes("unknown price"));
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("groq/llama-3.1-8b-instant");
+    expect(warnings[0]).not.toContain("ollama/llama3.2");
   }, 60_000);
 
   it("does not warn with real secrets and an admin token", async () => {

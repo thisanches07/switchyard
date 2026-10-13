@@ -32,6 +32,7 @@ import { AuthCache } from "./modules/auth/cache.js";
 import { recordAuthFailure } from "./modules/auth/telemetry.js";
 import { openApiInfo } from "./modules/docs.js";
 import { healthRoutes } from "./modules/health/routes.js";
+import type { PriceTable } from "./modules/pricing/table.js";
 import { proxyRoutes } from "./modules/proxy/routes.js";
 import { countRejection, createAdmission } from "./modules/ratelimit/admission.js";
 import { createOutcomeHook } from "./modules/usage/outcome.js";
@@ -52,6 +53,11 @@ export interface AppDeps {
   usageRecorder?: OutcomeRecorder;
   /** Answers GET /admin/usage (spec 006); the route returns 503 without it. */
   usageReader?: UsageReader;
+  /**
+   * Prices of `config/pricing.yaml` (spec 007): exact event costs, and `estimateUsd` for routing
+   * (spec 008). Defaults to an empty table: every cost unknown.
+   */
+  costEstimator?: PriceTable;
   bodyLimitBytes?: number;
   readinessTimeoutMs?: number;
 }

@@ -10,7 +10,7 @@ One commit per task, ending in `[spec-007]`. `pnpm verify` green after each (exi
   - Do: `src/core/pricing.ts` (`TokenCounts`, `CostEstimator`, shared with spec 008); `src/modules/pricing/decimal.ts`.
   - Test: `test/unit/pricing/decimal.test.ts` › parse (plain, numbers, exponents, invalid), add/sub/mulInt/compare, half-up rounding, toFixed and normalize never emit an exponent.
 
-- [ ] **T2. Price table, loader and boot wiring**
+- [x] **T2. Price table, loader and boot wiring**
   - ACs: AC-1, AC-2
   - Do: `src/modules/pricing/{table,load}.ts`; `AppDeps.costEstimator`; `server.ts` loads `pricingFile` (exit on error) and logs the unknown-price warning.
   - Test: `test/unit/pricing/table.test.ts` › exact > most specific pattern > file order, `*` spans `/`, cost formula with cached input (with and without `cachedInput`), zero-count prices not needed, `TODO`/missing → `null`, 10-place half-up, `estimateUsd`, `unknownPriceCandidates`; `test/unit/pricing/load.test.ts` › repo `config/pricing.yaml` loads, unknown field/negative/other string rejected naming the entry, missing file; `boot.test.ts` › invalid pricing file exits 1 naming it.

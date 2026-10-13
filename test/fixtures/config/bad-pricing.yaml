@@ -1,0 +1,4 @@
+providers:
+  mock:
+    type: mock
+pricingFile: test/fixtures/pricing/invalid.yaml
