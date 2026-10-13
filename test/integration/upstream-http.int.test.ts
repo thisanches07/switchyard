@@ -124,6 +124,28 @@ describe("undici HTTP client", () => {
     expect(error).not.toBeInstanceOf(UpstreamNetworkError);
   });
 
+  it("reads ttfb and total timeouts per request, so reloaded values apply (spec 008)", async () => {
+    const timeouts = { connectMs: 500, ttfbMs: 300, totalMs: 1_000 };
+    const reloadable = createUndiciClient(() => timeouts);
+    const slow = () =>
+      reloadable.postJson(
+        `${base}/slow-headers`,
+        {},
+        {
+          headers: {},
+          signal: new AbortController().signal,
+        },
+      );
+    try {
+      await expect(slow()).rejects.toBeInstanceOf(UpstreamTimeoutError);
+      timeouts.ttfbMs = 10_000;
+      timeouts.totalMs = 10_000;
+      expect(await slow()).toMatchObject({ status: 200, text: "late" });
+    } finally {
+      await reloadable.close();
+    }
+  });
+
   describe("postStream", () => {
     const open = (path: string, signal = new AbortController().signal) =>
       client.postStream(`${base}${path}`, { stream: true }, { headers: {}, signal });

@@ -132,6 +132,44 @@ describe("openai-compatible provider", () => {
     expect(error.message).not.toContain("internal.py");
   });
 
+  it("keeps the upstream retry-after on 429 and 503 (spec 008, AC-4)", async () => {
+    let status = 429;
+    const http = fakeHttp(() => ({ status, text: "{}", headers: { "retry-after": "3" } }));
+    const provider = createOpenAiCompatibleProvider(
+      { name: "groq", baseUrl: "http://g.test/v1" },
+      http.client,
+    );
+    const limited = await gatewayError(provider.chat(request, ctx()));
+    expect(limited.status).toBe(429);
+    expect(limited.headers).toEqual({ "retry-after": "3" });
+
+    status = 503;
+    const unavailable = await gatewayError(provider.chat(request, ctx()));
+    expect(unavailable.code).toBe("upstream_error");
+    expect(unavailable.headers).toEqual({ "retry-after": "3" });
+
+    status = 500;
+    expect((await gatewayError(provider.chat(request, ctx()))).headers).toEqual({});
+    status = 400;
+    expect((await gatewayError(provider.chat(request, ctx()))).headers).toEqual({});
+  });
+
+  it("keeps retry-after when a stream is refused before it opens", async () => {
+    const http = fakeHttp(
+      () => jsonResponse(500, {}),
+      () => ({
+        ...streamResponse(429, []),
+        headers: { "retry-after": "Wed, 21 Oct 2026 07:28:00 GMT" },
+      }),
+    );
+    const provider = createOpenAiCompatibleProvider(
+      { name: "groq", baseUrl: "http://g.test/v1" },
+      http.client,
+    );
+    const error = await gatewayError(provider.chatStream(request, ctx()));
+    expect(error.headers["retry-after"]).toBe("Wed, 21 Oct 2026 07:28:00 GMT");
+  });
+
   it("maps network errors to 502", async () => {
     const http = fakeHttp(() => {
       throw new UpstreamNetworkError("ECONNREFUSED");

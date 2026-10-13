@@ -26,7 +26,7 @@ One commit per task, ending in `[spec-008]`. `pnpm verify` green after each.
   - Test: `test/unit/routing/breaker.test.ts` › threshold opens, open skips, half-open single probe, probe success closes, probe failure reopens, release, neutral outcomes; `test/unit/routing/health.test.ts` › EWMA, error window of 100, snapshot, retain on reload, gauge values, one log per transition.
   - Files: `src/modules/routing/{breaker,health,timers,telemetry}.ts`
 
-- [ ] **T5. Upstream Retry-After and reloadable timeouts**
+- [x] **T5. Upstream Retry-After and reloadable timeouts**
   - ACs: AC-4, AC-7
   - Test: `test/unit/providers/openai-compatible.test.ts` › retry-after kept on 429 and 503; `test/integration/upstream-http.int.test.ts` › timeouts read from a getter per request.
   - Files: `src/modules/providers/openai-compatible.ts`, `src/infra/http/undici-client.ts`

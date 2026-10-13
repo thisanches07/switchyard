@@ -28,19 +28,32 @@ const NETWORK_CODES = new Set([
   "EPIPE",
 ]);
 
-/** `HttpClient` on a shared undici `Agent` with connect, TTFB, idle and total timeouts. */
-export function createUndiciClient(timeouts: UpstreamTimeouts): HttpClient & {
+/**
+ * `HttpClient` on a shared undici `Agent` with connect, TTFB, idle and total timeouts.
+ * Pass a getter to have TTFB and total read per request (config hot reload, spec 008);
+ * `connectMs` is an `Agent` option, fixed at creation.
+ */
+export function createUndiciClient(
+  source: UpstreamTimeouts | (() => UpstreamTimeouts),
+): HttpClient & {
   close(): Promise<void>;
 } {
+  const current = typeof source === "function" ? source : () => source;
+  const initial = current();
   const agent = new Agent({
-    connectTimeout: timeouts.connectMs,
-    headersTimeout: timeouts.ttfbMs,
-    bodyTimeout: timeouts.totalMs,
+    connectTimeout: initial.connectMs,
+    headersTimeout: initial.ttfbMs,
+    bodyTimeout: initial.totalMs,
     keepAliveTimeout: 30_000,
   });
 
   /** Normalises transport errors; caller aborts are rethrown untouched. */
-  function mapError(error: unknown, total: AbortSignal, caller: AbortSignal): unknown {
+  function mapError(
+    error: unknown,
+    total: AbortSignal,
+    caller: AbortSignal,
+    timeouts: UpstreamTimeouts,
+  ): unknown {
     if (caller.aborted) return error;
     if (total.aborted) {
       return new UpstreamTimeoutError(`no response within ${timeouts.totalMs} ms`);
@@ -53,6 +66,7 @@ export function createUndiciClient(timeouts: UpstreamTimeouts): HttpClient & {
 
   return {
     async postJson(url, body, options) {
+      const timeouts = current();
       const total = AbortSignal.timeout(timeouts.totalMs);
       const signal = AbortSignal.any([options.signal, total]);
       try {
@@ -62,6 +76,8 @@ export function createUndiciClient(timeouts: UpstreamTimeouts): HttpClient & {
           body: JSON.stringify(body),
           signal,
           dispatcher: agent,
+          headersTimeout: timeouts.ttfbMs,
+          bodyTimeout: timeouts.totalMs,
         });
         return {
           status: res.statusCode,
@@ -69,13 +85,14 @@ export function createUndiciClient(timeouts: UpstreamTimeouts): HttpClient & {
           headers: flattenHeaders(res.headers),
         };
       } catch (error) {
-        throw mapError(error, total, options.signal);
+        throw mapError(error, total, options.signal, timeouts);
       }
     },
 
     async postStream(url, body, options): Promise<HttpStreamResponse> {
       // The total limit applies only until the first body byte: long generations are legitimate,
       // and once data flows the idle (between-chunk) limit takes over (spec 003 design §3).
+      const timeouts = current();
       const totalController = new AbortController();
       const timer = setTimeout(
         () => totalController.abort(new DOMException("total timeout", "TimeoutError")),
@@ -92,11 +109,12 @@ export function createUndiciClient(timeouts: UpstreamTimeouts): HttpClient & {
           body: JSON.stringify(body),
           signal,
           dispatcher: agent,
+          headersTimeout: timeouts.ttfbMs,
           bodyTimeout: timeouts.ttfbMs,
         });
       } catch (error) {
         clearTimeout(timer);
-        throw mapError(error, total, options.signal);
+        throw mapError(error, total, options.signal, timeouts);
       }
 
       const responseBody = res.body;
@@ -109,7 +127,7 @@ export function createUndiciClient(timeouts: UpstreamTimeouts): HttpClient & {
           }
           completed = true;
         } catch (error) {
-          throw mapError(error, total, options.signal);
+          throw mapError(error, total, options.signal, timeouts);
         } finally {
           clearTimeout(timer);
           // Consumer stopped early (e.g. client disconnected): release the connection.
@@ -125,7 +143,7 @@ export function createUndiciClient(timeouts: UpstreamTimeouts): HttpClient & {
           try {
             return await responseBody.text();
           } catch (error) {
-            throw mapError(error, total, options.signal);
+            throw mapError(error, total, options.signal, timeouts);
           }
         },
         body: bytes(),
