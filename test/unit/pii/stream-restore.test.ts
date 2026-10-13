@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import type { ChatChunk } from "../../../src/core/chat.js";
 import {
+  createChunkRestorer,
   createTextRestorer,
   type HoldEvent,
   type HoldLimits,
@@ -153,5 +155,157 @@ describe("stream text restorer (spec 015)", () => {
     restorer.push("_", 130);
     expect(restorer.push("1>", 170)).toBe(CPF);
     expect(events).toEqual([{ heldMs: 70, outcome: "restored" }]);
+  });
+});
+
+const ID = { id: "chatcmpl-1", object: "chat.completion.chunk", created: 7, model: "m" };
+const chunk = (choices: unknown[], extra: object = {}): ChatChunk => ({ ...ID, choices, ...extra });
+const content = (text: string, index = 0, finish: string | null = null) => ({
+  index,
+  delta: { content: text },
+  finish_reason: finish,
+});
+const args = (text: string, tool = 0, index = 0) => ({
+  index,
+  delta: { tool_calls: [{ index: tool, function: { arguments: text } }] },
+  finish_reason: null,
+});
+
+function chunkRestorer(limits: HoldLimits = LIMITS) {
+  const events: HoldEvent[] = [];
+  const restorer = createChunkRestorer({ index: INDEX, limits, onHold: (e) => events.push(e) });
+  return { restorer, events };
+}
+
+/** Joined `delta.content` of a choice, and joined `arguments` per tool call, over chunks. */
+function textOf(chunks: ChatChunk[], choice = 0) {
+  let text = "";
+  const tools = new Map<number, string>();
+  for (const c of chunks) {
+    for (const ch of (c.choices as Record<string, unknown>[] | undefined) ?? []) {
+      if (ch.index !== choice) continue;
+      const delta = ch.delta as {
+        content?: string;
+        tool_calls?: { index: number; function?: { arguments?: string } }[];
+      };
+      text += delta?.content ?? "";
+      for (const call of delta?.tool_calls ?? []) {
+        tools.set(call.index, (tools.get(call.index) ?? "") + (call.function?.arguments ?? ""));
+      }
+    }
+  }
+  return { text, tools };
+}
+
+describe("stream chunk restorer (spec 015)", () => {
+  it("restores content and tool-call arguments per choice and tool index (AC-1)", () => {
+    const { restorer } = chunkRestorer();
+    const upstream = [
+      chunk([content("CPF <CP", 0)]),
+      chunk([content("mail <EMAIL", 1)]),
+      chunk([args('{"a":"<TER', 0, 0)]),
+      chunk([args('{"b":"<CPF_', 1, 0)]),
+      chunk([content("F_1>.", 0), content("_1>.", 1)]),
+      chunk([args('M_1>"}', 0, 0)]),
+      chunk([args('1>"}', 1, 0)]),
+    ];
+    const out = upstream.flatMap((c) => restorer.chunk(c, 0));
+    expect(out).toHaveLength(upstream.length);
+    expect(textOf(out, 0).text).toBe(`CPF ${CPF}.`);
+    expect(textOf(out, 1).text).toBe("mail ana@example.com.");
+    const tools = textOf(out, 0).tools;
+    expect(JSON.parse(tools.get(0) ?? "")).toEqual({ a: MAP.get("<TERM_1>") });
+    expect(JSON.parse(tools.get(1) ?? "")).toEqual({ b: CPF });
+    expect(restorer.deadline()).toBeUndefined();
+  });
+
+  it("keeps chunk boundaries and fields, sending an empty string while text is held", () => {
+    const { restorer } = chunkRestorer();
+    const first = chunk([{ index: 0, delta: { role: "assistant", content: "<" }, logprobs: null }]);
+    const [out] = restorer.chunk(first, 0);
+    expect(out).toEqual({
+      ...ID,
+      choices: [{ index: 0, delta: { role: "assistant", content: "" }, logprobs: null }],
+    });
+    // The upstream chunk is not mutated.
+    expect(first.choices).toEqual([
+      { index: 0, delta: { role: "assistant", content: "<" }, logprobs: null },
+    ]);
+  });
+
+  it("releases held text in a synthesised chunk before the finish chunk (AC-6)", () => {
+    const { restorer } = chunkRestorer();
+    restorer.chunk(chunk([content("x <CPF", 0)]), 0);
+    restorer.chunk(chunk([args("<EMA", 2, 0)]), 0);
+    const finish = chunk([{ index: 0, delta: {}, finish_reason: "stop" }]);
+    const out = restorer.chunk(finish, 5);
+    expect(out).toEqual([
+      {
+        ...ID,
+        choices: [
+          {
+            index: 0,
+            delta: { content: "<CPF", tool_calls: [{ index: 2, function: { arguments: "<EMA" } }] },
+            finish_reason: null,
+          },
+        ],
+      },
+      finish,
+    ]);
+  });
+
+  it("puts held text in the finish chunk's own field when it carries one (AC-6)", () => {
+    const { restorer } = chunkRestorer();
+    restorer.chunk(chunk([content("<CPF_1", 0)]), 0);
+    const out = restorer.chunk(chunk([content("> and <", 0, "stop")]), 0);
+    expect(out).toEqual([chunk([content(`${CPF} and <`, 0, "stop")])]);
+  });
+
+  it("only flushes the finishing choice", () => {
+    const { restorer } = chunkRestorer();
+    restorer.chunk(chunk([content("<CP", 0), content("<EM", 1)]), 0);
+    const out = restorer.chunk(chunk([{ index: 1, delta: {}, finish_reason: "stop" }]), 0);
+    expect(textOf(out, 1).text).toBe("<EM");
+    expect(textOf(out, 0).text).toBe("");
+    expect(restorer.deadline()).toBe(250);
+  });
+
+  it("flushes everything before a usage chunk (AC-6)", () => {
+    const { restorer } = chunkRestorer();
+    restorer.chunk(chunk([content("<CP", 0)]), 0);
+    const usage = { ...ID, choices: [], usage: { prompt_tokens: 1, completion_tokens: 2 } };
+    const out = restorer.chunk(usage, 0);
+    expect(out).toHaveLength(2);
+    expect(textOf(out).text).toBe("<CP");
+    expect(out[1]).toBe(usage);
+  });
+
+  it("synthesises expired and flushed fragments with the stream's identity (AC-4)", () => {
+    const { restorer, events } = chunkRestorer();
+    restorer.chunk(chunk([content("a <CPF", 0)]), 100);
+    restorer.chunk({ ...chunk([content("b <EMAIL_", 1)]), id: "chatcmpl-2" }, 200);
+    expect(restorer.deadline()).toBe(350);
+    expect(restorer.expire(349)).toEqual([]);
+    expect(restorer.expire(350)).toEqual([
+      {
+        ...ID,
+        id: "chatcmpl-2",
+        choices: [{ index: 0, delta: { content: "<CPF" }, finish_reason: null }],
+      },
+    ]);
+    expect(restorer.deadline()).toBe(450);
+    expect(textOf(restorer.flush(400), 1).text).toBe("<EMAIL_");
+    expect(restorer.flush(400)).toEqual([]);
+    expect(events.map((e) => e.outcome)).toEqual(["hold_limit", "end"]);
+  });
+
+  it("passes malformed chunks and choices through", () => {
+    const { restorer } = chunkRestorer();
+    const odd: ChatChunk[] = [
+      { ...ID },
+      chunk(["x", null, { index: 0 }, { index: 0, delta: { content: 5 } }]),
+      chunk([{ delta: { tool_calls: ["x", { function: { arguments: 1 } }, { id: "t" }] } }]),
+    ];
+    for (const c of odd) expect(restorer.chunk(c, 0).at(-1)).toEqual(c);
   });
 });

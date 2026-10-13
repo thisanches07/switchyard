@@ -15,7 +15,7 @@ One commit per task, ending in `[spec-015]`. Lint, typecheck and the task's test
   - Do: `src/modules/pii/stream-restore.ts` › `indexPlaceholders`, `createTextRestorer`.
   - Test: `test/unit/pii/stream-restore.test.ts` › every two-chunk split position (table), one char per chunk, three chunks, no partial placeholder emitted; unknown/altered/lone `<` forwarded at the ruling-out character; text without `<` returned as is; JSON escaping; char limit; ms limit via `push` and `expire`; flush; hold events (`restored`, `ruled_out`, `hold_limit`, `end`) with held time.
 
-- [ ] **T3. Chunk restorer**
+- [x] **T3. Chunk restorer**
   - ACs: AC-1, AC-6
   - Do: `createChunkRestorer` in `stream-restore.ts`.
   - Test: `stream-restore.test.ts` › content and tool-call arguments restored per choice and tool index; synthesised chunks copy `id`/`object`/`created`/`model` and keep indexes; held text released before the finish chunk (or in its own field); usage chunk flushes first; malformed chunks pass through.
