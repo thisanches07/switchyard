@@ -106,6 +106,12 @@ const piiSchema = z.strictObject({
   denyList: z.array(z.string().trim().min(1)).default([]),
 });
 
+/** Routing (spec 008): latency smoothing and config hot reload (ADR-0018). */
+const routingSchema = z.strictObject({
+  ewmaAlpha: z.number().gt(0).lte(1).default(0.3),
+  hotReload: z.boolean().default(true),
+});
+
 export const configSchema = z
   .strictObject({
     server: serverSchema.prefault({}),
@@ -129,6 +135,7 @@ export const configSchema = z
     cache: cacheSchema.prefault({}),
     pii: piiSchema.prefault({}),
     budgets: budgetsSchema.prefault({}),
+    routing: routingSchema.prefault({}),
     pricingFile: z.string().min(1).default("config/pricing.yaml"),
   })
   .superRefine((config, ctx) => {

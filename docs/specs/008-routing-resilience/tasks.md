@@ -5,7 +5,7 @@
 
 One commit per task, ending in `[spec-008]`. `pnpm verify` green after each.
 
-- [ ] **T1. Config and core groundwork**
+- [x] **T1. Config and core groundwork**
   - ACs: AC-1 (config keys), AC-2 (cost port), AC-9 (error)
   - Do: `src/core/pricing.ts` (shared with 007); `routing` config section; `noHealthyUpstream()`; `parseConfig(text, path, env)` in `load.ts`.
   - Test: `test/unit/config/schema.test.ts` › routing defaults and bounds; `test/unit/core/errors.test.ts` › no_healthy_upstream; `test/unit/config/load.test.ts` › parseConfig from text.
