@@ -26,7 +26,7 @@ One commit per task, ending in `[spec-005]`. `pnpm verify` exit code checked aft
   - ACs: AC-3, AC-4, AC-6
   - Test: `test/unit/ratelimit/memory-limiter.test.ts` › all-or-nothing, refill with a fake clock, adjust (refund capped at capacity, charge below zero), peek.
 
-- [ ] **T6. `RedisRateLimiter` with Lua**
+- [x] **T6. `RedisRateLimiter` with Lua**
   - ACs: AC-13
   - Test: `test/integration/ratelimit.int.test.ts` › same scenarios as T5 on real Redis, key expiry, parity with the memory limiter.
 
