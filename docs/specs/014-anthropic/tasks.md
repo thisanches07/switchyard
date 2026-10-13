@@ -60,7 +60,7 @@ One commit per task, ending in `[spec-014]`. `pnpm verify` green after each.
   - Test: `test/unit/anthropic/inbound-stream.test.ts` › synthesised event order (text, tool use, mixed), native forwarding with model rewritten, error event shape; `test/unit/proxy/stream.test.ts` unchanged (default encoder).
   - Files: `src/modules/proxy/stream.ts`, `src/modules/anthropic/inbound-stream.ts`
 
-- [ ] **T12. POST /v1/messages route**
+- [x] **T12. POST /v1/messages route**
   - ACs: AC-6, AC-7, AC-8, AC-9, AC-11, AC-12, AC-14
   - Test: `test/unit/proxy/messages.test.ts` › cross-family via mock (message, stream), same-family via fake HTTP (response unchanged, model rewritten), blockers, rate-limit headers and 429, every error class in Anthropic shape with request-id, chat errors keep OpenAI shape, mid-stream error event, request span attributes; `openapi.test.ts` › `/v1/messages` documented.
   - Files: `src/modules/proxy/{messages,routes}.ts`, `src/app.ts`, `src/modules/docs.ts`

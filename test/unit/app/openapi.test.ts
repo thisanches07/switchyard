@@ -25,6 +25,7 @@ describe("OpenAPI documentation", () => {
         "/v1/chat/completions",
         "/v1/embeddings",
         "/v1/models",
+        "/v1/messages",
         "/admin/teams",
         "/admin/keys",
         "/admin/keys/{id}/revoke",
@@ -35,6 +36,8 @@ describe("OpenAPI documentation", () => {
     // Spec 010: the key's PII mode is documented on create and PATCH.
     expect(JSON.stringify(doc.paths["/admin/keys"])).toContain("piiMode");
     expect(JSON.stringify(doc.paths["/admin/keys/{id}"])).toContain("piiMode");
+    // Spec 014: the Anthropic SDKs send the key as x-api-key.
+    expect(JSON.stringify(doc.components)).toContain('"name":"x-api-key"');
   });
 
   it("serves the interactive UI", async () => {

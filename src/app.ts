@@ -24,6 +24,10 @@ import type { ChatProvider } from "./core/provider.js";
 import type { RateLimiter } from "./core/ratelimit.js";
 import type { OutcomeRecorder, UsageReader } from "./core/usage.js";
 import { adminRoutes } from "./modules/admin/routes.js";
+import {
+  anthropicRateLimitHeaders,
+  toAnthropicErrorBody,
+} from "./modules/anthropic/inbound-errors.js";
 import { AuthCache } from "./modules/auth/cache.js";
 import { recordAuthFailure } from "./modules/auth/telemetry.js";
 import { openApiInfo } from "./modules/docs.js";
@@ -81,6 +85,15 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     const gatewayError = toGatewayError(error, request);
     if (gatewayError.code === "internal_error") {
       request.log.error({ err: error }, "unhandled error");
+    }
+    // ADR-0016: the route the client called decides the error shape.
+    if (request.routeOptions.config?.api === "anthropic") {
+      return reply
+        .code(gatewayError.status)
+        .headers(gatewayError.headers)
+        .headers(anthropicRateLimitHeaders(gatewayError.headers, Date.now()))
+        .header("request-id", request.id)
+        .send(toAnthropicErrorBody(gatewayError, request.id));
     }
     return reply
       .code(gatewayError.status)
