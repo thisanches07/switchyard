@@ -18,7 +18,7 @@ One commit per task, ending in `[spec-005]`. `pnpm verify` exit code checked aft
   - ACs: AC-5
   - Test: `test/unit/ratelimit/estimate.test.ts`, `plan.test.ts` › chat/embeddings estimates, allowance precedence, effective limits (own → defaults; team own only), oversized request detection.
 
-- [ ] **T4. Header formatting**
+- [x] **T4. Header formatting**
   - ACs: AC-7
   - Test: `test/unit/ratelimit/headers.test.ts` › duration format, most-restrictive selection, omission when unlimited, `retry-after` ≥ 1.
 
