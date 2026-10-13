@@ -28,7 +28,7 @@ One commit per task, ending in `[spec-011]`. T13 and T14 are blocked on things o
   - Test: `test/unit/proxy/timing.test.ts` › formula, streams use first byte, clamp at 0, records once after both end and outcome; `test/unit/proxy/request-metrics.test.ts` › non-streaming, streaming, one retry with backoff (manual clock, exact), labels only operation/stream/status, not recorded before admission.
   - Files: `src/modules/proxy/{timing,telemetry,attempts,routes,stream}.ts`, `src/modules/usage/outcome.ts`, `src/modules/routing/timers.ts`
 
-- [ ] **T5. Token counter and zero-initialised drop counter**
+- [x] **T5. Token counter and zero-initialised drop counter**
   - ACs: AC-3, AC-9 (series exist)
   - Test: `test/unit/usage/token-metrics.test.ts` › tokens_total by direction/provider/model equals the usage events' sums through the app; `test/unit/usage/telemetry.test.ts` › dropped counter exported at 0 per reason.
   - Files: `src/modules/usage/{token-metrics,telemetry}.ts`, `src/app.ts`
