@@ -34,7 +34,7 @@ function getInstruments(): Instruments {
       }),
       savings: meter.createCounter("switchyard_cache_savings_usd_total", {
         description: "USD the stored usage of cache hits would have cost at current prices",
-        unit: "USD",
+        unit: "{USD}",
       }),
       savingsUnknown: meter.createCounter("switchyard_cache_savings_unknown_total", {
         description: "Cache hits whose price is unknown (not counted in the savings)",

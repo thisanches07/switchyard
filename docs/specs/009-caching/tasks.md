@@ -57,7 +57,7 @@ One commit per task, ending in `[spec-009]`. Lint, typecheck and the task's test
   - Test: `test/integration/cache-isolation.int.test.ts` › two teams identical prompt (exact and semantic) never share, first request miss; differing `max_tokens` / `response_format` / system prompt miss; Redis stopped → miss.
   - Files: `src/infra/redis/exact-cache.ts`, `src/server.ts`
 
-- [ ] **T11. Contract and smoke**
+- [x] **T11. Contract and smoke**
   - ACs: AC-7, AC-13
   - Test: `test/contract/openai-sdk.contract.test.ts` › streamed cache hit; `test/contract/python/test_openai_sdk.py` › streamed cache hit; `scripts/compose-smoke.ts` › miss then hit.
   - Files: those, `scripts/contract-python.ts`
