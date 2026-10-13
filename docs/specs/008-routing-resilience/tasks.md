@@ -11,7 +11,7 @@ One commit per task, ending in `[spec-008]`. `pnpm verify` green after each.
   - Test: `test/unit/config/schema.test.ts` › routing defaults and bounds; `test/unit/core/errors.test.ts` › no_healthy_upstream; `test/unit/config/load.test.ts` › parseConfig from text.
   - Files: `src/core/{pricing,errors}.ts`, `src/config/{schema,load}.ts`
 
-- [ ] **T2. Route planning and candidate ordering**
+- [x] **T2. Route planning and candidate ordering**
   - ACs: AC-1, AC-2
   - Test: `test/unit/routing/resolve.test.ts` › planRoute (alias, plain ref, unknown); `test/unit/routing/select.test.ts` › priority, lowest-cost (priced, unknown last, ties, no estimator), lowest-latency (cold first, EWMA order).
   - Files: `src/modules/routing/{resolve,select}.ts`
