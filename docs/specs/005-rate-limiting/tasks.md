@@ -58,6 +58,30 @@ One commit per task, ending in `[spec-005]`. `pnpm verify` exit code checked aft
   - ACs: AC-8
   - Test: Node and Python › key with `rpm: 1` → second call raises `RateLimitError`.
 
-- [ ] **T14. Smoke, docs and verification**
+- [x] **T14. Smoke, docs and verification**
   - ACs: AC-14
   - Do: smoke steps; README (rate limits section, headers, config, admin PATCH, roadmap); backlog; verification table.
+
+## Verification (2026-10-13)
+
+| AC | Proven by | Result |
+|---|---|---|
+| AC-1 | `db.int.test.ts` › limit columns, join, check constraints; `schema.test.ts` › `limits` config defaults and validation | ✅ |
+| AC-2 | `admin.test.ts` › create with limits, PATCH key/team, `null` clears, same-instance effect (cache invalidated by key and by team) | ✅ |
+| AC-3 | `admission.test.ts` › 429 `type: requests`, nothing debited; `ratelimit-routes.test.ts` › provider not called | ✅ |
+| AC-4 | `memory-limiter.test.ts` › continuous refill; `ratelimit.int.test.ts` › refill on real Redis | ✅ |
+| AC-5 | `estimate.test.ts`, `plan.test.ts`; `admission.test.ts` › `type: tokens`; routes › 400 `request_too_large_for_limit` | ✅ |
+| AC-6 | `admission.test.ts` › refund/charge/full refund; routes › reconcile with usage, refund on failure; `stream.test.ts` › end, mid-stream failure, failure before first chunk | ✅ |
+| AC-7 | `headers.test.ts`; routes › headers on 200 and 429, omitted when unlimited; `retry-after` ≥ 1 | ✅ |
+| AC-8 | Node SDK contract 13/13 and Python SDK contract 10/10 › `RateLimitError` with `retry-after` | ✅ |
+| AC-9 | `ratelimit-http.int.test.ts` › two gateway instances, one Redis, 50 concurrent requests at `rpm: 10` → exactly 10 admitted | ✅ |
+| AC-10 | `admission.test.ts` › fail-open metric + one warning per minute, fail-closed 503; `ratelimit-http.int.test.ts` › Redis unreachable over HTTP | ✅ |
+| AC-11 | `authenticate.test.ts` › 429 without store lookups after 3 failures, missing/malformed counted, cached key and other addresses unaffected, `trustProxy` | ✅ (see note) |
+| AC-12 | `admission.test.ts` › `switchyard_ratelimit_rejections_total{scope,kind}`; span attributes for reserved/actual tokens and rejection scope | ✅ |
+| AC-13 | `ratelimit.int.test.ts` › Lua on real Redis: atomic multi-bucket, refill, floats, adjust, expiry, 10 of 50 under concurrency, parity with `MemoryRateLimiter`, timeout | ✅ |
+| AC-14 | `pnpm test:smoke` (13/13 locally) › `rpm: 2` key gets 200, 200, 429 with `retry-after` and `x-ratelimit-remaining-requests: 0` | ✅ |
+
+Deviations and fixes recorded here:
+- AC-11 (as noted in the design): an address that used up its failures is refused for every key not already in the auth cache.
+- **Bug found by AC-9's test and fixed:** the Redis client connected lazily (only via `/readyz`), so the limiter failed open until the first readiness probe. `server.ts` now connects Redis (up to 3 s) before listening.
+- Unit test timeout raised to 15 s: on a loaded dev machine the first test of a file (which builds the app) occasionally exceeded 5 s.

@@ -37,7 +37,7 @@
 <br>
 
 > [!NOTE]
-> **Status: v0.1 in progress.** Chat completions (including **SSE streaming**), embeddings, model listing, provider adapters, error mapping, tracing and metrics are **working and tested today**, plus **virtual API keys with teams and an admin API**, contract-tested with the official OpenAI Node and Python SDKs. Rate limits, budgets, fallback and caching are specified and on the [roadmap](#%EF%B8%8F-roadmap).
+> **Status: v0.1 in progress.** Chat completions (including **SSE streaming**), embeddings, model listing, provider adapters, error mapping, tracing and metrics are **working and tested today**, plus **virtual API keys with teams**, an admin API and **per-minute rate limits** shared across instances, contract-tested with the official OpenAI Node and Python SDKs. Usage events, budgets, fallback and caching are specified and on the [roadmap](#%EF%B8%8F-roadmap).
 
 > [!WARNING]
 > Docker Compose ships `dev-only` defaults for `ADMIN_TOKEN` and `KEY_PEPPER` so it works out of the box, and publishes every port on `127.0.0.1` only. Set real secrets in `.env` before exposing the gateway; it logs a warning while dev-only values are in use.
@@ -70,8 +70,8 @@ Teams shipping LLM features hit the same walls:
 | 🔭 | `switchyard.upstream` spans with GenAI attributes, request and latency metrics, `x-switchyard-*` headers | ✅ |
 | ❤️ | `/healthz`, `/readyz` with time-bounded dependency checks, graceful shutdown | ✅ |
 | 🔑 | **Virtual API keys** (`sk-sy-…`, stored only as peppered hashes), teams, per-key model allow-lists, revocation | ✅ |
+| 🚥 | **Rate limits** in requests and tokens per minute, per key and per team, atomic in Redis (Lua), OpenAI-style `429` + `x-ratelimit-*` | ✅ |
 | 🛠️ | Admin API for teams and keys; OpenAPI document and interactive UI at `/docs` | ✅ |
-| 🚥 | Rate limits (RPM/TPM) with Redis Lua | 🔜 005 |
 | 📨 | Usage events through Kafka (Redpanda), idempotent worker, DLQ | 🔜 006 |
 | 💰 | Monthly budgets with soft and hard limits | 🔜 007 |
 | 🛟 | Fallback, retries with jitter, circuit breakers | 🔜 008 |
@@ -220,8 +220,9 @@ flowchart LR
     direction LR
     AUTH["API key auth<br/>teams · allow-lists"] --> V["Validate<br/>(Zod)"]
     V --> RES["Resolve model<br/>alias → provider/model"]
-    RES --> AD["Provider adapter<br/>timeouts · error mapping"]
-    LIM["Rate limit · budget"]:::planned
+    RES --> LIM --> AD["Provider adapter<br/>timeouts · error mapping"]
+    LIM["Rate limits<br/>Redis token buckets"]
+    BUD["Budgets"]:::planned
     CACHE["Cache · PII"]:::planned
     FB["Fallback · circuit breaker"]:::planned
   end
@@ -261,6 +262,10 @@ sequenceDiagram
     G-->>C: 401 invalid_api_key · 403 model_not_allowed
   end
   G->>G: validate body · resolve "local" → ollama/llama3.2
+  G->>G: rate limits: take 1 request + estimated tokens (Redis, atomic)
+  alt over a limit
+    G-->>C: 429 + retry-after + x-ratelimit-*
+  end
   alt unknown model
     G-->>C: 404 model_not_found (no provider called)
   end
@@ -299,6 +304,9 @@ Every error, from validation to provider failures, comes back in the OpenAI shap
 | Invalid JSON or body | 400 | `invalid_json` / `invalid_request` |
 | Missing, unknown, revoked or expired API key | 401 | `invalid_api_key` |
 | Model outside the key's allow-list | 403 | `model_not_allowed` |
+| Over a request or token limit (key, team or failed-auth address) | 429 | `rate_limit_exceeded` (`type`: `requests` or `tokens`) |
+| A single request needs more tokens than the per-minute limit | 400 | `request_too_large_for_limit` |
+| Redis down with `limits.onRedisError: closed` | 503 | `rate_limiter_unavailable` |
 | Unknown model | 404 | `model_not_found` |
 | Body too large / not JSON | 413 / 415 | `request_too_large` / `unsupported_media_type` |
 | Provider 4xx (e.g. 429) | same | passed through |
@@ -366,15 +374,41 @@ Every `/v1` request needs a Switchyard key (`Authorization: Bearer sk-sy-…`), 
 
 | Method | Path | What it does |
 |---|---|---|
-| `POST` | `/admin/teams` | Create a team `{ name }` |
+| `POST` | `/admin/teams` | Create a team `{ name, rpm?, tpm? }` |
 | `GET` | `/admin/teams` | List teams |
-| `POST` | `/admin/keys` | Create a key `{ teamId, name, allowedModels?, expiresAt? }`; the plaintext key is returned **only here** |
+| `POST` | `/admin/keys` | Create a key `{ teamId, name, allowedModels?, expiresAt?, rpm?, tpm? }`; the plaintext key is returned **only here** |
 | `GET` | `/admin/keys?teamId=` | List keys (prefix, status, limits; never the key or its hash) |
+| `PATCH` | `/admin/keys/:id` | Set or clear (`null`) the key's `rpm` / `tpm` |
+| `PATCH` | `/admin/teams/:id` | Set or clear the team's `rpm` / `tpm` caps |
 | `POST` | `/admin/keys/:id/revoke` | Revoke a key; rejected immediately on this instance, everywhere within 30 s |
 
 `allowedModels` accepts aliases (`fast`), exact refs (`ollama/llama3.2`) and provider wildcards (`ollama/*`); `/v1/models` then lists only what the key may use. Admin routes take `Authorization: Bearer <ADMIN_TOKEN>` and do not exist at all when `ADMIN_TOKEN` is unset.
 
 📖 The full API, including request bodies, is documented in OpenAPI at **<http://localhost:8080/docs>**.
+
+## 🚥 Rate limits
+
+Every authenticated request takes **1 request** and an **estimate of its tokens** from token buckets in Redis, in one atomic Lua call shared by all gateway instances:
+
+| Bucket | Limit |
+|---|---|
+| Key | its own `rpm` / `tpm`, else `limits.defaults` from the config (60 RPM / 100 000 TPM in the example) |
+| Team | its own `rpm` / `tpm` caps across all its keys (optional) |
+| Client address | `limits.authFailuresPerMinutePerIp` failed authentications (30), checked **before** the database |
+
+The token estimate is `ceil(input characters / 4)` plus `max_completion_tokens`, `max_tokens` or `limits.completionReserveTokens` (512). When the response arrives, the reservation is **reconciled** with the real usage: unused tokens go back, overruns are charged, and failed calls are refunded. Streams are reconciled when they end, fail or the client disconnects.
+
+```http
+HTTP/1.1 429 Too Many Requests
+retry-after: 27
+x-ratelimit-limit-requests: 2
+x-ratelimit-remaining-requests: 0
+x-ratelimit-reset-requests: 1m0s
+
+{"error":{"type":"requests","code":"rate_limit_exceeded","message":"Rate limit reached for requests (key limit: 2 per minute)…"}}
+```
+
+The headers describe the **most restrictive** bucket and use the OpenAI format, so the official SDKs back off on their own. If Redis is unreachable the gateway keeps serving by default (`limits.onRedisError: open`, counted in `switchyard_ratelimit_fail_open_total`), or answers `503` with `closed`.
 
 ## 🔭 Observability
 
@@ -394,6 +428,7 @@ x-switchyard-upstream-ms: 986
 | Counter | `switchyard_requests_total` | by `provider`, `model`, `status`, `team` |
 | Histogram | `switchyard_upstream_duration_seconds` | by `provider`, `model`, `outcome` |
 | Histogram | `switchyard_ttfb_seconds` | time to first streamed token, by `provider`, `model` |
+| Counter | `switchyard_ratelimit_rejections_total` | by `scope` (`key`, `team`, `ip`) and `kind` (`requests`, `tokens`) |
 | Counter | `switchyard_auth_failures_total` | rejected `/v1` requests by `reason` (`missing`, `malformed`, `unknown`, `revoked`, `expired`) |
 | Logs | JSON (pino) | every line carries `trace_id` / `span_id`, plus `teamId` / `keyId` once authenticated; secrets redacted |
 
@@ -480,7 +515,7 @@ Each spec ends with a verification table, for example [spec 002](docs/specs/002-
 - [x] [002](docs/specs/002-chat-proxy/spec.md) Chat proxy: `/v1/chat/completions`, `/v1/models`, adapters, error mapping, upstream telemetry, SDK contract tests
 - [x] [003](docs/specs/003-streaming/spec.md) Streaming (SSE) and `/v1/embeddings`, Node + Python SDK contract tests
 - [x] [004](docs/specs/004-keys-and-teams/spec.md) Virtual API keys, teams, admin API, Postgres migrations, OpenAPI docs
-- [ ] 005 Rate limiting (RPM / TPM)
+- [x] [005](docs/specs/005-rate-limiting/spec.md) Rate limiting: RPM / TPM per key and team, Redis Lua token buckets, token reservation and reconciliation
 - [ ] 006 Usage events pipeline (Kafka, idempotent worker, DLQ)
 - [ ] 007 Budgets and cost accounting
 - [ ] 008 Fallback, retries and circuit breakers

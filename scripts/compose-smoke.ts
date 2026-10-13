@@ -1,5 +1,6 @@
 // Smoke test for the Docker Compose stack (spec 001: AC-1..AC-6, AC-9; specs 002-003: chat,
-// streaming and embeddings via the mock provider; spec 004: API keys through the admin API).
+// streaming and embeddings via the mock provider; spec 004: API keys through the admin API;
+// spec 005: per-minute rate limits).
 // Cross-platform: `node scripts/compose-smoke.ts [--down]` locally (Windows or Linux) and in CI.
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
@@ -131,6 +132,37 @@ try {
     if (res.status !== 200) throw new Error(`${res.status} ${body}`);
     const length = JSON.parse(body).data?.[0]?.embedding?.length;
     if (length !== 768) throw new Error(`embedding length ${length}`);
+  });
+
+  await step("a key limited to 2 requests per minute gets 200, 200, then 429", async () => {
+    const admin = { authorization: `Bearer ${ADMIN_TOKEN}`, "content-type": "application/json" };
+    const team = await fetch(`${GATEWAY}/admin/teams`, {
+      method: "POST",
+      headers: admin,
+      body: JSON.stringify({ name: `smoke-limits-${Date.now()}` }),
+    });
+    const { id } = (await team.json()) as { id: string };
+    const created = await fetch(`${GATEWAY}/admin/keys`, {
+      method: "POST",
+      headers: admin,
+      body: JSON.stringify({ teamId: id, name: "limited", rpm: 2 }),
+    });
+    const { key } = (await created.json()) as { key: string };
+    const statuses: number[] = [];
+    let last: Response | undefined;
+    for (let i = 0; i < 3; i += 1) {
+      last = await fetch(`${GATEWAY}/v1/chat/completions`, {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
+        body: JSON.stringify({ model: "mock/smoke", messages: [{ role: "user", content: "hi" }] }),
+      });
+      statuses.push(last.status);
+    }
+    if (statuses.join(",") !== "200,200,429") throw new Error(`statuses ${statuses.join(",")}`);
+    if (Number(last?.headers.get("retry-after")) < 1) throw new Error("missing retry-after");
+    if (last?.headers.get("x-ratelimit-remaining-requests") !== "0") {
+      throw new Error("missing x-ratelimit-remaining-requests: 0");
+    }
   });
 
   await step("ollama profile adds the ollama service", () => {
