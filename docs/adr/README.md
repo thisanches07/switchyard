@@ -17,3 +17,4 @@ Format: [MADR](0000-template.md). New ADRs start as **Proposed** and become **Ac
 | [0011](0011-opentelemetry.md) | OpenTelemetry as the single telemetry API | Accepted |
 | [0012](0012-deploy-oracle-always-free.md) | Demo on Oracle Cloud Always Free via Terraform | Accepted |
 | [0013](0013-toolchain.md) | Toolchain: pnpm, ESM, tsc, tsx, Vitest, Biome, Testcontainers | Accepted |
+| [0014](0014-zod-validation-openapi-docs.md) | Zod validation; Fastify route schemas only for OpenAPI docs | Proposed |
