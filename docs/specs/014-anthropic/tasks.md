@@ -40,7 +40,7 @@ One commit per task, ending in `[spec-014]`. `pnpm verify` green after each.
   - Test: `test/unit/auth/keys.test.ts` › `extractApiKey` table; `authenticate.test.ts` › x-api-key accepted, both equal accepted, both differ → 401.
   - Files: `src/modules/auth/{keys,authenticate}.ts`
 
-- [ ] **T8. Messages schema and inbound request translation**
+- [x] **T8. Messages schema and inbound request translation**
   - ACs: AC-6, AC-8
   - Test: `test/unit/anthropic/inbound-request.test.ts` › Zod errors name fields; system/string/blocks, tool_use ↔ tool_calls, tool_result → tool messages, images, thinking and cache_control dropped, tool_choice reverse, top_k/metadata, blockers (document, server tools, tool_result images).
   - Files: `src/modules/anthropic/{schema,inbound-request}.ts`
