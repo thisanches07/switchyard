@@ -63,7 +63,7 @@ Tokens are the hard part: the real count is only known *after* the provider answ
 
 ## Non-goals
 - Per-model or per-provider limits, and daily or monthly quotas (budgets are spec 007).
-- Exact tokenisation (tiktoken and friends): estimates plus reconciliation are enough for limiting; exact cost accounting arrives with usage events (spec 006).
+- Exact tokenisation (tiktoken and friends): estimates plus reconciliation are enough for limiting; exact cost accounting arrives with usage events and budgets (specs 006 and 007).
 - Queueing or delaying requests instead of rejecting them.
 - Limits on the admin API.
 - Retries or fallback to another provider on an upstream 429 (spec 008).
