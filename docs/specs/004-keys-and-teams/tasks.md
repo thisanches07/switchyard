@@ -47,7 +47,7 @@ One commit per task, ending in `[spec-004]`. `pnpm verify` green after each (exi
   - Do: `DrizzleKeyStore` in `server.ts`, `MIGRATE_ON_BOOT`, dev-only secret warning; Dockerfile copies `drizzle/`; Compose env defaults.
   - Test: `boot.test.ts` › starts with pepper; warning for dev-only secrets.
 
-- [ ] **T11. Contract suites with keys**
+- [x] **T11. Contract suites with keys**
   - ACs: AC-11
   - Test: Node and Python suites create team + key via the admin API; bad key → `AuthenticationError`.
 

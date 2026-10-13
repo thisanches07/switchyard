@@ -29,6 +29,12 @@ def test_chat_through_alias(client: OpenAI) -> None:
     assert res.headers["x-switchyard-provider"] == "mock"
 
 
+def test_invalid_key_is_authentication_error() -> None:
+    anonymous = OpenAI(base_url=BASE_URL, api_key="sk-sy-wrong", max_retries=0)
+    with pytest.raises(openai.AuthenticationError):
+        anonymous.models.list()
+
+
 def test_unknown_model_is_not_found(client: OpenAI) -> None:
     with pytest.raises(openai.NotFoundError) as info:
         client.chat.completions.create(model="gpt-9", messages=[{"role": "user", "content": "x"}])
