@@ -49,10 +49,10 @@ One commit per task, ending in `[spec-011]`. T13 and T14 are blocked on things o
   - Test: `grafana-files.test.ts` › four rules (error rate, circuit open, budget near limit, events dropped), summary + description, thresholds documented as examples, no contact points.
   - Files: `deploy/grafana/alerting/switchyard-alerts.yaml`
 
-- [ ] **T9. Compose smoke step**
+- [x] **T9. Compose smoke step**
   - ACs: AC-9
   - Do: after the traffic steps, query Grafana for the four dashboards and the rules, and Prometheus (via the Grafana datasource proxy) for every Overview metric; retries up to 60 s. Runs in CI only.
-  - Test: `scripts/compose-smoke.ts` step (CI); `test/unit/scripts/grafana-check.test.ts` › `overviewMetrics()` lists the Overview metric names.
+  - Test: `scripts/compose-smoke.ts` step (CI); `test/unit/scripts/grafana-files.test.ts` › Overview answers the AC-6 questions (`dashboardMetrics()` lists the Overview metric names).
   - Files: `scripts/compose-smoke.ts`, `scripts/lib/grafana-check.ts`
 
 - [ ] **T10. `pnpm demo:traffic`**
