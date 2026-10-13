@@ -5,7 +5,7 @@
 
 One commit per task, ending in `[spec-005]`. `pnpm verify` exit code checked after each.
 
-- [ ] **T1. Config: `limits` and `server.trustProxy`**
+- [x] **T1. Config: `limits` and `server.trustProxy`**
   - ACs: AC-1, AC-10, AC-11
   - Test: `schema.test.ts` › defaults (`completionReserveTokens` 512, `onRedisError` open, `authFailuresPerMinutePerIp` 30, empty `defaults`), validation; example config has `defaults` 60 / 100000.
 

@@ -8,6 +8,8 @@ export default defineConfig({
           name: "unit",
           include: ["test/unit/**/*.test.ts"],
           environment: "node",
+          // The first test in a file also builds the app (Swagger, OTel); allow for a loaded machine.
+          testTimeout: 15_000,
           env: { OTEL_SDK_DISABLED: "true" },
         },
       },

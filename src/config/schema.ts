@@ -44,6 +44,8 @@ const aliasSchema = z.strictObject({
 
 const serverSchema = z.strictObject({
   bodyLimitBytes: positiveInt.default(1_048_576),
+  /** Trust X-Forwarded-For for the client address; only behind a trusted proxy (spec 005). */
+  trustProxy: z.boolean().default(false),
   timeouts: z
     .strictObject({
       connectMs: positiveInt.default(5_000),
@@ -51,6 +53,17 @@ const serverSchema = z.strictObject({
       totalMs: positiveInt.default(120_000),
     })
     .prefault({}),
+});
+
+const limitsSchema = z.strictObject({
+  /** For keys without their own limits; empty means unlimited (spec 005). */
+  defaults: z
+    .strictObject({ rpm: positiveInt.optional(), tpm: positiveInt.optional() })
+    .prefault({}),
+  /** Tokens reserved for the completion when a request sets no max_tokens. */
+  completionReserveTokens: positiveInt.default(512),
+  onRedisError: z.enum(["open", "closed"]).default("open"),
+  authFailuresPerMinutePerIp: positiveInt.default(30),
 });
 
 const cacheSchema = z.strictObject({
@@ -85,6 +98,7 @@ export const configSchema = z
         openMs: positiveInt.default(30_000),
       })
       .prefault({}),
+    limits: limitsSchema.prefault({}),
     cache: cacheSchema.prefault({}),
     pricingFile: z.string().min(1).default("config/pricing.yaml"),
   })

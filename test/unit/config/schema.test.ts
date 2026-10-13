@@ -87,3 +87,34 @@ describe("configSchema", () => {
     expect(parsed.providers.mock).toMatchObject({ type: "mock", chunkDelayMs: 25 });
   });
 });
+
+describe("limits config (spec 005)", () => {
+  const minimal = () => ({ providers: { mock: { type: "mock" } } });
+
+  it("defaults to no key limits and documented settings", () => {
+    const config = configSchema.parse(minimal());
+    expect(config.limits).toEqual({
+      defaults: {},
+      completionReserveTokens: 512,
+      onRedisError: "open",
+      authFailuresPerMinutePerIp: 30,
+    });
+    expect(config.server.trustProxy).toBe(false);
+  });
+
+  it("example config sets default key limits", () => {
+    const config = configSchema.parse(example());
+    expect(config.limits.defaults).toEqual({ rpm: 60, tpm: 100_000 });
+  });
+
+  it.each([
+    [{ defaults: { rpm: 0 } }, "limits.defaults.rpm"],
+    [{ onRedisError: "maybe" }, "limits.onRedisError"],
+    [{ completionReserveTokens: -1 }, "limits.completionReserveTokens"],
+    [{ burst: 1 }, "limits"],
+  ])("rejects invalid limits %j", (limits, path) => {
+    const result = configSchema.safeParse({ ...minimal(), limits });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues.map((i) => formatPath(i.path))).toContain(path);
+  });
+});
