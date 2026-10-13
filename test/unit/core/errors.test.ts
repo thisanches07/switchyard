@@ -8,7 +8,6 @@ import {
   providerNotConfigured,
   providerNotImplemented,
   requestTooLarge,
-  streamNotSupported,
   unsupportedMediaType,
   upstreamClientError,
   upstreamError,
@@ -21,7 +20,6 @@ describe("gateway errors", () => {
     [invalidJson("Unexpected token"), 400, "invalid_request_error", "invalid_json"],
     [requestTooLarge(), 413, "invalid_request_error", "request_too_large"],
     [unsupportedMediaType("text/plain"), 415, "invalid_request_error", "unsupported_media_type"],
-    [streamNotSupported(), 400, "invalid_request_error", "stream_not_supported"],
     [modelNotFound("gpt-9"), 404, "invalid_request_error", "model_not_found"],
     [
       providerNotImplemented("claude", "anthropic"),

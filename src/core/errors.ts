@@ -46,14 +46,6 @@ export const unsupportedMediaType = (contentType: string) =>
     `Unsupported content type "${contentType}"; use application/json`,
   );
 
-export const streamNotSupported = () =>
-  new GatewayError(
-    400,
-    INVALID,
-    "stream_not_supported",
-    "Streaming is not supported yet; send stream: false",
-  );
-
 export const modelNotFound = (model: string) =>
   new GatewayError(404, INVALID, "model_not_found", `The model "${model}" does not exist`);
 

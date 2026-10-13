@@ -38,7 +38,7 @@ One commit per task, ending in `[spec-003]`. `pnpm verify` green after each.
   - Test: `telemetry.test.ts` › stream span attributes (`switchyard.stream`, ttfb, usage, estimated flag), `switchyard_ttfb_seconds`, statuses `upstream_error_midstream`/`499`, embeddings operation name; non-streaming behaviour unchanged.
   - Files: `src/modules/proxy/telemetry.ts`
 
-- [ ] **T8. Streaming route**
+- [x] **T8. Streaming route**
   - ACs: AC-1, AC-3, AC-4, AC-5, AC-7
   - Test: `test/unit/proxy/stream.test.ts` › SSE events and `[DONE]`, headers incl. ttfb, pre-first-chunk errors as JSON, mid-stream error event without `[DONE]`, usage forwarding rules.
   - Files: `src/modules/proxy/{stream,routes,schema}.ts`
