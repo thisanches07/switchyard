@@ -45,7 +45,7 @@ One commit per task, ending in `[spec-014]`. `pnpm verify` green after each.
   - Test: `test/unit/anthropic/inbound-request.test.ts` › Zod errors name fields; system/string/blocks, tool_use ↔ tool_calls, tool_result → tool messages, images, thinking and cache_control dropped, tool_choice reverse, top_k/metadata, blockers (document, server tools, tool_result images).
   - Files: `src/modules/anthropic/{schema,inbound-request}.ts`
 
-- [ ] **T9. Same-family native rebuild**
+- [x] **T9. Same-family native rebuild**
   - ACs: AC-7
   - Test: `test/unit/anthropic/native.test.ts` › byte-for-byte fixture (thinking, redacted_thinking, document, cache_control, system blocks, top_k, metadata, tools, tool_choice) with only `model` changed; masked canonical text written back; edited arguments written back as input.
   - Files: `src/modules/anthropic/native.ts`; adapter uses it.

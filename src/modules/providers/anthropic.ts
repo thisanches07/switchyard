@@ -17,6 +17,7 @@ import {
   UpstreamNetworkError,
   UpstreamTimeoutError,
 } from "../../core/provider.js";
+import { nativeRequestBody } from "../anthropic/native.js";
 import { toAnthropicRequest } from "../anthropic/outbound-request.js";
 import { toChatCompletion } from "../anthropic/outbound-response.js";
 import { createStreamTranslator } from "../anthropic/outbound-stream.js";
@@ -63,7 +64,7 @@ export function createAnthropicProvider(
     const extension = anthropicExtensionOf(request);
     let body: Record<string, unknown>;
     if (extension) {
-      body = { ...extension.body, model: request.model };
+      body = nativeRequestBody(extension, request);
       if (extension.beta) headers["anthropic-beta"] = extension.beta;
     } else {
       const translated = toAnthropicRequest(request, config);

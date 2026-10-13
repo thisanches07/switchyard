@@ -1,5 +1,6 @@
 import { trace } from "@opentelemetry/api";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { nativeEventOf } from "../../../src/core/anthropic.js";
 import type { ChatChunk } from "../../../src/core/chat.js";
 import { GatewayError } from "../../../src/core/errors.js";
 import {
@@ -7,8 +8,10 @@ import {
   UpstreamNetworkError,
   UpstreamTimeoutError,
 } from "../../../src/core/provider.js";
+import { fromAnthropicRequest } from "../../../src/modules/anthropic/inbound-request.js";
+import type { MessagesRequest } from "../../../src/modules/anthropic/schema.js";
 import { createAnthropicProvider } from "../../../src/modules/providers/anthropic.js";
-import { fixtureJson, fixtureText } from "../../helpers/anthropic-fixtures.js";
+import { fixtureEvents, fixtureJson, fixtureText } from "../../helpers/anthropic-fixtures.js";
 import { fakeHttp, jsonResponse } from "../../helpers/http.js";
 import { installInMemoryTracing } from "../../helpers/telemetry.js";
 
@@ -202,6 +205,46 @@ describe("anthropic provider (spec 014)", () => {
     );
     const stream = await createAnthropicProvider(config, http.client).chatStream(request, ctx());
     expect((await collect(stream)).error).toMatchObject({ code: "upstream_timeout" });
+  });
+});
+
+describe("anthropic provider, same-family requests (spec 014, AC-7/AC-11)", () => {
+  const sameFamily = () => {
+    const body = JSON.parse(fixtureText("request-same-family.json")) as MessagesRequest;
+    const { request: canonical } = fromAnthropicRequest(body, { beta: "beta-flag-1" });
+    return { body, request: { ...canonical, model: "claude-sonnet-5-5" } };
+  };
+
+  it("sends the client body natively, forwards anthropic-beta and returns the raw message", async () => {
+    const message = fixtureJson("message-thinking.json");
+    const http = fakeHttp(() => jsonResponse(200, message));
+    const { body, request: routed } = sameFamily();
+    const result = await createAnthropicProvider(config, http.client).chat(routed, ctx());
+    expect(JSON.stringify(http.calls[0]?.body)).toBe(
+      JSON.stringify({ ...body, model: "claude-sonnet-5-5" }),
+    );
+    expect(http.calls[0]?.headers["anthropic-beta"]).toBe("beta-flag-1");
+    expect(result.native).toEqual(message);
+    expect(result.body).toMatchObject({ object: "chat.completion" });
+  });
+
+  it("streams one chunk per upstream event, each carrying the raw event", async () => {
+    const raw = fixtureText("stream-thinking.sse");
+    const http = fakeHttp(
+      () => jsonResponse(500, {}),
+      () => sseResponse(200, [raw]),
+    );
+    const stream = await createAnthropicProvider(config, http.client).chatStream(
+      sameFamily().request,
+      ctx(),
+    );
+    const { chunks } = await collect(stream);
+    const events = chunks.map(nativeEventOf).filter((e) => e !== undefined);
+    expect(events.map((e) => e.type)).toEqual(
+      fixtureEvents("stream-thinking.sse").map((e) => e.type),
+    );
+    expect(events[0]?.data).toContain('"message_start"');
+    expect(http.calls[0]?.body).toMatchObject({ stream: true, top_k: 40 });
   });
 });
 
