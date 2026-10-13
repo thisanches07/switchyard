@@ -20,6 +20,7 @@ import {
 import type { DependencyCheck } from "./core/health.js";
 import type { ChatProvider } from "./core/provider.js";
 import { AuthCache } from "./modules/auth/cache.js";
+import { recordAuthFailure } from "./modules/auth/telemetry.js";
 import { healthRoutes } from "./modules/health/routes.js";
 import { proxyRoutes } from "./modules/proxy/routes.js";
 
@@ -84,7 +85,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   await app.register(proxyRoutes, {
     config: deps.config,
     providers: deps.providers,
-    auth: { store: deps.keyStore, pepper: deps.keyPepper, cache: authCache },
+    auth: {
+      store: deps.keyStore,
+      pepper: deps.keyPepper,
+      cache: authCache,
+      onFailure: recordAuthFailure,
+    },
     startedAt: Math.floor(Date.now() / 1000),
   });
   return app;

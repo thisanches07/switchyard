@@ -1,5 +1,6 @@
 import { Readable } from "node:stream";
 import type { FastifyBaseLogger, FastifyReply } from "fastify";
+import type { Principal } from "../../core/auth.js";
 import type { ChatChunk, ChatRequest, Usage } from "../../core/chat.js";
 import { GatewayError, upstreamError } from "../../core/errors.js";
 import type { ChatProvider } from "../../core/provider.js";
@@ -12,6 +13,7 @@ export interface StreamChatArgs {
   /** Request already rewritten with the resolved model. */
   request: ChatRequest;
   logger: FastifyBaseLogger;
+  principal?: Principal | undefined;
 }
 
 const sseEvent = (payload: unknown) => `data: ${JSON.stringify(payload)}\n\n`;
@@ -23,7 +25,7 @@ const sseEvent = (payload: unknown) => `data: ${JSON.stringify(payload)}\n\n`;
  * chunk is in hand, headers are sent and the rest is piped with backpressure; a failure from then
  * on becomes an SSE error event and is never retried (ADR-0008).
  */
-export async function streamChat({ reply, provider, request, logger }: StreamChatArgs) {
+export async function streamChat({ reply, provider, request, logger, principal }: StreamChatArgs) {
   const controller = new AbortController();
   let clientClosed = false;
   reply.raw.once("close", () => {
@@ -37,6 +39,7 @@ export async function streamChat({ reply, provider, request, logger }: StreamCha
     model: request.model,
     logger,
     stream: true,
+    principal,
   });
 
   let iterator: AsyncIterator<ChatChunk>;

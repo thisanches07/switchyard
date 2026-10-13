@@ -30,7 +30,7 @@ One commit per task, ending in `[spec-004]`. `pnpm verify` green after each (exi
   - ACs: AC-3, AC-4, AC-5
   - Test: `test/unit/auth/authenticate.test.ts` › each 401 reason (provider not called), valid key, expiry on cache hit, 403 `model_not_allowed`, `/v1/models` filtered, health open; existing proxy tests use a test key.
 
-- [ ] **T7. Team and key telemetry**
+- [x] **T7. Team and key telemetry**
   - ACs: AC-3
   - Test: `telemetry.test.ts` › `team` label, span attributes, `switchyard_auth_failures_total`.
 

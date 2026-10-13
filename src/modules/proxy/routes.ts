@@ -58,14 +58,20 @@ export async function proxyRoutes(app: FastifyInstance, opts: ProxyRoutesOptions
     const upstreamRequest = { ...body, model: resolved.model };
 
     if (body.stream === true) {
-      return streamChat({ reply, provider, request: upstreamRequest, logger: request.log });
+      return streamChat({
+        reply,
+        provider,
+        request: upstreamRequest,
+        logger: request.log,
+        principal: request.principal,
+      });
     }
 
     const signal = abortOnClientDisconnect(reply);
     const started = performance.now();
     try {
       const result = await tracedUpstreamCall(
-        { provider, model: resolved.model, logger: request.log },
+        { provider, model: resolved.model, logger: request.log, principal: request.principal },
         () => provider.chat(upstreamRequest, { signal }),
       );
       return result.body;
@@ -82,7 +88,13 @@ export async function proxyRoutes(app: FastifyInstance, opts: ProxyRoutesOptions
     const started = performance.now();
     try {
       const result = await tracedUpstreamCall(
-        { provider, model: resolved.model, logger: request.log, operation: "embeddings" },
+        {
+          provider,
+          model: resolved.model,
+          logger: request.log,
+          operation: "embeddings",
+          principal: request.principal,
+        },
         () => provider.embeddings({ ...body, model: resolved.model }, { signal }),
       );
       return result.body;

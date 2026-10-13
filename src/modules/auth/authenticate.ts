@@ -3,6 +3,7 @@ import type { ApiKeyRecord, KeyStore, Principal } from "../../core/auth.js";
 import { invalidApiKey } from "../../core/errors.js";
 import type { AuthCache } from "./cache.js";
 import { hashKey, KEY_PREFIX, parseBearer } from "./keys.js";
+import { tagRequestSpan } from "./telemetry.js";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -57,5 +58,6 @@ export function createAuthenticate(options: AuthenticateOptions) {
       allowedModels: record.allowedModels,
     };
     request.log = request.log.child({ teamId: record.teamId, keyId: record.id });
+    tagRequestSpan(request);
   };
 }

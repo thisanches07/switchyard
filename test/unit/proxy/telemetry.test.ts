@@ -77,12 +77,22 @@ describe("upstream telemetry", () => {
     const requests = await meters.points("switchyard_requests_total");
     expect(requests).toContainEqual(
       expect.objectContaining({
-        attributes: { provider: "mock", model: "fast-model", status: "200" },
+        attributes: {
+          provider: "mock",
+          model: "fast-model",
+          status: "200",
+          team: expect.any(String),
+        },
       }),
     );
     expect(requests).toContainEqual(
       expect.objectContaining({
-        attributes: { provider: "mock", model: "error-500", status: "502" },
+        attributes: {
+          provider: "mock",
+          model: "error-500",
+          status: "502",
+          team: expect.any(String),
+        },
       }),
     );
 
@@ -159,6 +169,7 @@ describe("upstream span handle (streaming)", () => {
       provider: "mock",
       model: "stream-mid",
       status: "upstream_error_midstream",
+      team: "none",
     });
     expect(tracing.exporter.getFinishedSpans()).toHaveLength(1);
   });
@@ -173,6 +184,7 @@ describe("upstream span handle (streaming)", () => {
       provider: "mock",
       model: "stream-gone",
       status: "499",
+      team: "none",
     });
   });
 
@@ -187,5 +199,63 @@ describe("upstream span handle (streaming)", () => {
       "gen_ai.usage.input_tokens": 4,
     });
     expect(lastSpan()?.attributes).not.toHaveProperty("gen_ai.usage.output_tokens");
+  });
+});
+
+describe("team and key telemetry (spec 004)", () => {
+  let tracing: ReturnType<typeof installInMemoryTracing>;
+  let meters: ReturnType<typeof installTestMetrics>;
+  beforeAll(() => {
+    tracing = installInMemoryTracing();
+    meters = installTestMetrics();
+  });
+  afterAll(async () => {
+    await tracing.uninstall();
+    await meters.uninstall();
+  });
+
+  it("labels requests with the team and tags spans with team and key ids", async () => {
+    const { app, store } = await testApp({ authenticated: false });
+    const { key, record, team } = await store.issueKey({ team: "telemetry-team" });
+    tracing.exporter.reset();
+    const res = await app.inject({
+      method: "POST",
+      url: "/v1/chat/completions",
+      payload: { model: "fast", messages: [{ role: "user", content: "hi" }] },
+      headers: { authorization: `Bearer ${key}` },
+    });
+    await app.close();
+    expect(res.statusCode).toBe(200);
+
+    const spans = tracing.exporter.getFinishedSpans();
+    const upstream = spans.find((s) => s.name === "switchyard.upstream");
+    expect(upstream?.attributes).toMatchObject({
+      "switchyard.team_id": team.id,
+      "switchyard.key_id": record.id,
+    });
+    const root = spans.find((s) => s.parentSpanContext === undefined);
+    expect(root?.attributes).toMatchObject({ "switchyard.team_id": team.id });
+
+    const requests = await meters.points("switchyard_requests_total");
+    expect(requests.map((p) => p.attributes)).toContainEqual({
+      provider: "mock",
+      model: "fast-model",
+      status: "200",
+      team: team.id,
+    });
+  });
+
+  it("counts authentication failures by reason", async () => {
+    const { app } = await testApp({ authenticated: false });
+    await app.inject({ method: "GET", url: "/v1/models" });
+    await app.inject({
+      method: "GET",
+      url: "/v1/models",
+      headers: { authorization: "Bearer nope" },
+    });
+    await app.close();
+    const failures = await meters.points("switchyard_auth_failures_total");
+    const reasons = failures.map((p) => (p.attributes as { reason: string }).reason);
+    expect(reasons).toEqual(expect.arrayContaining(["missing", "malformed"]));
   });
 });
