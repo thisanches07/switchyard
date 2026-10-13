@@ -54,7 +54,7 @@ One commit per task, ending in `[spec-005]`. `pnpm verify` exit code checked aft
   - ACs: AC-9, AC-10
   - Test: `ratelimit.int.test.ts` › two app instances on one Redis (exactly 10 of 50), Redis down open/closed through the HTTP API.
 
-- [ ] **T13. Contract suites**
+- [x] **T13. Contract suites**
   - ACs: AC-8
   - Test: Node and Python › key with `rpm: 1` → second call raises `RateLimitError`.
 

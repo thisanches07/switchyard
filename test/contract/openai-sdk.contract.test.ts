@@ -102,6 +102,24 @@ describe("official OpenAI Node SDK against Switchyard", () => {
     expect(error).toBeInstanceOf(OpenAI.AuthenticationError);
   });
 
+  it("surfaces gateway rate limits as RateLimitError with rate limit headers (spec 005)", async () => {
+    const limitedKey = await createKeyViaAdmin(baseUrl, TEST_ADMIN_TOKEN, {
+      team: `limited-${Date.now()}`,
+      rpm: 1,
+    });
+    const limited = new OpenAI({ baseURL: `${baseUrl}/v1`, apiKey: limitedKey, maxRetries: 0 });
+    const ok = await limited.chat.completions
+      .create({ model: "fast", messages: [{ role: "user", content: "hi" }] })
+      .withResponse();
+    expect(ok.response.headers.get("x-ratelimit-limit-requests")).toBe("1");
+    const error = await limited.chat.completions
+      .create({ model: "fast", messages: [{ role: "user", content: "hi" }] })
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(OpenAI.RateLimitError);
+    const headers = (error as InstanceType<typeof OpenAI.RateLimitError>).headers;
+    expect(Number(headers?.get("retry-after"))).toBeGreaterThanOrEqual(1);
+  });
+
   it("lists models", async () => {
     const ids: string[] = [];
     for await (const model of client.models.list()) ids.push(model.id);

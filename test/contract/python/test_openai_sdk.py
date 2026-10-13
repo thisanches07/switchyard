@@ -35,6 +35,14 @@ def test_invalid_key_is_authentication_error() -> None:
         anonymous.models.list()
 
 
+def test_rate_limit_is_rate_limit_error() -> None:
+    limited = OpenAI(base_url=BASE_URL, api_key=os.environ["SWITCHYARD_LIMITED_KEY"], max_retries=0)
+    limited.chat.completions.create(model="fast", messages=[{"role": "user", "content": "hi"}])
+    with pytest.raises(openai.RateLimitError) as info:
+        limited.chat.completions.create(model="fast", messages=[{"role": "user", "content": "hi"}])
+    assert int(info.value.response.headers["retry-after"]) >= 1
+
+
 def test_unknown_model_is_not_found(client: OpenAI) -> None:
     with pytest.raises(openai.NotFoundError) as info:
         client.chat.completions.create(model="gpt-9", messages=[{"role": "user", "content": "x"}])
