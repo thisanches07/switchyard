@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="320" viewBox="0 0 1280 320" role="img" aria-labelledby="title desc">
+  <title id="title">Switchyard</title>
+  <desc id="desc">One request track splitting into several provider tracks, like a railway switchyard.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0B1020"/>
+      <stop offset="1" stop-color="#111A33"/>
+    </linearGradient>
+    <linearGradient id="track" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#7C9CFF"/>
+      <stop offset="1" stop-color="#36D6B5"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.22" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#3B5BDB" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#3B5BDB" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M32 0H0V32" fill="none" stroke="#FFFFFF" stroke-opacity="0.04"/>
+    </pattern>
+  </defs>
+
+  <rect width="1280" height="320" rx="24" fill="url(#bg)"/>
+  <rect width="1280" height="320" rx="24" fill="url(#grid)"/>
+  <rect width="1280" height="320" rx="24" fill="url(#glow)"/>
+
+  <!-- Tracks: one inbound line switching into four provider lines -->
+  <g fill="none" stroke="url(#track)" stroke-width="4" stroke-linecap="round">
+    <path d="M760 160 H900"/>
+    <path d="M900 160 C960 160 980 70 1060 70 H1190"/>
+    <path d="M900 160 C960 160 980 130 1060 130 H1190"/>
+    <path d="M900 160 C960 160 980 190 1060 190 H1190"/>
+    <path d="M900 160 C960 160 980 250 1060 250 H1190"/>
+  </g>
+  <g fill="none" stroke="#FFFFFF" stroke-opacity="0.12" stroke-width="2" stroke-dasharray="2 10">
+    <path d="M760 172 H900"/>
+  </g>
+  <circle cx="900" cy="160" r="9" fill="#0B1020" stroke="#7C9CFF" stroke-width="4"/>
+  <g font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15" font-weight="600" fill="#C9D3F5">
+    <circle cx="1196" cy="70" r="7" fill="#36D6B5"/><text x="1212" y="75">Ollama</text>
+    <circle cx="1196" cy="130" r="7" fill="#36D6B5"/><text x="1212" y="135">Groq</text>
+    <circle cx="1196" cy="190" r="7" fill="#36D6B5"/><text x="1212" y="195">Gemini</text>
+    <circle cx="1196" cy="250" r="7" fill="#36D6B5"/><text x="1212" y="255">OpenAI</text>
+  </g>
+
+  <!-- Wordmark -->
+  <g font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif">
+    <text x="80" y="150" font-size="76" font-weight="800" fill="#FFFFFF" letter-spacing="-2">Switchyard</text>
+    <text x="84" y="198" font-size="24" font-weight="500" fill="#AEB9DF">The self-hosted, OpenAI-compatible LLM gateway</text>
+    <text x="84" y="236" font-size="18" font-weight="500" fill="#7C9CFF">routing · resilience · budgets · observability</text>
+  </g>
+</svg>
