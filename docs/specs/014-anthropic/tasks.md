@@ -15,7 +15,7 @@ One commit per task, ending in `[spec-014]`. `pnpm verify` green after each.
   - Test: `test/unit/anthropic/outbound-request.test.ts` › system concatenation, role merging, max tokens precedence, stop, user, images (data URI, URL), tools and tool_choice table, parallel_tool_calls, tool_calls → tool_use, invalid arguments 400, tool messages → tool_result turn, rejected and dropped parameter tables.
   - Files: `src/modules/anthropic/outbound-request.ts`
 
-- [ ] **T3. Outbound response translation**
+- [x] **T3. Outbound response translation**
   - ACs: AC-3, AC-4
   - Test: `test/unit/anthropic/outbound-response.test.ts` › text, tool_use, mixed, thinking dropped, every stop_reason, usage with cache fields (fixtures in `test/fixtures/anthropic/`).
   - Files: `src/modules/anthropic/outbound-response.ts`

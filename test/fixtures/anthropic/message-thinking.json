@@ -1,0 +1,18 @@
+{
+  "id": "msg_01Thinking",
+  "type": "message",
+  "role": "assistant",
+  "model": "claude-sonnet-5-5",
+  "content": [
+    {
+      "type": "thinking",
+      "thinking": "I need to find the GCD of 1071 and 462 using the Euclidean algorithm.",
+      "signature": "EqQBCgIYAhIM1gbcDa9GJwZA2b3hGgxBdjrkzLoky3dl1pkiMOYds"
+    },
+    { "type": "redacted_thinking", "data": "EmwKAhgBEgy3va3pzix/LafPsn4a" },
+    { "type": "text", "text": "The greatest common divisor of 1071 and 462 is **21**." }
+  ],
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "usage": { "input_tokens": 30, "output_tokens": 120 }
+}
