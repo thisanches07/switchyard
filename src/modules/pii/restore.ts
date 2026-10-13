@@ -59,3 +59,37 @@ export function restoreChatResponse(body: unknown, map: RestoreMap): unknown {
     return body;
   }
 }
+
+/** Restores every string inside a JSON value (tool-use `input`). */
+function restoreValue(value: unknown, map: RestoreMap): unknown {
+  if (typeof value === "string") return restoreText(value, map);
+  if (Array.isArray(value)) return value.map((item) => restoreValue(item, map));
+  if (isRecord(value)) {
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, restoreValue(v, map)]));
+  }
+  return value;
+}
+
+/**
+ * Restores a non-streaming Anthropic `message` (spec 014 same-family `/v1/messages`): `text`
+ * blocks and `tool_use` inputs. Thinking blocks are signed by the provider and never touched.
+ * Like `restoreChatResponse`, it never throws.
+ */
+export function restoreAnthropicMessage(message: unknown, map: RestoreMap): unknown {
+  if (map.size === 0 || !isRecord(message) || !Array.isArray(message.content)) return message;
+  try {
+    return {
+      ...message,
+      content: message.content.map((block: unknown) => {
+        if (!isRecord(block)) return block;
+        if (block.type === "text" && typeof block.text === "string") {
+          return { ...block, text: restoreText(block.text, map) };
+        }
+        if (block.type === "tool_use") return { ...block, input: restoreValue(block.input, map) };
+        return block;
+      }),
+    };
+  } catch {
+    return message;
+  }
+}

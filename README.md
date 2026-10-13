@@ -539,7 +539,7 @@ message = client.messages.create(model="smart", max_tokens=1024,
 | Not provided | `count_tokens`, Message Batches, Files, Models and beta endpoints; Bedrock / Vertex / Foundry. |
 | Embeddings on `anthropic` providers | `400 embeddings_not_supported` |
 
-Upstream `429`, `5xx`, `529` and timeouts are classified as retryable (and `401` from Anthropic as the operator's problem, `502 upstream_auth_error`), ready for fallback in spec 008. Usage events and PII redaction for `/v1/messages` are wired when specs 006 and 010 land.
+Upstream `429`, `5xx`, `529` and timeouts are classified as retryable (and `401` from Anthropic as the operator's problem, `502 upstream_auth_error`), ready for fallback in spec 008. `/v1/messages` produces one usage event per admitted request (`operation: "messages"`, with Anthropic `cache_read_input_tokens` as `cachedInputTokens`) and goes through PII redaction like chat: masked text reaches Claude inside the client's own blocks, thinking blocks and documents are forwarded unscanned, and non-streaming answers are restored.
 
 ## 🔭 Observability
 
@@ -659,7 +659,7 @@ Each spec ends with a verification table, for example [spec 002](docs/specs/002-
 - [x] [006](docs/specs/006-usage-pipeline/spec.md) Usage events pipeline: one event per request, Kafka (Redpanda), idempotent worker, daily aggregates, DLQ, `GET /admin/usage`
 - [ ] 007 Budgets and cost accounting
 - [ ] 008 Fallback, retries and circuit breakers
-- [ ] [014](docs/specs/014-anthropic/spec.md) Anthropic adapter and `/v1/messages` (implemented; usage-event and PII wiring follow 006 and 010)
+- [x] [014](docs/specs/014-anthropic/spec.md) Anthropic adapter and `/v1/messages`: Claude behind the OpenAI API, the Anthropic SDKs in front of any provider
 
 **v0.2: savings and safety:** exact and semantic cache, PII redaction
 

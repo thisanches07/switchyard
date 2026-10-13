@@ -186,6 +186,7 @@ export async function proxyRoutes(app: FastifyInstance, opts: ProxyRoutesOptions
     admit,
     settle,
     abortOnClientDisconnect,
+    pii,
   });
 }
 

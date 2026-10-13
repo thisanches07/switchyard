@@ -222,6 +222,7 @@ Inbound shape: `app.setErrorHandler` checks `request.routeOptions.config.api ===
 4. `tool_result.is_error` has no OpenAI equivalent and is dropped on the cross-family path.
 5. `anthropic-ratelimit-*` derived by parsing the `x-ratelimit-*` headers rather than changing `Admission` (§6).
 
-## 11. Blocked wiring (after specs 006 and 010 merge)
+## 11. Wiring with specs 006 and 010 (done after both merged, T18)
 - `proxy/messages.ts` calls the same request-outcome hook as chat with `operation: "messages"`; `cachedInputTokens` comes from `Usage.cachedInputTokens` (set by the adapter from `cache_read_input_tokens`; for streams from the canonical usage chunk's `prompt_tokens_details.cached_tokens`).
 - The PII stage runs on the canonical request right after admission, exactly where chat calls it; `native.ts` already writes masked text back.
+- Non-streaming answers are restored after translation: `restoreChatResponse` on the canonical body (cross-family) or `restoreAnthropicMessage` on the native message (`text` blocks and `tool_use` inputs; thinking untouched). PII `block` ends the tracker with `reject()` (one `rejected` event).

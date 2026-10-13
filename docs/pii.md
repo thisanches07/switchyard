@@ -51,6 +51,7 @@ Detection is linear in the size of the request (bounded patterns only, tested on
 
 - Chat: `messages[].content` of **every** role, as a string or as `type: "text"` parts, and `messages[].tool_calls[].function.arguments` of earlier assistant turns (string values inside the JSON).
 - Embeddings: `input` as a string or an array of strings.
+- Anthropic Messages (`/v1/messages`, spec 014): `system`, `text` blocks, `tool_result` text and `tool_use` inputs, through the same canonical fields as chat. On Claude models the masked text is written back into the client's own blocks; `thinking` / `redacted_thinking` blocks (signed by Anthropic) and `document` blocks are forwarded **unscanned** (ADR-0016). Non-streaming answers are restored, including `tool_use` inputs; thinking in answers is left as sent.
 - **Not inspected:** images, audio and files; `tools` / `functions` definitions; message `name`; every other parameter. Token-array embeddings input is passed through unchanged and marked `switchyard.pii.uninspected=true` on the request span.
 
 ## Placeholders and restore (`mask`)

@@ -1,6 +1,6 @@
 # Tasks 014: Anthropic provider adapter and Messages API
 
-- **Status:** Approved (2026-10-13)
+- **Status:** Done (2026-10-13)
 - **Spec:** [spec.md](spec.md) · **Design:** [design.md](design.md)
 
 One commit per task, ending in `[spec-014]`. `pnpm verify` green after each.
@@ -88,12 +88,12 @@ One commit per task, ending in `[spec-014]`. `pnpm verify` green after each.
   - Do: README (Anthropic section: both directions, limitations incl. thinking blocks, `defaultMaxTokens`), example config, architecture doc; verification table below.
   - Test: `pnpm verify`, `pnpm test:int`, `pnpm test:contract`, `pnpm test:contract:py`.
 
-- [ ] **T18. Wire `/v1/messages` into the outcome hook and PII stage** — *blocked until specs 006 and 010 merge*
+- [x] **T18. Wire `/v1/messages` into the outcome hook and PII stage** (after specs 006 and 010 merged)
   - ACs: AC-9 (outcome hook, `operation: "messages"`, `cachedInputTokens` from `cache_read_input_tokens`), ADR-0016 (PII on `/v1/messages`)
   - Do: in `src/modules/proxy/messages.ts`, call 006's hook on the same settle/stream paths chat uses (both already go through `settle()`/`streamChat()`); read `cachedInputTokens` from `Usage` (non-stream) and from the canonical usage chunk (stream); call 010's PII stage on the canonical request after admission; keep the extension (spread, not clone).
-  - Test: `messages.test.ts` › one usage event per admitted request with `operation: "messages"` and cached tokens; PII mask on cross-family and same-family (masked text reaches the upstream body, thinking untouched); `block` mode → Anthropic-shaped 400 `pii_detected`; `native.test.ts` fixture still byte-for-byte with PII `off`.
+  - Test: `test/unit/proxy/messages-usage.test.ts` › one usage event per admitted request with `operation: "messages"` and cached tokens; PII mask on cross-family and same-family (masked text reaches the upstream body, thinking untouched); `block` mode → Anthropic-shaped 400 `pii_detected`; `native.test.ts` fixture still byte-for-byte with PII `off`.
 
-## Verification (2026-10-13, everything except T18)
+## Verification (2026-10-13, rebased on specs 006 and 010)
 
 | AC | Proven by | Result |
 |---|---|---|
@@ -105,7 +105,7 @@ One commit per task, ending in `[spec-014]`. `pnpm verify` green after each.
 | AC-6 | `inbound-request.test.ts` › Zod errors name the field; `authenticate.test.ts`, `keys.test.ts` › `x-api-key`, both headers equal/different; `messages.test.ts`; `openapi.test.ts` › `/v1/messages` and the `x-api-key` scheme | ✅ |
 | AC-7 | `native.test.ts` › byte-for-byte fixture (thinking, redacted_thinking, document, cache_control, system blocks, top_k, metadata, tools, tool_choice), masked text written back; `messages.test.ts` › same-family response with requested model, `anthropic-beta`; `anthropic.int.test.ts` › raw upstream bytes over HTTP | ✅ |
 | AC-8 | `inbound-request.test.ts`, `inbound-response.test.ts` (tables, blockers, `msg_` ids, stop sequences); `messages.test.ts` › cross-family message and 400 blockers | ✅ |
-| AC-9 | `messages.test.ts` › `anthropic-ratelimit-*` on success and 429 with `retry-after`, `max_tokens` allowance, request span `gen_ai.operation.name=chat` + `switchyard.api=anthropic` without content. **Outcome hook: T18 (blocked)** | ⏳ partial |
+| AC-9 | `messages.test.ts` › `anthropic-ratelimit-*` on success and 429 with `retry-after`, `max_tokens` allowance, request span `gen_ai.operation.name=chat` + `switchyard.api=anthropic` without content; `messages-usage.test.ts` › exactly one usage event with `operation: "messages"` for success, stream success, pre-first-byte failure, mid-stream failure, client disconnect and PII `rejected`, none before admission; `cachedInputTokens` from `cache_read_input_tokens` (same-family message and stream, and `/v1/chat/completions` → anthropic) | ✅ |
 | AC-10 | `outbound-stream.test.ts` (text, tool use, thinking, usage, stop reasons, ping/unknown); `anthropic.test.ts` › stream; `anthropic.int.test.ts` › real SSE with `[DONE]` | ✅ |
 | AC-11 | `inbound-stream.test.ts` › synthesised order and native forwarding; `messages.test.ts` › both paths; contract (Node, Python) › stream + `finalMessage` / `get_final_message` | ✅ |
 | AC-12 | `outbound-stream.test.ts` › thinking emits nothing, `error` before/after content; `anthropic.test.ts` › pre-stream status and first-read error; `messages.test.ts` and `anthropic.int.test.ts` › mid-stream error event per route | ✅ |
@@ -114,8 +114,10 @@ One commit per task, ending in `[spec-014]`. `pnpm verify` green after each.
 | AC-15 | Fixtures in `test/fixtures/anthropic/`; `anthropic.int.test.ts` against the in-process fake server; `anthropic-live.contract.test.ts` skipped with a message unless `ANTHROPIC_API_KEY` and `SWITCHYARD_LIVE_ANTHROPIC=1` | ✅ |
 | AC-16 | `anthropic-sdk.contract.test.ts` (TS SDK 0.129.0) and `test_anthropic_sdk.py` (Python SDK 1.9.0): create, stream, tool round trip and typed errors on mock and on the fake server; `openai-sdk.contract.test.ts` › chat, stream and tools routed to the fake Anthropic server | ✅ |
 
-Runs: `pnpm verify` green (540 unit tests, coverage gate) · `pnpm test:int` 44 passed (incl. 8 against the fake Anthropic server) · `pnpm test:contract` 31 passed, 3 live skipped · `pnpm test:contract:py` 22 passed.
+PII on `/v1/messages` (ADR-0016, spec 010): `messages-usage.test.ts` › cross-family mask + restore, same-family masked text written into the client blocks (system, text, tool_use input, tool_result) with thinking untouched and the message restored, `masked-unrestored` streams, `block` → Anthropic-shaped `400 pii_detected` with one `rejected` event and no upstream call, PII `off` keeps the body byte for byte.
+
+Runs after the rebase: `pnpm verify` green (868 unit tests, coverage gate) · `anthropic.int.test.ts` + `upstream-http.int.test.ts` 20 passed (Docker lock; the full `pnpm test:int`, 44 passed, ran before the rebase) · `pnpm test:contract` 33 passed, 3 live skipped · `pnpm test:contract:py` 22 passed. Compose smoke not run locally (CI covers it).
 
 Notes:
 - The thinking open question was not checked live (no paid key in this run); the opt-in live test includes the OpenAI-surface tool loop that answers it.
-- `test/unit/proxy/stream.test.ts` › "reconciles against the usage reported at the end of the stream" and `admission.test.ts` › "reconcile refunds…" are timing-sensitive (token refill during the request) and failed intermittently on the loaded shared machine; they pass on rerun and were not changed (out of scope).
+- The two timing-sensitive reconciliation tests seen earlier are fixed on main by PR #11 (frozen limiter clock), kept as merged.

@@ -11,6 +11,8 @@ import { toAnthropicMessage, withRequestedModel } from "../anthropic/inbound-res
 import { createAnthropicEncoder } from "../anthropic/inbound-stream.js";
 import { parseMessagesRequest } from "../anthropic/schema.js";
 import { docs } from "../docs.js";
+import { restoreAnthropicMessage, restoreChatResponse } from "../pii/restore.js";
+import type { PiiStage } from "../pii/stage.js";
 import type { Admission } from "../ratelimit/admission.js";
 import { estimateChatTokens } from "../ratelimit/estimate.js";
 import type { ResolvedModel } from "../routing/resolve.js";
@@ -47,6 +49,8 @@ export interface MessagesRouteDeps {
     estimate: (result: T) => TokenUsage,
   ): Promise<T>;
   abortOnClientDisconnect(reply: FastifyReply): AbortSignal;
+  /** PII stage (spec 010), run on the canonical request right after admission. */
+  pii: PiiStage;
 }
 
 /**
@@ -73,9 +77,8 @@ export function registerMessagesRoute(app: FastifyInstance, deps: MessagesRouteD
           `${blockers.join(", ")}: not supported when the model is served by a non-Anthropic provider ("${resolved.provider}")`,
         );
       }
-      // Spread keeps the Anthropic extension (a symbol key) for the adapter.
-      const upstreamRequest: ChatRequest = { ...canonical, model: resolved.model };
       const stream = body.stream === true;
+      // One usage event per admitted request, operation "messages" (spec 006).
       const admission = await deps.admit(
         request,
         reply,
@@ -83,6 +86,10 @@ export function registerMessagesRoute(app: FastifyInstance, deps: MessagesRouteD
         { operation: "messages", stream, model: body.model, resolved },
       );
       reply.headers(anthropicRateLimitHeaders(admission?.headers ?? {}, Date.now()));
+      // PII (spec 010) masks canonical text in place; spread keeps the Anthropic extension (a
+      // symbol key), so the same-family adapter writes masked text back into the client's blocks.
+      const masked = await deps.pii.chat({ request, reply, admission, stream }, canonical);
+      const upstreamRequest: ChatRequest = { ...masked.body, model: resolved.model };
 
       if (stream) {
         return streamChat({
@@ -117,8 +124,13 @@ export function registerMessagesRoute(app: FastifyInstance, deps: MessagesRouteD
       } finally {
         reply.header("x-switchyard-upstream-ms", Math.round(performance.now() - started));
       }
-      if (result.native !== undefined) return withRequestedModel(result.native, body.model);
-      return toAnthropicMessage(result.body, {
+      if (result.native !== undefined) {
+        return withRequestedModel(
+          restoreAnthropicMessage(result.native, masked.restore),
+          body.model,
+        );
+      }
+      return toAnthropicMessage(restoreChatResponse(result.body, masked.restore), {
         model: body.model,
         provider: provider.name,
         stopSequences: body.stop_sequences,

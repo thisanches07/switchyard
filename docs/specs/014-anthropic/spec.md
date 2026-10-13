@@ -1,6 +1,6 @@
 # Spec 014: Anthropic provider adapter and Messages API
 
-- **Status:** Approved (2026-10-13)
+- **Status:** Done (2026-10-13)
 - **Owner:** @thisanches07
 - **Release:** stretch (implemented in wave A)
 - **Depends on:** 003, 004, 005
