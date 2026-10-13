@@ -107,7 +107,8 @@ function parseYaml(text: string, path: string): unknown {
   return doc.toJS() ?? {};
 }
 
-function readSource(path: string): string {
+/** Reads the config file; a missing or unreadable file is a ConfigError. */
+export function readSource(path: string): string {
   try {
     return readFileSync(path, "utf8");
   } catch (error) {

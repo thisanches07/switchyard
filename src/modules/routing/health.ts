@@ -1,5 +1,6 @@
 import type { FastifyBaseLogger } from "fastify";
 import type { LoadedConfig } from "../../config/load.js";
+import { stableJson } from "../../core/stable-json.js";
 import { type BreakerSettings, type BreakerState, CircuitBreaker } from "./breaker.js";
 import { recordCircuitState } from "./telemetry.js";
 
@@ -147,13 +148,4 @@ export class CandidateHealthRegistry {
       }
     }
   }
-}
-
-/** JSON with sorted keys, so equal definitions compare equal whatever their key order. */
-function stableJson(value: unknown): string {
-  return JSON.stringify(value, (_key, v: unknown) =>
-    v && typeof v === "object" && !Array.isArray(v)
-      ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => a.localeCompare(b)))
-      : v,
-  );
 }

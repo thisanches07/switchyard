@@ -51,7 +51,7 @@ One commit per task, ending in `[spec-008]`. `pnpm verify` green after each. T7�
   - Test: `test/unit/proxy/messages-routing.test.ts` › fallback (stream and not), mixed-family alias with blockers drops non-anthropic candidates, Anthropic-shaped 503.
   - Files: `src/modules/proxy/messages.ts`
 
-- [ ] **T10. Config runtime and reload routine**
+- [x] **T10. Config runtime and reload routine**
   - ACs: AC-12, AC-13
   - Test: `test/unit/config/runtime.test.ts` › unchanged hash, reload swaps snapshot, startup-fixed kept with restartRequired, provider instances reused, health retained/dropped, invalid YAML and schema keep the old snapshot and count failure, issues without values.
   - Files: `src/modules/config/runtime.ts`
