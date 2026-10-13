@@ -17,7 +17,7 @@ One commit per task, ending in `[spec-011]`. T13 and T14 are blocked on things o
   - Test: `test/unit/proxy/telemetry.test.ts` › GenAI attributes and name, error.type, no gen_ai.system, default and configured provider name; `test/unit/config/schema.test.ts` › genAiProviderName.
   - Files: `src/modules/proxy/{telemetry,attempts,routes}.ts`, `src/config/schema.ts`, `config/switchyard.example.yaml`, `test/unit/**`
 
-- [ ] **T3. No prompt or response content in telemetry**
+- [x] **T3. No prompt or response content in telemetry**
   - ACs: AC-5
   - Test: `test/unit/proxy/no-content-telemetry.test.ts` › sentinel absent from every span attribute, span event and log line (chat, stream, embeddings, messages), with `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true`.
   - Files: test only (fix code if it fails)
