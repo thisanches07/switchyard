@@ -20,7 +20,7 @@ One commit per task, ending in `[spec-014]`. `pnpm verify` green after each.
   - Test: `test/unit/anthropic/outbound-response.test.ts` › text, tool_use, mixed, thinking dropped, every stop_reason, usage with cache fields (fixtures in `test/fixtures/anthropic/`).
   - Files: `src/modules/anthropic/outbound-response.ts`
 
-- [ ] **T4. Upstream error mapping**
+- [x] **T4. Upstream error mapping**
   - ACs: AC-13
   - Test: `test/unit/anthropic/upstream-errors.test.ts` › status table (400/403/404/413/422 pass-through, 401 → 502, 429 + retry-after, 529 → 503, 500 → 502, 504), retryable flags, `error` event types.
   - Files: `src/modules/anthropic/upstream-errors.ts`
