@@ -78,8 +78,8 @@ retry:                       # spec 008: retries and fallback, only before the f
   maxDelayMs: 2000           # also caps an upstream Retry-After
 
 circuitBreaker:              # spec 008: per candidate (provider/model), per instance
-  failureThreshold: 5        # consecutive failures to open
-  openMs: 30000              # time before half-open probe
+  failureThreshold: 10       # consecutive failures to open (a dead provider opens in ~4 requests; 30 % noise almost never does)
+  openMs: 10000              # time before the single half-open probe
 
 routing:                     # spec 008
   ewmaAlpha: 0.3             # weight of the newest latency sample (lowest-latency aliases)

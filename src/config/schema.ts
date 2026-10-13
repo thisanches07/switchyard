@@ -126,8 +126,8 @@ export const configSchema = z
       .prefault({}),
     circuitBreaker: z
       .strictObject({
-        failureThreshold: positiveInt.default(5),
-        openMs: positiveInt.default(30_000),
+        failureThreshold: positiveInt.default(10),
+        openMs: positiveInt.default(10_000),
       })
       .prefault({}),
     limits: limitsSchema.prefault({}),

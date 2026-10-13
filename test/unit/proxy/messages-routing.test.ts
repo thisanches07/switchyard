@@ -127,9 +127,8 @@ describe("routing on POST /v1/messages (spec 008)", () => {
 
   it("answers no_healthy_upstream in the Anthropic shape (AC-9)", async () => {
     const { send } = await setup();
-    // Open mock/error-503 (5 consecutive failures by default: two requests of 3 attempts).
-    await send({ ...hi, model: "mock/error-503" });
-    await send({ ...hi, model: "mock/error-503" });
+    // Open mock/error-503 (10 consecutive failures by default: four requests of 3 attempts).
+    for (let i = 0; i < 4; i += 1) await send({ ...hi, model: "mock/error-503" });
     const res = await send({ ...hi, model: "mock/error-503" });
     expect(res.statusCode).toBe(503);
     expect(res.json()).toMatchObject({ type: "error", error: { type: "overloaded_error" } });

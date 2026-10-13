@@ -33,8 +33,8 @@ retry:                   # existing stub, now used
   baseDelayMs: 200
   maxDelayMs: 2000
 circuitBreaker:          # existing stub, now used
-  failureThreshold: 5
-  openMs: 30000
+  failureThreshold: 10
+  openMs: 10000
 server:
   timeouts: { connectMs: 5000, ttfbMs: 30000, totalMs: 120000 }   # totalMs: whole request, all attempts
 aliases:
@@ -215,6 +215,8 @@ sequenceDiagram
 5. **All breakers open after at least one attempt** returns the last attempt's error rather than `no_healthy_upstream` (more informative; AC-9 targets requests that made no attempt).
 6. **Non-retryable outcomes of a half-open probe** release the probe (stay half-open) instead of closing the breaker: a 4xx says little about provider health.
 7. **`/v1/models` filtering** lists an alias when any of its candidates is allowed for the key (consistent with AC-1).
+8. **Breaker defaults `failureThreshold: 10`, `openMs: 10000`** (the config stub had 5 / 30000). A breaker should open for a dead provider within seconds but not on random noise. With a per-call failure probability `p`, a run of `k` consecutive failures starts at a given call with probability about `p^k (1 − p)`. At `p = 0.3`, `k = 5` gives about 1.7 × 10⁻³ per call, so each candidate opens a few times per thousand calls. With 30 s open periods all three chaos candidates were eventually open together, and only 430 of 1000 chaos requests succeeded. `k = 10` gives about 4 × 10⁻⁶ per call, essentially never on 30 % noise, while a dead provider (`p = 1`) still opens after 10 failures, about 4 requests at `maxAttempts: 3`. A 10 s open period bounds how long a recovered provider stays skipped, and costs one probe per 10 s per candidate while it is down. The chaos test (AC-15) runs with these defaults and sets only the seed and `retry.maxAttempts: 5`.
+9. **Budgets and hot reload (after spec 007):** the gateway reads `budgets.onRedisError` from the live config on every check, so it reloads. `budgets.reconcileIntervalSeconds` belongs to the usage worker, which reads the file when it starts (no hot reload in the worker). `pricingFile` stays restart-only: the price table is loaded at boot (spec 007), and `lowest-cost` and event costs use that table.
 
 ## 9. AC → component → test
 

@@ -417,7 +417,7 @@ aliases:
   fast:  { strategy: priority,       candidates: [groq/llama-3.1-8b-instant, gemini/gemini-2.5-flash, ollama/llama3.2] }
   smart: { strategy: lowest-latency, candidates: [claude/claude-sonnet-5-5, gemini/gemini-2.5-pro] }
 retry:          { maxAttempts: 3, baseDelayMs: 200, maxDelayMs: 2000 }
-circuitBreaker: { failureThreshold: 5, openMs: 30000 }
+circuitBreaker: { failureThreshold: 10, openMs: 10000 }
 routing:        { ewmaAlpha: 0.3, hotReload: true }
 ```
 

@@ -92,7 +92,7 @@ One commit per task, ending in `[spec-008]`. `pnpm verify` green after each. T7�
 | AC | Test(s) |
 |---|---|
 | AC-1 | `test/unit/routing/plan.test.ts`; `test/unit/proxy/routing.test.ts` › allowed models per candidate (skip, alias name, 403, `/v1/models`); `test/unit/config/routing-config.test.ts` › routing section |
-| AC-2 | `test/unit/routing/select.test.ts`; `test/unit/proxy/attempts.test.ts` › lowest-latency, lowest-cost; `routing.test.ts` › lowest-cost with a fake estimator / without one |
+| AC-2 | `test/unit/routing/select.test.ts`; `test/unit/proxy/lowest-cost-pricing.test.ts` › spec 007 price table (cheapest first, unknown last); `test/unit/proxy/attempts.test.ts` › lowest-latency, lowest-cost; `routing.test.ts` › lowest-cost with a fake estimator / without one |
 | AC-3 | `attempts.test.ts` › fallback, wrap-around, maxAttempts, non-retryable at once, explicit retryable flag; `test/unit/routing/classify.test.ts`; `routing.test.ts` › fallback, non-retryable 4xx |
 | AC-4 | `test/unit/routing/backoff.test.ts`; `attempts.test.ts` › backoff only on repeats, Retry-After floor and cap; `test/unit/providers/openai-compatible.test.ts` › retry-after kept |
 | AC-5 | `attempts.test.ts` › last error, client disconnect; `routing.test.ts` › 502, 429, 504 |
@@ -108,4 +108,4 @@ One commit per task, ending in `[spec-008]`. `pnpm verify` green after each. T7�
 | AC-15 | `test/integration/routing-chaos.int.test.ts` |
 | AC-16 | `scripts/compose-smoke.ts` › "an alias falls back when its first candidate fails" (CI) |
 
-Notes: the chaos test sets `circuitBreaker.failureThreshold: 10, openMs: 1000` and spaces requests 50 ms on its manual clock; with the default threshold (5) random 30 % noise eventually opens all three candidates and requests get `no_healthy_upstream`, which AC-15 does not intend to test.
+Notes: the chaos test uses the shipped breaker and backoff defaults (`failureThreshold: 10`, `openMs: 10000`, design §8 item 8) and sets only the seed and `retry.maxAttempts: 5`. The earlier defaults (5 / 30000) let random 30 % noise open all three candidates (430 of 1000 succeeded).

@@ -30,10 +30,8 @@ async function runChaos(seed: number): Promise<Outcome[]> {
       c3: { type: "mock", errorRate: 0.3 },
     },
     aliases: { chaos: { strategy: "priority", candidates: ["c1/m", "c2/m", "c3/m"] } },
-    retry: { maxAttempts: 5, baseDelayMs: 100, maxDelayMs: 2_000 },
-    // Random 30 % noise must not trip breakers for long: with the default threshold (5) every
-    // candidate opens at some point in 1000+ calls and requests then get no_healthy_upstream.
-    circuitBreaker: { failureThreshold: 10, openMs: 1_000 },
+    // Only the attempts are set: backoff and circuit-breaker settings are the shipped defaults.
+    retry: { maxAttempts: 5 },
   });
   const timers = manualTimers();
   const providers = createProviderRegistry(
