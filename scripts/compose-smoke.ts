@@ -1,4 +1,5 @@
-// Smoke test for the Docker Compose stack (spec 001: AC-1..AC-6, AC-9; spec 002: chat via mock).
+// Smoke test for the Docker Compose stack (spec 001: AC-1..AC-6, AC-9; specs 002-003: chat,
+// streaming and embeddings via the mock provider).
 // Cross-platform: `node scripts/compose-smoke.ts [--down]` locally (Windows or Linux) and in CI.
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
@@ -73,6 +74,36 @@ try {
     if (res.status !== 200) throw new Error(`${res.status} ${body}`);
     if (res.headers.get("x-switchyard-provider") !== "mock")
       throw new Error("missing provider header");
+  });
+
+  await step("streamed chat completion arrives as SSE ending with [DONE]", async () => {
+    const res = await fetch(`${GATEWAY}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: "mock/smoke",
+        stream: true,
+        messages: [{ role: "user", content: "hi" }],
+      }),
+    });
+    const body = await res.text();
+    if (res.status !== 200) throw new Error(`${res.status} ${body}`);
+    if (!res.headers.get("content-type")?.startsWith("text/event-stream")) {
+      throw new Error(`unexpected content-type ${res.headers.get("content-type")}`);
+    }
+    if (!body.trimEnd().endsWith("data: [DONE]")) throw new Error(body.slice(-200));
+  });
+
+  await step("POST /v1/embeddings through the mock provider returns 768-dim vectors", async () => {
+    const res = await fetch(`${GATEWAY}/v1/embeddings`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: "mock/smoke", input: "hi", encoding_format: "float" }),
+    });
+    const body = await res.text();
+    if (res.status !== 200) throw new Error(`${res.status} ${body}`);
+    const length = JSON.parse(body).data?.[0]?.embedding?.length;
+    if (length !== 768) throw new Error(`embedding length ${length}`);
   });
 
   await step("ollama profile adds the ollama service", () => {

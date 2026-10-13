@@ -60,6 +60,31 @@ One commit per task, ending in `[spec-003]`. `pnpm verify` green after each.
   - Do: `scripts/contract-python.ts` starts the gateway and runs pytest; `pnpm test:contract:py`; CI job with `actions/setup-python`.
   - Test: `test/contract/python/test_openai_sdk.py` › chat, stream, embeddings on mock; Ollama cases when available.
 
-- [ ] **T13. Smoke, docs and verification**
+- [x] **T13. Smoke, docs and verification**
   - Do: smoke step for a streamed request; README (features, quickstart streaming example, roadmap); backlog status; verification table.
   - Test: `pnpm verify`, `pnpm test:int`, `pnpm test:contract`, `pnpm test:contract:py`, `pnpm test:smoke`.
+
+## Verification (2026-10-13)
+
+| AC | Proven by | Result |
+|---|---|---|
+| AC-1 | `test/unit/proxy/stream.test.ts` › SSE content type, chunks, `[DONE]`; contract (Node, Python) › stream through an alias | ✅ |
+| AC-2 | `test/integration/streaming.int.test.ts` › first chunk arrives > 800 ms before the last (200 ms chunk delay, real socket) | ✅ |
+| AC-3 | `stream.test.ts` › Switchyard headers including `x-switchyard-ttfb-ms` | ✅ |
+| AC-4 | `stream.test.ts` › 404 / 502 / 429 as JSON before the first byte; `openai-compatible.test.ts` › pre-stream status and connection errors | ✅ |
+| AC-5 | `stream.test.ts` › mid-stream error event without `[DONE]`, no retry; `openai-compatible.test.ts` › mid-stream timeout/network codes; `upstream-http.int.test.ts` › idle timeout; telemetry › `upstream_error_midstream` | ✅ |
+| AC-6 | `streaming.int.test.ts` › client abort → upstream signal aborted < 1 s, status `499` recorded | ✅ |
+| AC-7 | `test/unit/proxy/usage.test.ts`; `stream.test.ts` › usage chunk only when requested, provider always asked, estimation flag | ✅ |
+| AC-8 | `test/unit/proxy/telemetry.test.ts` › stream span attributes, `switchyard_ttfb_seconds`, statuses; no content recorded | ✅ |
+| AC-9 | `test/unit/providers/mock.test.ts` › stream sequence, `chunkDelayMs`, `error-midstream`, abort | ✅ |
+| AC-10 | `test/unit/proxy/embeddings.test.ts`; `openai-compatible.test.ts` › embeddings URL, body, usage, errors | ✅ |
+| AC-11 | `mock.test.ts` › 768 dims, deterministic, normalised, base64 round-trip; telemetry › `gen_ai.operation.name=embeddings` | ✅ |
+| AC-12 | `test/unit/config/schema.test.ts` › example config defines `embed` | ✅ |
+| AC-13 | Node SDK contract 11/11 and Python SDK contract 8/8, including Ollama `llama3.2` streaming and `nomic-embed-text` embeddings (GTX 1060) | ✅ |
+
+Also run: `pnpm verify` (188 unit tests, coverage gate), `pnpm test:int` (16), `pnpm test:smoke` (10/10 steps, now with streaming and embeddings inside Docker).
+
+Deviations recorded here:
+- The mock honours `encoding_format: "base64"`: both official SDKs request base64 by default (spec non-goal corrected in the design).
+- `stream_not_supported` (spec 002) was removed; `stream: true` is now served.
+- The upstream tracer is looked up per call so tests that swap the global tracer provider are honoured.
