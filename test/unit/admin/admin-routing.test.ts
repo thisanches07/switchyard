@@ -25,7 +25,7 @@ ${extra}
 const aliases = `  broken: { strategy: priority, candidates: [mock/error-500, ollama/llama3.2] }`;
 
 describe("admin routing endpoints (spec 008)", () => {
-  const cleanup: (() => Promise<unknown> | void)[] = [];
+  const cleanup: (() => unknown)[] = [];
   afterEach(async () => {
     for (const fn of cleanup.splice(0)) await fn();
   });

@@ -1,7 +1,7 @@
 import { buildApp } from "./app.js";
 import { loadEnv } from "./config/env.js";
 import { ConfigError, formatConfigError } from "./config/errors.js";
-import { loadConfig } from "./config/load.js";
+import { type LoadedConfig, loadConfig } from "./config/load.js";
 import { DrizzleBudgetStore } from "./infra/db/budget-store.js";
 import { createDatabase } from "./infra/db/client.js";
 import { DrizzleKeyStore } from "./infra/db/key-store.js";
@@ -16,6 +16,8 @@ import { createRedisClient, redisCheck } from "./infra/redis/client.js";
 import { RedisRateLimiter } from "./infra/redis/rate-limiter.js";
 import { shutdownTelemetry } from "./infra/telemetry/sdk.js";
 import { installShutdown } from "./lifecycle/shutdown.js";
+import { type ConfigRuntime, createConfigRuntime } from "./modules/config/runtime.js";
+import { installReloadSignal, watchConfigFile } from "./modules/config/watch.js";
 import { loadPricing } from "./modules/pricing/load.js";
 import { unknownPriceCandidates } from "./modules/pricing/table.js";
 import { createProviderRegistry } from "./modules/providers/registry.js";
@@ -103,8 +105,32 @@ async function main(): Promise<void> {
     new Promise((resolve) => setTimeout(resolve, 3_000).unref()),
   ]);
 
-  const http = createUndiciClient(config.server.timeouts);
-  const providers = createProviderRegistry(config, process.env, { http });
+  // Hot reload (spec 008, ADR-0018): requests read the runtime's snapshot; TTFB and total
+  // timeouts are read per upstream call, so reloaded values apply too.
+  let runtime: ConfigRuntime | undefined;
+  const http = createUndiciClient(
+    () => runtime?.current().config.server.timeouts ?? config.server.timeouts,
+  );
+  const buildProviders = (next: LoadedConfig) =>
+    createProviderRegistry(next, process.env, { http });
+  const providers = buildProviders(config);
+  runtime = createConfigRuntime({
+    initial: { config, providers },
+    source: { path: env.SWITCHYARD_CONFIG, env: process.env },
+    buildProviders,
+    logger,
+  });
+  const live = runtime;
+  const watcher = watchConfigFile({
+    path: env.SWITCHYARD_CONFIG,
+    enabled: () => live.current().config.routing.hotReload,
+    reload: () => live.reload(),
+    logger,
+  });
+  const removeSighup = installReloadSignal(() => live.reload(), {
+    platform: process.platform,
+    target: process,
+  });
 
   // Usage events (spec 006): buffered in memory, published in the background; Kafka may be down.
   const usage = createUsagePublisher({
@@ -126,6 +152,7 @@ async function main(): Promise<void> {
     checks: [postgresCheck(pool), redisCheck(redis)],
     config,
     providers,
+    runtime,
     keyStore: new DrizzleKeyStore(db),
     rateLimiter: new RedisRateLimiter(redis),
     keyPepper: env.KEY_PEPPER,
@@ -141,6 +168,13 @@ async function main(): Promise<void> {
   installShutdown({
     app,
     closers: [
+      {
+        name: "config-watch",
+        close: async () => {
+          watcher.stop();
+          removeSighup();
+        },
+      },
       // After app.close(): in-flight requests have recorded their events. Leave 1 s for the rest.
       { name: "usage-events", close: ({ deadlineAt }) => usage.close(deadlineAt - 1_000) },
       { name: "upstream-http", close: () => http.close() },

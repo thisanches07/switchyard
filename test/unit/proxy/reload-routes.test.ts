@@ -27,7 +27,7 @@ const broken = "  broken: { strategy: priority, candidates: [mock/error-500] }";
 const fresh = "  fresh: { strategy: priority, candidates: [ollama/llama3.2] }";
 
 describe("requests read the config snapshot (spec 008, AC-12)", () => {
-  const cleanup: (() => Promise<unknown> | void)[] = [];
+  const cleanup: (() => unknown)[] = [];
   afterEach(async () => {
     for (const fn of cleanup.splice(0)) await fn();
   });

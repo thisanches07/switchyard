@@ -66,7 +66,7 @@ One commit per task, ending in `[spec-008]`. `pnpm verify` green after each. T7�
   - Test: `test/unit/admin/admin-routing.test.ts` › health view (states, EWMA, error rate, per-instance note), reload reloaded/unchanged, 400 invalid_config with issues, admin token required; `test/unit/app/openapi.test.ts` › paths.
   - Files: `src/modules/admin/routes.ts`, `src/modules/docs.ts`, `src/app.ts`
 
-- [ ] **T13. Poller, SIGHUP and server wiring**
+- [x] **T13. Poller, SIGHUP and server wiring**
   - ACs: AC-12
   - Test: `test/unit/config/watch.test.ts` › change detected and reloaded within 2.5 s of fake time, debounce, hotReload false skips, stop; SIGHUP installed only off Windows.
   - Files: `src/modules/config/watch.ts`, `src/server.ts`
