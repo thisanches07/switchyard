@@ -10,6 +10,7 @@ import Fastify, {
 } from "fastify";
 import type { LoadedConfig } from "./config/load.js";
 import type { AuthRecord, KeyStore } from "./core/auth.js";
+import type { BudgetCounters } from "./core/budget.js";
 import {
   GatewayError,
   internalError,
@@ -23,6 +24,7 @@ import type { DependencyCheck } from "./core/health.js";
 import type { ChatProvider } from "./core/provider.js";
 import type { RateLimiter } from "./core/ratelimit.js";
 import type { OutcomeRecorder, UsageReader } from "./core/usage.js";
+import { MemoryBudgetCounters } from "./infra/memory/budget-counters.js";
 import { adminRoutes } from "./modules/admin/routes.js";
 import {
   anthropicRateLimitHeaders,
@@ -30,7 +32,7 @@ import {
 } from "./modules/anthropic/inbound-errors.js";
 import { AuthCache } from "./modules/auth/cache.js";
 import { recordAuthFailure } from "./modules/auth/telemetry.js";
-import { createBudgetCharger } from "./modules/budgets/charge.js";
+import { createBudgets } from "./modules/budgets/service.js";
 import { openApiInfo } from "./modules/docs.js";
 import { healthRoutes } from "./modules/health/routes.js";
 import { PriceTable, priceEvent } from "./modules/pricing/table.js";
@@ -59,6 +61,10 @@ export interface AppDeps {
    * (spec 008). Defaults to an empty table: every cost unknown.
    */
   costEstimator?: PriceTable;
+  /** Budget counters (spec 007, Redis in production); defaults to in-process counters. */
+  budgetCounters?: BudgetCounters;
+  /** Clock for budget periods (spec 007); tests inject one. Defaults to `Date.now`. */
+  clock?: () => number;
   bodyLimitBytes?: number;
   readinessTimeoutMs?: number;
 }
@@ -133,10 +139,19 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     logger: deps.logger,
   });
 
+  // Monthly budgets (spec 007): checked before rate limiting, charged when a request ends.
+  const budgets = createBudgets({
+    counters: deps.budgetCounters ?? new MemoryBudgetCounters(),
+    config: deps.config.budgets,
+    logger: deps.logger,
+    ...(deps.clock ? { now: deps.clock } : {}),
+  });
+  app.addHook("onClose", async () => budgets.close());
+
   // The request-outcome hook (spec 006); later specs extend the recorder, not the routes.
   // Spec 007: every event is priced, then charged to the budget counters and published.
   const outcomes = createOutcomeHook({
-    recorder: fanOut(createBudgetCharger(), deps.usageRecorder ?? noopRecorder),
+    recorder: fanOut(budgets.charger, deps.usageRecorder ?? noopRecorder),
     logger: deps.logger,
     price: priceEvent(deps.costEstimator ?? PriceTable.empty()),
   });
@@ -145,6 +160,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     config: deps.config,
     providers: deps.providers,
     admission,
+    budgets: budgets.check,
     outcomes,
     auth: {
       store: deps.keyStore,

@@ -5,6 +5,7 @@ import type { ChatProvider } from "../../core/provider.js";
 import type { UsageOperation } from "../../core/usage.js";
 import { type AuthenticateOptions, createAuthenticate } from "../auth/authenticate.js";
 import { isModelAllowed } from "../auth/models.js";
+import type { BudgetCheck } from "../budgets/check.js";
 import { docs } from "../docs.js";
 import { restoreChatResponse } from "../pii/restore.js";
 import { createPiiStage } from "../pii/stage.js";
@@ -29,6 +30,8 @@ export interface ProxyRoutesOptions {
   providers: ReadonlyMap<string, ChatProvider>;
   auth: AuthenticateOptions;
   admission: AdmissionService;
+  /** Monthly budgets (spec 007), checked before rate limiting. */
+  budgets: BudgetCheck;
   /** Request-outcome hook (spec 006): one usage event per admitted request. */
   outcomes: OutcomeHook;
   /** Gateway start time in seconds, reported as `created` in /v1/models. */
@@ -71,6 +74,9 @@ export async function proxyRoutes(app: FastifyInstance, opts: ProxyRoutesOptions
     usage: { operation: UsageOperation; stream: boolean; model: string; resolved: ResolvedModel },
   ) {
     if (!request.principal) return undefined;
+    // Spec 007: budgets first, so an exhausted budget debits no rate-limit unit (AC-6).
+    const budget = await opts.budgets.check(request.principal);
+    reply.headers(budget.headers);
     const admission = await opts.admission.admit(request.principal, estimate);
     reply.headers(admission.headers);
     opts.outcomes.begin(request, {

@@ -35,7 +35,7 @@ One commit per task, ending in `[spec-007]`. `pnpm verify` green after each (exi
   - Do: `src/core/budget.ts`; `src/modules/budgets/period.ts`; `src/infra/memory/budget-counters.ts`; `src/infra/redis/budget-counters.ts`.
   - Test: `test/unit/budgets/period.test.ts` › month boundaries incl. December and leap years, instant at 00:00:00Z; `test/unit/budgets/memory-counters.test.ts` › charge, read, raise never lowers, expiry; `test/integration/budget-counters.int.test.ts` › same on real Redis, PEXPIREAT set, timeout.
 
-- [ ] **T7. Budget check before rate limiting**
+- [x] **T7. Budget check before rate limiting**
   - ACs: AC-6, AC-8, AC-9, AC-11, AC-13
   - Do: `budgets` config key; `budgetExceeded`/`budgetUnavailable` errors; `src/modules/budgets/{check,telemetry}.ts`; wired into `admit()`; `AppDeps.budgetCounters`.
   - Test: `test/unit/budgets/check.test.ts` › `evaluateBudgets` (reject at equality, lowest remaining, key wins ties, soft thresholds, headers), Redis error closed → 503 / open → admit + metric + one warning per minute, no read without budgets, span attributes, warning once per scope/id/period; `test/unit/proxy/budget-routes.test.ts` › 429 shape and headers, no provider call, no rate-limit debit, no usage event, budget `0` blocks, headers on 200 and on the stream, `/v1/messages` Anthropic shape, change applies immediately after PATCH.

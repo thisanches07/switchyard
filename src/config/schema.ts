@@ -78,6 +78,12 @@ export const usageSchema = z.strictObject({
   flushIntervalMs: positiveInt.default(200),
 });
 
+/** Monthly budgets (spec 007): Redis failure policy and the worker's reconciliation interval. */
+export const budgetsSchema = z.strictObject({
+  onRedisError: z.enum(["open", "closed"]).default("closed"),
+  reconcileIntervalSeconds: positiveInt.default(60),
+});
+
 const cacheSchema = z.strictObject({
   exact: z
     .strictObject({ enabled: z.boolean().default(false), ttlSeconds: positiveInt.default(3600) })
@@ -122,6 +128,7 @@ export const configSchema = z
     usage: usageSchema.prefault({}),
     cache: cacheSchema.prefault({}),
     pii: piiSchema.prefault({}),
+    budgets: budgetsSchema.prefault({}),
     pricingFile: z.string().min(1).default("config/pricing.yaml"),
   })
   .superRefine((config, ctx) => {
@@ -148,4 +155,5 @@ export const configSchema = z
 
 export type AppConfig = z.infer<typeof configSchema>;
 export type UsageConfig = z.infer<typeof usageSchema>;
+export type BudgetsConfig = z.infer<typeof budgetsSchema>;
 export type ProviderConfig = z.infer<typeof providerSchema>;

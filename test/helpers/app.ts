@@ -1,6 +1,7 @@
 import type { FastifyInstance, InjectOptions } from "fastify";
 import { buildApp } from "../../src/app.js";
 import type { LoadedConfig } from "../../src/config/load.js";
+import type { BudgetCounters } from "../../src/core/budget.js";
 import type { DependencyCheck } from "../../src/core/health.js";
 import type { ChatProvider } from "../../src/core/provider.js";
 import type { RateLimiter } from "../../src/core/ratelimit.js";
@@ -29,6 +30,10 @@ export interface TestAppOptions {
   usageReader?: UsageReader;
   /** Prices (spec 007); default: every cost unknown. */
   costEstimator?: PriceTable;
+  /** Budget counters (spec 007); default: fresh in-memory counters. */
+  budgetCounters?: BudgetCounters;
+  /** Clock for budget periods (spec 007). */
+  clock?: () => number;
   /**
    * Default true: `app.inject` adds `Authorization: Bearer <test key>` unless the request sets
    * its own `authorization` header. Set false to exercise authentication itself.
@@ -55,6 +60,8 @@ export async function testApp(options: TestAppOptions = {}) {
     ...(options.usageRecorder === undefined ? {} : { usageRecorder: options.usageRecorder }),
     ...(options.usageReader === undefined ? {} : { usageReader: options.usageReader }),
     ...(options.costEstimator === undefined ? {} : { costEstimator: options.costEstimator }),
+    ...(options.budgetCounters === undefined ? {} : { budgetCounters: options.budgetCounters }),
+    ...(options.clock === undefined ? {} : { clock: options.clock }),
     ...(options.bodyLimitBytes === undefined ? {} : { bodyLimitBytes: options.bodyLimitBytes }),
   });
 

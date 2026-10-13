@@ -60,6 +60,10 @@ usage:                         # spec 006: one usage event per admitted request,
   bufferSize: 10000            # events held in memory while Kafka is slow or down, then dropped
   flushIntervalMs: 200
 
+budgets:                       # spec 007: monthly budgets per key and team, see docs/budgets.md
+  onRedisError: closed         # closed: 503 for keys/teams with a budget if Redis is down; open: admit
+  reconcileIntervalSeconds: 60 # usage worker: raise Redis spend counters to the Postgres totals
+
 pii:                           # spec 010: PII redaction, see docs/pii.md
   defaultMode: off             # off | mask | block, for keys without their own piiMode
   detectors: [email, phone, card, cpf, cnpj, ip, term]
@@ -84,4 +88,4 @@ cache:
     similarityThreshold: 0.95
     ttlSeconds: 86400
 
-pricingFile: config/pricing.yaml
+pricingFile: config/pricing.yaml   # spec 007: USD per 1M tokens; unverified prices stay TODO

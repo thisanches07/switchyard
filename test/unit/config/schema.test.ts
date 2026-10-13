@@ -209,3 +209,30 @@ describe("pii config (spec 010)", () => {
     expect(result.error?.issues.map((i) => formatPath(i.path))).toContain(path);
   });
 });
+
+describe("budgets config (spec 007)", () => {
+  const minimal = () => ({ providers: { mock: { type: "mock" } } });
+
+  it("defaults to fail closed and reconciling every 60 s", () => {
+    expect(configSchema.parse(minimal()).budgets).toEqual({
+      onRedisError: "closed",
+      reconcileIntervalSeconds: 60,
+    });
+    expect(configSchema.parse(minimal()).pricingFile).toBe("config/pricing.yaml");
+  });
+
+  it("example config documents the budgets section", () => {
+    expect(configSchema.parse(example()).budgets.onRedisError).toBe("closed");
+  });
+
+  it.each([
+    [{ onRedisError: "maybe" }, "budgets.onRedisError"],
+    [{ reconcileIntervalSeconds: 0 }, "budgets.reconcileIntervalSeconds"],
+    [{ reconcileIntervalSeconds: 1.5 }, "budgets.reconcileIntervalSeconds"],
+    [{ hard: true }, "budgets"],
+  ])("rejects invalid budgets config %j", (budgets, path) => {
+    const result = configSchema.safeParse({ ...minimal(), budgets });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues.map((i) => formatPath(i.path))).toContain(path);
+  });
+});
