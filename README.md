@@ -37,7 +37,7 @@
 <br>
 
 > [!NOTE]
-> **Status: v0.1 in progress.** Chat completions (including **SSE streaming**), embeddings, model listing, provider adapters, error mapping, tracing and metrics are **working and tested today**, plus **virtual API keys with teams**, an admin API and **per-minute rate limits** shared across instances, contract-tested with the official OpenAI Node and Python SDKs. Usage events, budgets, fallback and caching are specified and on the [roadmap](#%EF%B8%8F-roadmap).
+> **Status: v0.1 in progress.** Chat completions (including **SSE streaming**), embeddings, model listing, provider adapters, error mapping, tracing and metrics are **working and tested today**, plus **virtual API keys with teams**, an admin API, **per-minute rate limits** shared across instances and a **usage event pipeline** (Kafka → idempotent worker → Postgres), contract-tested with the official OpenAI Node and Python SDKs. Budgets, fallback and caching are specified and on the [roadmap](#%EF%B8%8F-roadmap).
 
 > [!WARNING]
 > Docker Compose ships `dev-only` defaults for `ADMIN_TOKEN` and `KEY_PEPPER` so it works out of the box, and publishes every port on `127.0.0.1` only. Set real secrets in `.env` before exposing the gateway; it logs a warning while dev-only values are in use.
@@ -72,7 +72,7 @@ Teams shipping LLM features hit the same walls:
 | 🔑 | **Virtual API keys** (`sk-sy-…`, stored only as peppered hashes), teams, per-key model allow-lists, revocation | ✅ |
 | 🚥 | **Rate limits** in requests and tokens per minute, per key and per team, atomic in Redis (Lua), OpenAI-style `429` + `x-ratelimit-*` | ✅ |
 | 🛠️ | Admin API for teams and keys; OpenAPI document and interactive UI at `/docs` | ✅ |
-| 📨 | Usage events through Kafka (Redpanda), idempotent worker, DLQ | 🔜 006 |
+| 📨 | **Usage events** through Kafka (Redpanda): never blocks a request, idempotent worker, daily aggregates, DLQ, `GET /admin/usage` | ✅ |
 | 💰 | Monthly budgets with soft and hard limits | 🔜 007 |
 | 🛟 | Fallback, retries with jitter, circuit breakers | 🔜 008 |
 | ⚡ | Exact cache and tenant-scoped semantic cache (pgvector) | 🔜 009 |
@@ -231,15 +231,18 @@ flowchart LR
   AD -->|undici| OL["Ollama"]
   AD -->|undici| OAI["Groq · Gemini · OpenRouter · OpenAI"]
   AD --> MOCK["Mock provider"]
+  AD --> EV["Usage event<br/>(in-memory buffer)"]
 
   subgraph Infra["Docker Compose stack"]
     direction LR
     LGTM["Grafana LGTM<br/>traces · metrics · logs"]
     PG[("Postgres<br/>+ pgvector")]
     RD[("Redis")]
-    KF[["Redpanda"]]:::planned
+    KF[["Redpanda<br/>usage.events.v1"]]
+    WK["Usage worker<br/>idempotent · DLQ"]
   end
 
+  EV -->|async| KF --> WK --> PG
   GW -. "OTLP · health" .-> Infra
 
   classDef planned stroke-dasharray: 5 5,opacity:0.6
@@ -280,6 +283,7 @@ sequenceDiagram
   else 5xx · network error · timeout
     G-->>C: 502 upstream_error / 504 upstream_timeout
   end
+  G->>G: record one usage event (buffered, published to Kafka in the background)
 ```
 
 ### Model resolution
@@ -347,6 +351,7 @@ aliases:                             # model ids are examples; check each provid
 | `ADMIN_TOKEN` | unset | Enables the admin API (≥ 16 chars) |
 | `MIGRATE_ON_BOOT` | `false` | Apply database migrations at startup (Compose sets `true`; otherwise run `pnpm db:migrate`) |
 | `REDIS_URL` | required | Redis (`redis://…`) |
+| `KAFKA_BROKERS` | required when `usage.enabled` (gateway) and for the worker | Comma-separated `host:port` list, e.g. `localhost:19092` |
 | `LOG_LEVEL` | `info` | pino log level |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | unset | OTLP collector, e.g. `http://localhost:4318` |
 | `SHUTDOWN_TIMEOUT_MS` | `9000` | Hard deadline for graceful shutdown |
@@ -381,6 +386,7 @@ Every `/v1` request needs a Switchyard key (`Authorization: Bearer sk-sy-…`), 
 | `PATCH` | `/admin/keys/:id` | Set or clear (`null`) the key's `rpm` / `tpm` |
 | `PATCH` | `/admin/teams/:id` | Set or clear the team's `rpm` / `tpm` caps |
 | `POST` | `/admin/keys/:id/revoke` | Revoke a key; rejected immediately on this instance, everywhere within 30 s |
+| `GET` | `/admin/usage?from=&to=&groupBy=&teamId=&keyId=` | Requests, tokens and cost per team, key, model, provider or day ([usage](#-usage-events)) |
 
 `allowedModels` accepts aliases (`fast`), exact refs (`ollama/llama3.2`) and provider wildcards (`ollama/*`); `/v1/models` then lists only what the key may use. Admin routes take `Authorization: Bearer <ADMIN_TOKEN>` and do not exist at all when `ADMIN_TOKEN` is unset.
 
@@ -410,6 +416,40 @@ x-ratelimit-reset-requests: 1m0s
 
 The headers describe the **most restrictive** bucket and use the OpenAI format, so the official SDKs back off on their own. If Redis is unreachable the gateway keeps serving by default (`limits.onRedisError: open`, counted in `switchyard_ratelimit_fail_open_total`), or answers `503` with `closed`.
 
+## 📊 Usage events
+
+Every request that passes authentication and rate limiting produces **exactly one usage event**, however it ends: success, provider error, a stream that fails half-way, or a client that hangs up. Events carry **metadata only** (ids, model, provider, tokens, latency, status, outcome), never prompt or response content ([ADR-0010](docs/adr/0010-no-prompt-persistence.md)).
+
+```mermaid
+flowchart LR
+  R["Request ends"] --> B["In-memory buffer<br/>(bounded, never blocks)"]
+  B -->|"every 200 ms<br/>key = team id"| K[["usage.events.v1"]]
+  K --> W["Usage worker"]
+  W -->|"one transaction:<br/>insert … on conflict do nothing<br/>+ daily aggregate"| PG[("usage_events<br/>usage_daily")]
+  W -->|malformed| DLQ[["usage.events.dlq"]]
+```
+
+- **Never in the way:** the request only appends to a buffer. If Kafka is down the gateway keeps serving; the buffer (`usage.bufferSize`, 10 000) holds events until the broker is back, then new events are **dropped and counted** in `switchyard_usage_events_dropped_total{reason="buffer_full"}` (ADR-0007). On `SIGTERM` the buffer is flushed before exit.
+- **Counted once:** events have UUIDv7 ids; the worker inserts with `ON CONFLICT (id) DO NOTHING` and updates `usage_daily` only for rows it actually inserted, in the same transaction, and commits Kafka offsets only after that. Redeliveries and worker restarts never double-count.
+- **Bad messages set aside:** invalid JSON or schema violations go to `usage.events.dlq` with the original bytes and headers naming the reason and the source partition/offset. Re-publish them after fixing the cause, for example with `rpk topic consume usage.events.dlq` piped into `rpk topic produce usage.events.v1`.
+
+```bash
+curl -s "localhost:8080/admin/usage?groupBy=model&from=2026-10-01" -H "$ADMIN" | jq
+```
+
+```json
+{
+  "from": "2026-10-01", "to": "2026-10-13", "groupBy": "model",
+  "data": [
+    { "group": "ollama/llama3.2", "requests": 42, "inputTokens": 5120, "outputTokens": 9310,
+      "costUsd": "0", "unknownCostRequests": 42 }
+  ],
+  "totals": { "requests": 42, "inputTokens": 5120, "outputTokens": 9310, "costUsd": "0", "unknownCostRequests": 42 }
+}
+```
+
+`groupBy` is `team`, `key`, `model`, `provider` or `day` (default; `from`/`to` default to the last 30 days, at most 366). Costs stay `null` (counted in `unknownCostRequests`) until budgets land in spec 007. Results are eventually consistent: a request shows up within seconds. Set `usage.enabled: false` to run without Kafka.
+
 ## 🔭 Observability
 
 Every response tells you what happened:
@@ -430,6 +470,10 @@ x-switchyard-upstream-ms: 986
 | Histogram | `switchyard_ttfb_seconds` | time to first streamed token, by `provider`, `model` |
 | Counter | `switchyard_ratelimit_rejections_total` | by `scope` (`key`, `team`, `ip`) and `kind` (`requests`, `tokens`) |
 | Counter | `switchyard_auth_failures_total` | rejected `/v1` requests by `reason` (`missing`, `malformed`, `unknown`, `revoked`, `expired`) |
+| Counters | `switchyard_usage_events_published_total`, `switchyard_usage_events_dropped_total` | usage events acknowledged by Kafka; dropped by `reason` (`buffer_full`, `shutdown`, `invalid`) |
+| Gauge | `switchyard_usage_buffer_events` | usage events waiting in the gateway's buffer |
+| Counter | `switchyard_usage_worker_events_total` | worker results: `inserted`, `duplicate`, `dlq` |
+| Span | `switchyard.usage.consume` | one per worker batch, with message and result counts |
 | Logs | JSON (pino) | every line carries `trace_id` / `span_id`, plus `teamId` / `keyId` once authenticated; secrets redacted |
 
 > [!IMPORTANT]
@@ -450,6 +494,7 @@ x-switchyard-upstream-ms: 986
 pnpm install
 cp .env.example .env && cp config/switchyard.example.yaml config/switchyard.yaml
 pnpm dev             # gateway in watch mode
+pnpm dev:worker      # usage worker in watch mode (needs KAFKA_BROKERS, e.g. localhost:19092)
 ```
 
 ### Quality gates
@@ -457,11 +502,11 @@ pnpm dev             # gateway in watch mode
 | Command | What it checks |
 |---|---|
 | `pnpm verify` | Biome lint · strict typecheck · unit tests with **≥ 80% line coverage** on core and modules · build |
-| `pnpm test:int` | Real Postgres and Redis (Testcontainers), real HTTP timeouts and connection failures |
+| `pnpm test:int` | Real Postgres, Redis and Redpanda (Testcontainers), real HTTP timeouts and connection failures, the usage pipeline end to end |
 | `pnpm test:contract` | The **official OpenAI Node SDK** against the gateway: chat, streaming, embeddings (mock always; Ollama when running) |
 | `pnpm db:migrate` | Applies database migrations to `DATABASE_URL` (`pnpm db:generate` creates new ones from the Drizzle schema) |
 | `pnpm test:contract:py` | The same with the **official OpenAI Python SDK** (needs `pip install -r test/contract/python/requirements.txt`) |
-| `pnpm test:smoke` | Boots the Compose stack: health, readiness, a chat request, bad config, memory budget, graceful SIGTERM |
+| `pnpm test:smoke` | Boots the Compose stack: health, readiness, a chat request, rate limits, a request counted in `GET /admin/usage`, bad config, memory budget, graceful SIGTERM |
 
 ```mermaid
 flowchart LR
@@ -477,6 +522,7 @@ flowchart LR
 ```
 src/
 ├─ server.ts            entry point: config → clients → app → listen → graceful shutdown
+├─ worker.ts            usage worker entry point (usage-worker.ts wires Kafka and Postgres)
 ├─ app.ts               buildApp(deps): injectable, so tests use fakes
 ├─ config/              Zod schemas for env and YAML, readable errors
 ├─ core/                canonical types, ports and errors (no infra imports)
@@ -484,8 +530,9 @@ src/
 │  ├─ health/           /healthz, /readyz
 │  ├─ proxy/            /v1/chat/completions, /v1/models, upstream telemetry
 │  ├─ providers/        openai-compatible, mock, registry
-│  └─ routing/          alias and model resolution
-└─ infra/               undici HTTP client, Postgres, Redis, logger, OpenTelemetry
+│  ├─ routing/          alias and model resolution
+│  └─ usage/            request-outcome hook, usage publisher, worker batches, usage reports
+└─ infra/               undici HTTP client, Postgres, Redis, Kafka, logger, OpenTelemetry
 test/                   unit · integration · contract
 docs/                   architecture, ADRs, specs, threat model
 ```
@@ -516,7 +563,7 @@ Each spec ends with a verification table, for example [spec 002](docs/specs/002-
 - [x] [003](docs/specs/003-streaming/spec.md) Streaming (SSE) and `/v1/embeddings`, Node + Python SDK contract tests
 - [x] [004](docs/specs/004-keys-and-teams/spec.md) Virtual API keys, teams, admin API, Postgres migrations, OpenAPI docs
 - [x] [005](docs/specs/005-rate-limiting/spec.md) Rate limiting: RPM / TPM per key and team, Redis Lua token buckets, token reservation and reconciliation
-- [ ] 006 Usage events pipeline (Kafka, idempotent worker, DLQ)
+- [x] [006](docs/specs/006-usage-pipeline/spec.md) Usage events pipeline: one event per request, Kafka (Redpanda), idempotent worker, daily aggregates, DLQ, `GET /admin/usage`
 - [ ] 007 Budgets and cost accounting
 - [ ] 008 Fallback, retries and circuit breakers
 

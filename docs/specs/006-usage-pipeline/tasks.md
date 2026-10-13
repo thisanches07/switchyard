@@ -59,11 +59,37 @@ One commit per task, ending in `[spec-006]`. `pnpm verify` exit code checked aft
   - ACs: AC-2, AC-6, AC-13
   - Test: `usage-pipeline.int.test.ts` › gateway app + real producer: broker paused → buffer fills, drops counted, delivery resumes on unpause; request with a unique marker → marker absent from the Kafka message bytes and the stored row.
 
-- [ ] **T12. Compose stack and smoke**
+- [x] **T12. Compose stack and smoke**
   - ACs: AC-8, AC-14
   - Do: `usage-worker` service, `KAFKA_BROKERS` for the gateway, smoke step.
   - Test: `scripts/compose-smoke.ts` › chat request with an admin-created key is counted in `GET /admin/usage?groupBy=key` within 10 s; topics exist.
 
-- [ ] **T13. Docs and verification**
+- [x] **T13. Docs and verification**
   - ACs: AC-2, all
   - Do: README (usage section, config, worker, roadmap), threat model *Repudiation* row, architecture, CONTRIBUTING commands if needed, verification table, spec status.
+
+## Verification (2026-10-13)
+
+| AC | Proven by | Result |
+|---|---|---|
+| AC-1 | `test/unit/usage/schema.test.ts` › strict v1 schema (unknown fields, `schemaVersion`, UUIDv7, negative tokens, `costUsd` format); `publisher.test.ts` › invalid events dropped before buffering; `consume.test.ts` › schema failures go to the DLQ | ✅ |
+| AC-2 | `routes-outcome.test.ts` › marker absent from events of chat, stream and embeddings; `usage-pipeline.int.test.ts` › marker absent from the Kafka message bytes and the stored row (`row_to_json`); threat model *Repudiation* row updated | ✅ |
+| AC-3 | `outcome.test.ts` › every terminal case, `reject`, contributions, exactly one event; `routes-outcome.test.ts` › chat/embeddings × stream/non-stream × success, upstream error, mid-stream failure, client disconnect (200 and 499), cached tokens, no event for 400/401/403/404/429 or `/v1/models`, fallback for routes that forget; `publisher.test.ts` › `usage.enabled: false` builds and validates without a producer | ✅ |
+| AC-4 | `schema.test.ts` › `usage` defaults and validation; `env.test.ts` › `KAFKA_BROKERS`, worker env; `boot.test.ts` › gateway exits naming `KAFKA_BROKERS` | ✅ |
+| AC-5 | `publisher.test.ts` › synchronous record, key = team id, periodic flush; `usage-producer.int.test.ts` › messages on Redpanda keyed by team id | ✅ |
+| AC-6 | `publisher.test.ts` › buffer full → drop + metric + one warning per minute, retry after failed sends; `boot.test.ts` › gateway starts and `/healthz` answers with Kafka unreachable; `usage-pipeline.int.test.ts` › broker paused: buffer fills, 7 drops counted, delivery resumes after unpause | ✅ |
+| AC-7 | `publisher.test.ts` › close flushes in batches, leftovers counted `shutdown`, retries until the deadline; `shutdown.test.ts` › closers receive the deadline | ✅ |
+| AC-8 | `usage-store.int.test.ts` › every field stored, exact `cost_usd`, daily aggregate per UTC day/team/key/model; `usage-pipeline.int.test.ts` › topics created at startup, publish → row + aggregate; smoke › topics exist | ✅ |
+| AC-9 | `usage-store.int.test.ts` › same event twice (separate and same batch) counted once; `usage-pipeline.int.test.ts` › duplicate publish, worker "killed" after the DB commit and restarted: 40/40 rows, 40 requests | ✅ |
+| AC-10 | `consume.test.ts` › DLQ with original bytes and reason/partition/offset headers, Postgres down → no DLQ, error rethrown; `usage-store.int.test.ts` › known costs summed, unknown counted, unreachable DB throws even for empty batches; `usage-pipeline.int.test.ts` › malformed → DLQ while the next valid one is stored | ✅ |
+| AC-11 | `report.test.ts` › defaults, validation, 366-day limit, decimals; `admin-usage.test.ts` › response shape, 400s, 401, 503 without a store; `openapi.test.ts` › route documented; `usage-store.int.test.ts` › every `groupBy`, filters, sorting, provider `null` | ✅ |
+| AC-12 | `publisher.test.ts` › dropped/published counters and buffer gauge; `consume.test.ts` › worker counter and `switchyard.usage.consume` span without content | ✅ |
+| AC-13 | `test/integration/usage-pipeline.int.test.ts` (Redpanda + Postgres via Testcontainers): 7/7 | ✅ |
+| AC-14 | `scripts/compose-smoke.ts` › `usage-worker` service, topics exist, chat request counted in `GET /admin/usage?groupBy=key` within 10 s; verified by the CI `compose-smoke` job (see note) | ⏳ CI |
+
+Notes:
+- AC-14: the local Compose smoke could not run on the reference machine (Docker Desktop left the gateway-image containers stuck in "Created"; the image itself built, including the Kafka client's prebuilt binary). By the owner's decision the smoke is verified by the CI `compose-smoke` job. The script gained a timeout on every Docker call (120 s for `compose run`) so a hung daemon fails the step instead of blocking.
+- The full integration suite for this spec (`usage-producer`, `usage-store`, `usage-pipeline`, `db`) passes locally under Testcontainers.
+- Spec open questions resolved as proposed, except two fallbacks the proposals allowed: Kafka is not reported in `/readyz`, and `groupBy=provider` reads `usage_events` (design §10).
+- Kafka client: `@confluentinc/kafka-javascript` 1.11.0 (prebuilt librdkafka on Windows x64 and Linux), as ADR-0007 decided; no fallback needed.
+- Non-streaming requests whose provider reports no usage are recorded with the spec 003 estimate (`estimated: true`); the rate limiter keeps its spec 005 behaviour (reservation kept) for that case.
