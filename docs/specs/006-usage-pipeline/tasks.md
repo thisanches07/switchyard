@@ -55,7 +55,7 @@ One commit per task, ending in `[spec-006]`. `pnpm verify` exit code checked aft
   - Do: `src/modules/usage/report.ts`, admin route, OpenAPI docs, `DrizzleUsageStore.summarize`.
   - Test: `test/unit/usage/report.test.ts` › defaults, validation (dates, ids, order, 366 days, groupBy), decimal normalisation; `test/unit/admin/admin-usage.test.ts` › 200 shape, 400s, 503 without a reader, admin token required; `openapi.test.ts` › route listed; `usage-store.int.test.ts` › every groupBy, filters, sorting, provider `null`.
 
-- [ ] **T11. End-to-end pipeline: broker outage and metadata-only proof**
+- [x] **T11. End-to-end pipeline: broker outage and metadata-only proof**
   - ACs: AC-2, AC-6, AC-13
   - Test: `usage-pipeline.int.test.ts` › gateway app + real producer: broker paused → buffer fills, drops counted, delivery resumes on unpause; request with a unique marker → marker absent from the Kafka message bytes and the stored row.
 

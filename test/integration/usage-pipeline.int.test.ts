@@ -13,7 +13,9 @@ import { createKafkaProducer } from "../../src/infra/kafka/producer.js";
 import { createLogger } from "../../src/infra/logger.js";
 import { createUsagePublisher } from "../../src/modules/usage/publisher.js";
 import { startUsageWorker, type UsageWorker } from "../../src/usage-worker.js";
-import { readTopic, startRedpanda } from "../helpers/kafka.js";
+import { testApp } from "../helpers/app.js";
+import { dockerPause, readTopic, startRedpanda } from "../helpers/kafka.js";
+import { installTestMetrics } from "../helpers/metrics.js";
 import { sampleEvent } from "../helpers/usage.js";
 
 const logger = createLogger({ level: "silent" });
@@ -66,10 +68,15 @@ describe("usage pipeline: gateway producer → Redpanda → worker → Postgres 
     return started;
   }
 
-  function publisher(topic: string) {
+  function publisher(topic: string, bufferSize = 10_000) {
     const p = createUsagePublisher({
-      config: { enabled: true, topic, bufferSize: 10_000, flushIntervalMs: 20 },
-      producer: createKafkaProducer({ brokers: [brokers], clientId: "test-gateway", logger }),
+      config: { enabled: true, topic, bufferSize, flushIntervalMs: 20 },
+      producer: createKafkaProducer({
+        brokers: [brokers],
+        clientId: "test-gateway",
+        logger,
+        messageTimeoutMs: 2_000,
+      }),
       logger,
     });
     p.start();
@@ -210,5 +217,86 @@ describe("usage pipeline: gateway producer → Redpanda → worker → Postgres 
     expect(await countRows(teamId)).toBe(40);
     expect(await dailyRequests(teamId)).toBe(40);
     expect(crashes).toBeGreaterThan(0);
+  });
+
+  it("buffers while the broker is down, counts drops and resumes without a restart (AC-6, AC-13)", async () => {
+    const meters = installTestMetrics();
+    try {
+      const usage = topics();
+      await worker(usage);
+      const teamId = randomUUID();
+      const p = publisher(usage.topic, 5);
+      p.record(sampleEvent({ teamId }));
+      expect(
+        await waitFor(
+          () => countRows(teamId),
+          (n) => n === 1,
+        ),
+      ).toBe(1);
+
+      dockerPause(redpanda.getId(), true);
+      try {
+        for (let i = 0; i < 12; i += 1) p.record(sampleEvent({ teamId }));
+        expect(p.size()).toBe(5);
+        await new Promise((r) => setTimeout(r, 3_000)); // sends time out and are retried
+        expect(p.size()).toBe(5);
+      } finally {
+        dockerPause(redpanda.getId(), false);
+      }
+      const dropped = (await meters.points("switchyard_usage_events_dropped_total"))
+        .filter((point) => point.attributes.reason === "buffer_full")
+        .reduce((sum, point) => sum + (point.value as number), 0);
+      expect(dropped).toBe(7);
+
+      expect(
+        await waitFor(
+          () => countRows(teamId),
+          (n) => n === 6,
+          60_000,
+        ),
+      ).toBe(6);
+      expect(p.size()).toBe(0);
+      await p.close(Date.now() + 5_000);
+    } finally {
+      await meters.uninstall();
+    }
+  });
+
+  it("never carries request content into Kafka or Postgres (AC-2)", async () => {
+    const usage = topics();
+    await worker(usage);
+    const p = publisher(usage.topic);
+    const { app, store } = await testApp({ usageRecorder: p });
+    const marker = `marker-${randomUUID()}`;
+    const res = await app.inject({
+      method: "POST",
+      url: "/v1/chat/completions",
+      payload: {
+        model: "fast",
+        user: marker,
+        messages: [{ role: "user", content: `repeat after me: ${marker}` }],
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    await app.close();
+    const [key] = await store.listKeys();
+    const teamId = key?.teamId as string;
+
+    expect(
+      await waitFor(
+        () => countRows(teamId),
+        (n) => n === 1,
+      ),
+    ).toBe(1);
+    const [message] = await readTopic(brokers, usage.topic, 1);
+    expect(message?.value?.toString()).toContain(teamId);
+    expect(message?.value?.toString()).not.toContain(marker);
+    const { rows } = await pool.query(
+      "SELECT row_to_json(e)::text AS json FROM usage_events e WHERE team_id = $1",
+      [teamId],
+    );
+    expect(rows[0]?.json).toContain(res.headers["x-switchyard-request-id"]);
+    expect(rows[0]?.json).not.toContain(marker);
+    await p.close(Date.now() + 5_000);
   });
 });
