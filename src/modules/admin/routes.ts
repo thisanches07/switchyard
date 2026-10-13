@@ -2,10 +2,12 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { ApiKeyRecord, AuthRecord, KeyStore } from "../../core/auth.js";
-import { invalidAdminToken, notFound } from "../../core/errors.js";
+import { invalidAdminToken, notFound, usageUnavailable } from "../../core/errors.js";
+import type { UsageReader } from "../../core/usage.js";
 import type { AuthCache } from "../auth/cache.js";
 import { displayPrefix, generateKey, hashKey, parseBearer } from "../auth/keys.js";
 import { docs } from "../docs.js";
+import { normalizeDecimal, parseUsageQuery, todayUtc } from "../usage/report.js";
 import { parseWith } from "../validation.js";
 
 export interface AdminRoutesOptions {
@@ -13,6 +15,8 @@ export interface AdminRoutesOptions {
   pepper: string;
   adminToken: string;
   cache: AuthCache<AuthRecord>;
+  /** Usage tables (spec 006); GET /admin/usage answers 503 without it. */
+  usage?: UsageReader | undefined;
 }
 
 /** A per-minute limit: positive integer, or null to clear it (spec 005). */
@@ -129,6 +133,20 @@ export async function adminRoutes(app: FastifyInstance, opts: AdminRoutesOptions
     opts.cache.invalidate((cached) => cached.key.id === id);
     request.log.info({ keyId: id, ...patch }, "api key limits updated");
     return keyView(record);
+  });
+
+  // Usage per team, key, model, provider or day (spec 006, AC-11). Eventually consistent.
+  app.get("/admin/usage", { schema: docs.usage }, async (request) => {
+    if (!opts.usage) throw usageUnavailable();
+    const query = parseUsageQuery(request.query, todayUtc());
+    const report = await opts.usage.summarize(query);
+    return {
+      from: query.from,
+      to: query.to,
+      groupBy: query.groupBy,
+      data: report.data.map((row) => ({ ...row, costUsd: normalizeDecimal(row.costUsd) })),
+      totals: { ...report.totals, costUsd: normalizeDecimal(report.totals.costUsd) },
+    };
   });
 
   app.patch("/admin/teams/:id", { schema: docs.patchTeamLimits }, async (request) => {

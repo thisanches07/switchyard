@@ -26,6 +26,26 @@ const errorResponse = {
   },
 };
 
+/** One row of GET /admin/usage (spec 006). */
+function usageRow(withGroup: boolean) {
+  return {
+    type: "object",
+    properties: {
+      ...(withGroup && {
+        group: {
+          type: ["string", "null"],
+          description: "Team id, key id, model, provider (null: no provider reached) or date",
+        },
+      }),
+      requests: { type: "integer" },
+      inputTokens: { type: "integer" },
+      outputTokens: { type: "integer" },
+      costUsd: { type: "string" },
+      unknownCostRequests: { type: "integer" },
+    },
+  };
+}
+
 export const openApiInfo: SwaggerOptions = {
   openapi: {
     openapi: "3.1.0",
@@ -154,6 +174,44 @@ export const docs = {
     summary: "Revoke an API key (idempotent)",
     security: adminAuth,
     params: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
+  },
+  usage: {
+    tags: ["Admin"],
+    summary: "Usage per team, key, model, provider or day (spec 006; eventually consistent)",
+    security: adminAuth,
+    querystring: {
+      type: "object",
+      properties: {
+        from: {
+          type: "string",
+          format: "date",
+          description: "UTC date, inclusive (default: to − 29 days)",
+        },
+        to: { type: "string", format: "date", description: "UTC date, inclusive (default: today)" },
+        groupBy: {
+          type: "string",
+          enum: ["team", "key", "model", "provider", "day"],
+          default: "day",
+        },
+        teamId: { type: "string", format: "uuid" },
+        keyId: { type: "string", format: "uuid" },
+      },
+    },
+    response: {
+      200: {
+        description: "Usage rows and totals; costUsd sums known costs only (decimal string)",
+        type: "object",
+        properties: {
+          from: { type: "string" },
+          to: { type: "string" },
+          groupBy: { type: "string" },
+          data: { type: "array", items: usageRow(true) },
+          totals: usageRow(false),
+        },
+      },
+      400: errorResponse,
+      401: errorResponse,
+    },
   },
   health: { tags: ["Health"], summary: "Liveness / readiness probe" },
 };

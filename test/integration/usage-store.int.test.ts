@@ -206,4 +206,124 @@ describe("usage store on Postgres (spec 006)", () => {
     await expect(dead.insertEvents([sampleEvent()])).rejects.toThrow();
     await deadPool.end();
   });
+
+  describe("summarize (GET /admin/usage, AC-11)", () => {
+    const at = (day: string) => `${day}T12:00:00.000Z`;
+    beforeEach(async () => {
+      await store.insertEvents([
+        sampleEvent({
+          teamId: TEAM_A,
+          keyId: KEY_A1,
+          occurredAt: at("2026-10-10"),
+          costUsd: "0.25",
+        }),
+        sampleEvent({
+          teamId: TEAM_A,
+          keyId: KEY_A1,
+          occurredAt: at("2026-10-10"),
+          costUsd: "0.25",
+        }),
+        sampleEvent({ teamId: TEAM_A, keyId: KEY_A1, occurredAt: at("2026-10-12"), costUsd: "1" }),
+        sampleEvent({
+          teamId: TEAM_A,
+          keyId: KEY_A2,
+          occurredAt: at("2026-10-12"),
+          provider: "ollama",
+          servedModel: "llama3.2",
+          inputTokens: 100,
+        }),
+        sampleEvent({ teamId: TEAM_B, keyId: KEY_B1, occurredAt: at("2026-10-11"), costUsd: "2" }),
+        sampleEvent({
+          teamId: TEAM_B,
+          keyId: KEY_B1,
+          occurredAt: at("2026-10-11"),
+          provider: null,
+          servedModel: null,
+          requestedModel: "mock/x",
+          outcome: "rejected",
+          status: 400,
+          attempts: 0,
+          inputTokens: 0,
+          outputTokens: 0,
+        }),
+        // Outside the range.
+        sampleEvent({ teamId: TEAM_A, keyId: KEY_A1, occurredAt: at("2026-09-01"), costUsd: "9" }),
+      ]);
+    });
+
+    const range = { from: "2026-10-10", to: "2026-10-12" };
+    const groups = async (groupBy: "team" | "key" | "model" | "provider" | "day") =>
+      (await store.summarize({ ...range, groupBy })).data.map((r) => [
+        r.group,
+        r.requests,
+        Number(r.costUsd),
+      ]);
+
+    it("groups by day in date order", async () => {
+      expect(await groups("day")).toEqual([
+        ["2026-10-10", 2, 0.5],
+        ["2026-10-11", 2, 2],
+        ["2026-10-12", 2, 1],
+      ]);
+    });
+
+    it("groups by team and key, highest cost first", async () => {
+      expect(await groups("team")).toEqual([
+        [TEAM_B, 2, 2],
+        [TEAM_A, 4, 1.5],
+      ]);
+      expect(await groups("key")).toEqual([
+        [KEY_B1, 2, 2],
+        [KEY_A1, 3, 1.5],
+        [KEY_A2, 1, 0],
+      ]);
+    });
+
+    it("groups by model reference and by provider (null: no provider reached)", async () => {
+      expect(await groups("model")).toEqual([
+        ["mock/fast-model", 4, 3.5],
+        ["mock/x", 1, 0],
+        ["ollama/llama3.2", 1, 0],
+      ]);
+      expect(await groups("provider")).toEqual([
+        ["mock", 4, 3.5],
+        ["ollama", 1, 0],
+        [null, 1, 0],
+      ]);
+    });
+
+    it("reports token sums, unknown costs and totals, with filters", async () => {
+      const report = await store.summarize({ ...range, groupBy: "key", teamId: TEAM_A });
+      expect(report.data.map((r) => r.group)).toEqual([KEY_A1, KEY_A2]);
+      expect(report.data[1]).toMatchObject({ inputTokens: 100, unknownCostRequests: 1 });
+      expect(report.totals).toMatchObject({
+        requests: 4,
+        inputTokens: 136,
+        outputTokens: 24,
+        unknownCostRequests: 1,
+      });
+      expect(Number(report.totals.costUsd)).toBe(1.5);
+
+      const byKey = await store.summarize({ ...range, groupBy: "provider", keyId: KEY_B1 });
+      expect(byKey.totals).toMatchObject({ requests: 2, unknownCostRequests: 1 });
+    });
+
+    it("returns zero totals for an empty range", async () => {
+      const report = await store.summarize({
+        from: "2020-01-01",
+        to: "2020-01-02",
+        groupBy: "day",
+      });
+      expect(report).toEqual({
+        data: [],
+        totals: {
+          requests: 0,
+          inputTokens: 0,
+          outputTokens: 0,
+          costUsd: "0",
+          unknownCostRequests: 0,
+        },
+      });
+    });
+  });
 });

@@ -50,7 +50,7 @@ One commit per task, ending in `[spec-006]`. `pnpm verify` exit code checked aft
   - Do: `src/infra/kafka/{consumer,topics}.ts`, `src/worker.ts`, `pnpm dev:worker`.
   - Test: `test/integration/usage-pipeline.int.test.ts` › topics created, publish → row + aggregate, same event twice → counted once, malformed → DLQ while the next valid one is stored, worker restart mid-stream → no loss and no double count.
 
-- [ ] **T10. `GET /admin/usage`**
+- [x] **T10. `GET /admin/usage`**
   - ACs: AC-11
   - Do: `src/modules/usage/report.ts`, admin route, OpenAPI docs, `DrizzleUsageStore.summarize`.
   - Test: `test/unit/usage/report.test.ts` › defaults, validation (dates, ids, order, 366 days, groupBy), decimal normalisation; `test/unit/admin/admin-usage.test.ts` › 200 shape, 400s, 503 without a reader, admin token required; `openapi.test.ts` › route listed; `usage-store.int.test.ts` › every groupBy, filters, sorting, provider `null`.

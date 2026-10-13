@@ -6,6 +6,7 @@ import { createDatabase } from "./infra/db/client.js";
 import { DrizzleKeyStore } from "./infra/db/key-store.js";
 import { migrateDatabase } from "./infra/db/migrate.js";
 import { createPostgresPool, postgresCheck } from "./infra/db/postgres.js";
+import { DrizzleUsageStore } from "./infra/db/usage-store.js";
 import { createUndiciClient } from "./infra/http/undici-client.js";
 import { createKafkaProducer } from "./infra/kafka/producer.js";
 import { createLogger } from "./infra/logger.js";
@@ -115,6 +116,7 @@ async function main(): Promise<void> {
     keyPepper: env.KEY_PEPPER,
     adminToken: env.ADMIN_TOKEN,
     usageRecorder: usage,
+    usageReader: new DrizzleUsageStore(db),
   });
 
   installShutdown({

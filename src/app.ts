@@ -22,7 +22,7 @@ import {
 import type { DependencyCheck } from "./core/health.js";
 import type { ChatProvider } from "./core/provider.js";
 import type { RateLimiter } from "./core/ratelimit.js";
-import type { OutcomeRecorder } from "./core/usage.js";
+import type { OutcomeRecorder, UsageReader } from "./core/usage.js";
 import { adminRoutes } from "./modules/admin/routes.js";
 import { AuthCache } from "./modules/auth/cache.js";
 import { recordAuthFailure } from "./modules/auth/telemetry.js";
@@ -46,6 +46,8 @@ export interface AppDeps {
   adminToken?: string | undefined;
   /** Receives one usage event per admitted request (spec 006); defaults to discarding them. */
   usageRecorder?: OutcomeRecorder;
+  /** Answers GET /admin/usage (spec 006); the route returns 503 without it. */
+  usageReader?: UsageReader;
   bodyLimitBytes?: number;
   readinessTimeoutMs?: number;
 }
@@ -143,6 +145,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       pepper: deps.keyPepper,
       adminToken: deps.adminToken,
       cache: authCache,
+      usage: deps.usageReader,
     });
   }
   return app;

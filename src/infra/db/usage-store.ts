@@ -1,5 +1,13 @@
-import { sql } from "drizzle-orm";
-import type { UsageEvent, UsageStore } from "../../core/usage.js";
+import { type SQL, sql } from "drizzle-orm";
+import type {
+  UsageEvent,
+  UsageGroupBy,
+  UsageQuery,
+  UsageReader,
+  UsageReport,
+  UsageStore,
+  UsageTotals,
+} from "../../core/usage.js";
 import type { Database } from "./client.js";
 import { usageEvents } from "./schema.js";
 
@@ -35,9 +43,75 @@ function toRow(event: UsageEvent): typeof usageEvents.$inferInsert {
   };
 }
 
-/** Usage tables on Postgres (spec 006): idempotent inserts and daily aggregates. */
-export class DrizzleUsageStore implements UsageStore {
+/** SQL expression of each grouping on `usage_daily`. */
+const DAILY_GROUP: Record<Exclude<UsageGroupBy, "provider">, SQL> = {
+  team: sql`team_id::text`,
+  key: sql`key_id::text`,
+  model: sql`model`,
+  day: sql`day::text`,
+};
+
+interface AggregateRow extends Record<string, unknown> {
+  group: string | null;
+  requests: string | number | null;
+  input_tokens: string | number | null;
+  output_tokens: string | number | null;
+  cost_usd: string | null;
+  unknown_cost_requests: string | number | null;
+}
+
+function toTotals(row: AggregateRow | undefined): UsageTotals {
+  return {
+    requests: Number(row?.requests ?? 0),
+    inputTokens: Number(row?.input_tokens ?? 0),
+    outputTokens: Number(row?.output_tokens ?? 0),
+    costUsd: row?.cost_usd ?? "0",
+    unknownCostRequests: Number(row?.unknown_cost_requests ?? 0),
+  };
+}
+
+/** Usage tables on Postgres (spec 006): idempotent inserts, daily aggregates and reports. */
+export class DrizzleUsageStore implements UsageStore, UsageReader {
   constructor(private readonly db: Database) {}
+
+  async summarize(query: UsageQuery): Promise<UsageReport> {
+    // `provider` is not in usage_daily: it comes from the events themselves (design §10).
+    const fromEvents = query.groupBy === "provider";
+    const filters = [
+      fromEvents
+        ? sql`occurred_at >= (${query.from}::date)::timestamp AT TIME ZONE 'UTC'
+              AND occurred_at < (${query.to}::date + 1)::timestamp AT TIME ZONE 'UTC'`
+        : sql`day BETWEEN ${query.from}::date AND ${query.to}::date`,
+      ...(query.teamId ? [sql`team_id = ${query.teamId}::uuid`] : []),
+      ...(query.keyId ? [sql`key_id = ${query.keyId}::uuid`] : []),
+    ];
+    const where = sql.join(filters, sql` AND `);
+    const measures = fromEvents
+      ? sql`count(*) AS requests, sum(input_tokens) AS input_tokens,
+            sum(output_tokens) AS output_tokens, coalesce(sum(cost_usd), 0)::text AS cost_usd,
+            count(*) FILTER (WHERE cost_usd IS NULL) AS unknown_cost_requests`
+      : sql`sum(requests) AS requests, sum(input_tokens) AS input_tokens,
+            sum(output_tokens) AS output_tokens, coalesce(sum(cost_usd), 0)::text AS cost_usd,
+            sum(unknown_cost_requests) AS unknown_cost_requests`;
+    const table = fromEvents ? sql`usage_events` : sql`usage_daily`;
+    const group = query.groupBy === "provider" ? sql`provider` : DAILY_GROUP[query.groupBy];
+    const order =
+      query.groupBy === "day"
+        ? sql`1 ASC`
+        : sql`coalesce(sum(cost_usd), 0) DESC, 2 DESC, 1 ASC NULLS LAST`;
+
+    const grouped = await this.db.execute<AggregateRow>(sql`
+      SELECT ${group} AS "group", ${measures}
+        FROM ${table} WHERE ${where}
+       GROUP BY 1 ORDER BY ${order}`);
+    const totals = await this.db.execute<AggregateRow>(sql`
+      SELECT ${measures} FROM ${table} WHERE ${where}`);
+
+    return {
+      data: grouped.rows.map((row) => ({ group: row.group, ...toTotals(row) })),
+      totals: toTotals(totals.rows[0]),
+    };
+  }
 
   async insertEvents(events: readonly UsageEvent[]): Promise<{ inserted: number }> {
     // The same id twice in one batch is one event.
