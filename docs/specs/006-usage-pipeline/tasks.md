@@ -20,7 +20,7 @@ One commit per task, ending in `[spec-006]`. `pnpm verify` exit code checked aft
   - Do: `src/modules/usage/outcome.ts` (`createOutcomeHook`, tracker, request augmentation), `recorders.ts` (`noopRecorder`, `fanOut`).
   - Test: `test/unit/usage/outcome.test.ts` › success, fail (GatewayError and unknown error), failMidstream, clientClosed (200/499), reject (provider null, attempts 0, tokens 0), `set()` contributions, exactly one event when two terminal calls race, recorder errors swallowed.
 
-- [ ] **T4. Wire the hook into chat, embeddings and streams**
+- [x] **T4. Wire the hook into chat, embeddings and streams**
   - ACs: AC-2, AC-3
   - Do: `AppDeps.usageRecorder`; `admit()` begins the tracker; `settle()` and `streamChat` end it; `onResponse` safety net; provider-reported `cachedInputTokens` (`usage.prompt_tokens_details.cached_tokens`).
   - Test: `test/unit/usage/routes-outcome.test.ts` › one event per case (chat/embeddings, stream/non-stream, success/upstream error/mid-stream/disconnect), none for 401/404/429, cached tokens, marker absent from the event JSON; `openai-compatible.test.ts`/`usage.test.ts` › cached tokens parsed.

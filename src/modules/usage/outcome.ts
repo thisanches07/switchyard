@@ -4,7 +4,7 @@
  * later specs add data with `set()` (008 attempts, 009 cacheStatus, 010 piiDetections) or end a
  * request with `reject()` (010), instead of adding completion paths. See design.md §4.
  */
-import type { FastifyBaseLogger } from "fastify";
+import type { FastifyBaseLogger, FastifyInstance } from "fastify";
 import { GatewayError } from "../../core/errors.js";
 import type {
   OutcomeRecorder,
@@ -111,6 +111,37 @@ const errorStatus = (error: unknown) => (error instanceof GatewayError ? error.s
 const errorCode = (error: unknown) =>
   error instanceof GatewayError ? error.code : "internal_error";
 const whole = (value: number) => Math.max(0, Math.round(value));
+
+/**
+ * Safety net for routes that begin a tracker (spec 006): if a response finishes while its tracker
+ * is still open, records it from the response status (and the error the handler threw) and logs a
+ * warning, so an admitted request never goes unrecorded. Register it on every plugin whose routes
+ * call `outcomes.begin` (the proxy routes do; spec 014's routes should too).
+ */
+export function registerOutcomeFallback(app: FastifyInstance): void {
+  const errors = new WeakMap<object, unknown>();
+  app.addHook("onError", async (request, _reply, error) => {
+    errors.set(request, error);
+  });
+  app.addHook("onResponse", async (request, reply) => {
+    const outcome = request.outcome;
+    if (!outcome || outcome.done) return;
+    request.log.warn(
+      { route: request.routeOptions.url, status: reply.statusCode },
+      "request outcome recorded by fallback",
+    );
+    if (reply.statusCode < 400) {
+      outcome.succeed({ status: reply.statusCode });
+      return;
+    }
+    const error = errors.get(request);
+    outcome.fail(
+      error instanceof GatewayError
+        ? error
+        : new GatewayError(reply.statusCode, "server_error", "internal_error", "unrecorded"),
+    );
+  });
+}
 
 export function createOutcomeHook(deps: OutcomeHookDeps): OutcomeHook {
   const now = deps.now ?? Date.now;

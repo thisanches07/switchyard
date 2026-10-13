@@ -17,6 +17,8 @@ export interface ChatRequest {
 export interface Usage {
   inputTokens: number;
   outputTokens: number;
+  /** Provider-reported prompt-cache read tokens, part of inputTokens (spec 006). */
+  cachedInputTokens?: number;
 }
 
 /** One parsed `chat.completion.chunk` event, forwarded to the client as-is (minus usage rules). */

@@ -22,6 +22,7 @@ import {
 import type { DependencyCheck } from "./core/health.js";
 import type { ChatProvider } from "./core/provider.js";
 import type { RateLimiter } from "./core/ratelimit.js";
+import type { OutcomeRecorder } from "./core/usage.js";
 import { adminRoutes } from "./modules/admin/routes.js";
 import { AuthCache } from "./modules/auth/cache.js";
 import { recordAuthFailure } from "./modules/auth/telemetry.js";
@@ -29,6 +30,8 @@ import { openApiInfo } from "./modules/docs.js";
 import { healthRoutes } from "./modules/health/routes.js";
 import { proxyRoutes } from "./modules/proxy/routes.js";
 import { countRejection, createAdmission } from "./modules/ratelimit/admission.js";
+import { createOutcomeHook } from "./modules/usage/outcome.js";
+import { noopRecorder } from "./modules/usage/recorders.js";
 
 export interface AppDeps {
   logger: FastifyBaseLogger;
@@ -41,6 +44,8 @@ export interface AppDeps {
   keyPepper: string;
   /** Enables the admin API when set (ADMIN_TOKEN). */
   adminToken?: string | undefined;
+  /** Receives one usage event per admitted request (spec 006); defaults to discarding them. */
+  usageRecorder?: OutcomeRecorder;
   bodyLimitBytes?: number;
   readinessTimeoutMs?: number;
 }
@@ -106,10 +111,17 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     logger: deps.logger,
   });
 
+  // The request-outcome hook (spec 006); later specs extend the recorder, not the routes.
+  const outcomes = createOutcomeHook({
+    recorder: deps.usageRecorder ?? noopRecorder,
+    logger: deps.logger,
+  });
+
   await app.register(proxyRoutes, {
     config: deps.config,
     providers: deps.providers,
     admission,
+    outcomes,
     auth: {
       store: deps.keyStore,
       pepper: deps.keyPepper,

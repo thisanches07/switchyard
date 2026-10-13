@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   deltaText,
+  estimateChatUsage,
   estimateTokens,
   forwardChunk,
   messageChars,
@@ -23,6 +24,26 @@ describe("usage helpers", () => {
     expect(usageFromChunk(usageOnly)).toEqual({ inputTokens: 12, outputTokens: 5 });
     expect(usageFromChunk(contentChunk)).toBeUndefined();
     expect(usageFromChunk({ usage: null })).toBeUndefined();
+  });
+
+  it("extracts provider-reported prompt-cache tokens (spec 006)", () => {
+    const usage = { ...usageOnly.usage, prompt_tokens_details: { cached_tokens: 8 } };
+    expect(usageFromChunk({ ...usageOnly, usage })).toEqual({
+      inputTokens: 12,
+      outputTokens: 5,
+      cachedInputTokens: 8,
+    });
+  });
+
+  it("estimates chat usage from message and response text", () => {
+    const body = { choices: [{ message: { content: "abcdefgh" } }, { message: {} }, null] };
+    expect(
+      estimateChatUsage({ model: "m", messages: [{ role: "user", content: "1234" }] }, body),
+    ).toEqual({ inputTokens: 1, outputTokens: 2 });
+    expect(estimateChatUsage({ model: "m", messages: [] }, "not an object")).toEqual({
+      inputTokens: 0,
+      outputTokens: 0,
+    });
   });
 
   it("forwards chunks unchanged when the client asked for usage", () => {

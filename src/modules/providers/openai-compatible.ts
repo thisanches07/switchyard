@@ -29,7 +29,15 @@ export interface OpenAiCompatibleConfig {
 const completionMeta = z.looseObject({
   model: z.string().optional(),
   usage: z
-    .looseObject({ prompt_tokens: z.number(), completion_tokens: z.number() })
+    .looseObject({
+      prompt_tokens: z.number(),
+      completion_tokens: z.number(),
+      // Prompt-cache read tokens (spec 006); providers without prompt caching omit it.
+      prompt_tokens_details: z
+        .looseObject({ cached_tokens: z.number() })
+        .optional()
+        .catch(undefined),
+    })
     .optional()
     .catch(undefined),
 });
@@ -97,9 +105,14 @@ export function createOpenAiCompatibleProvider(
       const meta = completionMeta.safeParse(parsed);
       if (!meta.success) throw upstreamError(config.name);
       const usage = meta.data.usage;
+      const cached = usage?.prompt_tokens_details?.cached_tokens;
       return {
         body: parsed,
-        usage: usage && { inputTokens: usage.prompt_tokens, outputTokens: usage.completion_tokens },
+        usage: usage && {
+          inputTokens: usage.prompt_tokens,
+          outputTokens: usage.completion_tokens,
+          ...(cached === undefined ? {} : { cachedInputTokens: cached }),
+        },
         responseModel: meta.data.model,
       };
     },
