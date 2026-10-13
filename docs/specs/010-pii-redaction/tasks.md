@@ -24,7 +24,7 @@ One commit per task, ending in `[spec-010]`. `pnpm verify` green after each (exi
   - ACs: AC-3, AC-4
   - Test: `test/unit/pii/validators.test.ts` › Luhn, CPF and CNPJ check digits (numeric and alphanumeric, valid and invalid), repeated digits, DDD list, e-mail domains, IPv4/IPv6.
 
-- [ ] **T5. Detectors and overlap resolution**
+- [x] **T5. Detectors and overlap resolution**
   - ACs: AC-3, AC-4, AC-5
   - Test: `test/unit/pii/scan.test.ts` › every AC-3 vector found with the right type, every AC-4 vector not reported, disabled detectors do not run, deny-list case and word boundaries, longest match and validator tie-break, characters replaced once.
 
