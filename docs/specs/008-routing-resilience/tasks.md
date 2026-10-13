@@ -76,7 +76,7 @@ One commit per task, ending in `[spec-008]`. `pnpm verify` green after each. T7�
   - Test: `test/integration/routing-chaos.int.test.ts` › 1000 sequential requests (half streaming) over three `errorRate: 0.3` mocks, seed fixed: ≥ 990 successes, one completion id per stream, identical results on a second run.
   - Files: test only
 
-- [ ] **T15. Compose smoke and example config**
+- [x] **T15. Compose smoke and example config**
   - ACs: AC-16
   - Test: `scripts/compose-smoke.ts` › `resilient` alias answers 200 with `x-switchyard-attempts: 2` and the second candidate (CI).
   - Files: `config/switchyard.example.yaml`, `scripts/compose-smoke.ts`
