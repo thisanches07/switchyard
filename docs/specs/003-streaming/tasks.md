@@ -10,7 +10,7 @@ One commit per task, ending in `[spec-003]`. `pnpm verify` green after each.
   - Do: `ChatChunk`, `ChatStream`, `EmbeddingsRequest/Result`, `HttpStreamResponse`; `chatStream`/`embeddings` on `ChatProvider`; failing provider implements them; mock `chunkDelayMs` in config schema; `embed` alias in the example config.
   - Test: `test/unit/providers/registry.test.ts` › failing providers reject `chatStream`/`embeddings` with 501/503; `schema.test.ts` › example config has `embed` alias and accepts `chunkDelayMs`.
 
-- [ ] **T2. SSE decoder**
+- [x] **T2. SSE decoder**
   - ACs: AC-1 (provider side)
   - Test: `test/unit/providers/sse.test.ts` › splits events across arbitrary byte boundaries, `\r\n`, comments ignored, multi-line data joined, stops at `[DONE]`.
   - Files: `src/modules/providers/sse.ts`
