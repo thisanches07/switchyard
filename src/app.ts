@@ -19,6 +19,7 @@ import {
 } from "./core/errors.js";
 import type { DependencyCheck } from "./core/health.js";
 import type { ChatProvider } from "./core/provider.js";
+import { adminRoutes } from "./modules/admin/routes.js";
 import { AuthCache } from "./modules/auth/cache.js";
 import { recordAuthFailure } from "./modules/auth/telemetry.js";
 import { healthRoutes } from "./modules/health/routes.js";
@@ -93,6 +94,16 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     },
     startedAt: Math.floor(Date.now() / 1000),
   });
+
+  // Not registered at all without ADMIN_TOKEN: the routes 404 (spec 004, AC-8).
+  if (deps.adminToken) {
+    await app.register(adminRoutes, {
+      store: deps.keyStore,
+      pepper: deps.keyPepper,
+      adminToken: deps.adminToken,
+      cache: authCache,
+    });
+  }
   return app;
 }
 

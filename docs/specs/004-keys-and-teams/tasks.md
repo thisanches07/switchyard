@@ -34,7 +34,7 @@ One commit per task, ending in `[spec-004]`. `pnpm verify` green after each (exi
   - ACs: AC-3
   - Test: `telemetry.test.ts` › `team` label, span attributes, `switchyard_auth_failures_total`.
 
-- [ ] **T8. Admin API**
+- [x] **T8. Admin API**
   - ACs: AC-6, AC-7, AC-8
   - Test: `test/unit/admin/admin.test.ts` › all routes, 400/401/404/409, key shown once, revoke invalidates cache immediately, absent without `ADMIN_TOKEN`.
 

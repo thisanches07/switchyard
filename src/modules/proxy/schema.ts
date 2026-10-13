@@ -1,7 +1,6 @@
 import { z } from "zod";
-import { formatPath } from "../../config/zod-issues.js";
 import type { ChatRequest, EmbeddingsRequest } from "../../core/chat.js";
-import { invalidRequest } from "../../core/errors.js";
+import { parseWith } from "../validation.js";
 
 // Only what the gateway needs; every other field is kept and passed through (ADR-0003).
 const chatRequestSchema = z.looseObject({
@@ -22,17 +21,7 @@ const embeddingsRequestSchema = z.looseObject({
   encoding_format: z.string().optional(),
 });
 
-function parse<T>(schema: z.ZodType<T>, body: unknown): T {
-  const result = schema.safeParse(body ?? {});
-  if (!result.success) {
-    const issue = result.error.issues[0];
-    const where = issue ? formatPath(issue.path) : "";
-    throw invalidRequest(where ? `${where}: ${issue?.message}` : "Invalid request body");
-  }
-  return result.data;
-}
-
-export const parseChatRequest = (body: unknown): ChatRequest => parse(chatRequestSchema, body);
+export const parseChatRequest = (body: unknown): ChatRequest => parseWith(chatRequestSchema, body);
 
 export const parseEmbeddingsRequest = (body: unknown): EmbeddingsRequest =>
-  parse(embeddingsRequestSchema, body);
+  parseWith(embeddingsRequestSchema, body);
