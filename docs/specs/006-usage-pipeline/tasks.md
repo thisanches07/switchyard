@@ -40,7 +40,7 @@ One commit per task, ending in `[spec-006]`. `pnpm verify` exit code checked aft
   - Do: Drizzle tables, generated migration, `DrizzleUsageStore.insertEvents`.
   - Test: `test/integration/usage-store.int.test.ts` › row with every field (exact `cost_usd`), daily aggregate, same event twice → one row counted once, unknown costs counted apart, model = provider/servedModel or requested model; `db.int.test.ts` › table list.
 
-- [ ] **T8. Worker batch processing**
+- [x] **T8. Worker batch processing**
   - ACs: AC-1, AC-9, AC-10, AC-12
   - Do: `src/modules/usage/consume.ts` (+ worker metric and span).
   - Test: `test/unit/usage/consume.test.ts` › valid stored, duplicates counted, invalid JSON and schema failures → DLQ with original bytes and headers, Postgres error → throws before any DLQ, in-batch duplicate ids, `switchyard_usage_worker_events_total`, `switchyard.usage.consume` span without content.
