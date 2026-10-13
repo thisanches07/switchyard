@@ -61,7 +61,7 @@ One commit per task, ending in `[spec-011]`. T13 and T14 are blocked on things o
   - Test: `test/unit/scripts/traffic-plan.test.ts` › proportions, only `mock/*` refs, forced errors, repeats, burst, duration and rate parsing.
   - Files: `scripts/**`, `package.json`
 
-- [ ] **T11. Docs**
+- [x] **T11. Docs**
   - ACs: AC-11 (text), AC-12
   - Do: `docs/observability.md` (dashboards, alerts, contact point, definitions, rule for new metrics, screenshot checklist); README observability section (new metrics, span attributes, where dashboards/alerts live, screenshot captions template); `docs/architecture.md`; ADR-0011 stage naming note.
   - Files: docs, README

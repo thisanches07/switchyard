@@ -67,7 +67,8 @@ Teams shipping LLM features hit the same walls:
 | 🧱 | Provider adapters: any OpenAI-compatible endpoint + deterministic **mock** for tests | ✅ |
 | 🧯 | Consistent OpenAI-shaped errors (400 / 404 / 413 / 415 / 429 / 502 / 504) with upstream internals never leaked | ✅ |
 | ⏱️ | Connect, time-to-first-byte and total timeouts on every upstream call | ✅ |
-| 🔭 | `switchyard.upstream` spans with GenAI attributes, request and latency metrics, `x-switchyard-*` headers | ✅ |
+| 🔭 | Upstream spans following the OpenTelemetry **GenAI conventions**, request duration and **gateway overhead** metrics, `x-switchyard-*` headers | ✅ |
+| 📊 | **Grafana dashboards and alert rules as code** (Overview, Cost, Providers), loaded on `docker compose up`, checked in CI against the metrics the code emits; `pnpm demo:traffic` | ✅ |
 | ❤️ | `/healthz`, `/readyz` with time-bounded dependency checks, graceful shutdown | ✅ |
 | 🔑 | **Virtual API keys** (`sk-sy-…`, stored only as peppered hashes), teams, per-key model allow-lists, revocation | ✅ |
 | 🚥 | **Rate limits** in requests and tokens per minute, per key and per team, atomic in Redis (Lua), OpenAI-style `429` + `x-ratelimit-*` | ✅ |
@@ -277,7 +278,7 @@ sequenceDiagram
   end
   loop each attempt (candidate in strategy order, skipping open breakers)
     G->>P: POST {baseUrl}/chat/completions (model rewritten)
-    Note over G,P: span switchyard.upstream per attempt<br/>connect · TTFB timeouts · whole-request budget
+    Note over G,P: upstream span per attempt (chat model)<br/>connect · TTFB timeouts · whole-request budget
     alt 5xx · 408 · 429 · network error · timeout
       P-->>G: retryable failure → next candidate (backoff when it repeats)
     end
@@ -641,7 +642,10 @@ x-switchyard-upstream-ms: 986
 
 | Signal | Name | Details |
 |---|---|---|
-| Span | `switchyard.upstream` | one per attempt: `gen_ai.system`, `gen_ai.request.model`, `gen_ai.response.model`, `gen_ai.usage.input_tokens` / `output_tokens`, `switchyard.candidate`, `switchyard.attempt`, `switchyard.attempt.outcome`, `switchyard.backoff_ms` |
+| Span | `{operation} {model}` (e.g. `chat llama3.2`), kind `CLIENT` | one per upstream attempt, [GenAI conventions](https://github.com/open-telemetry/semantic-conventions-genai): `gen_ai.operation.name`, `gen_ai.provider.name`, `gen_ai.request.model`, `gen_ai.response.model`, `gen_ai.usage.input_tokens` / `output_tokens`, `error.type`; plus `switchyard.stage: upstream`, `switchyard.provider.name`, `switchyard.candidate`, `switchyard.attempt`, `switchyard.attempt.outcome`, `switchyard.backoff_ms` |
+| Histogram | `switchyard_request_duration_seconds` | whole request, arrival to last byte, by `operation`, `stream`, `status` class |
+| Histogram | `switchyard_gateway_overhead_seconds` | time the gateway adds: duration − upstream time − backoff (to the first byte for streams), same labels |
+| Counter | `switchyard_tokens_total` | by `direction` (`input`, `output`), `provider`, `model`; matches the usage events |
 | Counter | `switchyard_requests_total` | by `provider`, `model`, `status`, `team`; one per client request (the attempt that served or failed last) |
 | Counter | `switchyard_upstream_attempts_total` | every attempt, by `candidate` and `outcome` (`success`, `retryable_error`, `non_retryable_error`, `timeout`, `midstream_error`) |
 | Gauge | `switchyard_circuit_state` | per `candidate`: `0` closed, `1` half-open, `2` open; transitions are logged |
@@ -665,7 +669,16 @@ x-switchyard-upstream-ms: 986
 > [!IMPORTANT]
 > Prompt and response **content is never written to logs or spans** ([ADR-0010](docs/adr/0010-no-prompt-persistence.md)). Only metadata such as tokens, latency and status is recorded.
 
-**See a trace:** open Grafana at <http://localhost:3000> → **Explore** → **Tempo** → search service `switchyard-gateway`.
+**Dashboards and alerts:** `docker compose up -d`, then `pnpm demo:traffic` (mock provider only) and open Grafana at <http://localhost:3000> → **Dashboards → Switchyard**: **Overview** (traffic, errors, duration, overhead, TTFB, tokens, rejections, dropped events), **Cost** (spend by model, requests by team, unknown costs, budgets), **Providers** (per-provider errors and latency, retries, circuit state) and **Cache** (with spec 009). Four example alert rules (error rate, breaker open, budget near limit, usage events dropped) load with them; add your own contact point in Grafana. Everything lives in [`deploy/grafana/`](deploy/grafana) and `pnpm verify` fails if a panel queries a metric the code does not emit. Definitions, panels, rules and the rule for new metrics: [docs/observability.md](docs/observability.md).
+
+<!-- Screenshots (spec 011, AC-11): captured by the owner following docs/observability.md § Screenshots.
+![Grafana Overview dashboard](docs/assets/dashboard-overview.png)
+*Grafana, Overview dashboard, fed by `pnpm demo:traffic` (mock provider). Captured at commit `<hash>`.*
+![Grafana Providers dashboard](docs/assets/dashboard-providers.png)
+*Grafana, Providers dashboard, fed by `pnpm demo:traffic` (mock provider). Captured at commit `<hash>`.*
+-->
+
+**See a trace:** open Grafana at <http://localhost:3000> → **Explore** → **Tempo** → search service `switchyard-gateway`; upstream calls carry `switchyard.stage = upstream`.
 
 ## 🛠 Development
 
@@ -692,7 +705,9 @@ pnpm dev:worker      # usage worker in watch mode (needs KAFKA_BROKERS, e.g. loc
 | `pnpm test:contract` | The **official OpenAI and Anthropic Node SDKs** against the gateway: chat, streaming, embeddings, tools, `/v1/messages` (mock and an in-process fake Anthropic server always; Ollama when running) |
 | `pnpm db:migrate` | Applies database migrations to `DATABASE_URL` (`pnpm db:generate` creates new ones from the Drizzle schema) |
 | `pnpm test:contract:py` | The same with the **official OpenAI and Anthropic Python SDKs** (needs `pip install -r test/contract/python/requirements.txt`; on Windows, enable long paths or use a short venv path) |
-| `pnpm test:smoke` | Boots the Compose stack: health, readiness, a chat request, rate limits, a request counted in `GET /admin/usage`, a cost header then `budget_exceeded`, bad config, memory budget, graceful SIGTERM |
+| `pnpm test:smoke` | Boots the Compose stack: health, readiness, a chat request, rate limits, a request counted in `GET /admin/usage`, a cost header then `budget_exceeded`, Grafana dashboards and alert rules provisioned with Overview series, bad config, memory budget, graceful SIGTERM |
+| `pnpm check:grafana` | Validates `deploy/grafana` dashboards and alert rules against the metrics `src/` emits (also part of `pnpm verify`) |
+| `pnpm demo:traffic` | Sends a configurable mix of mock-only traffic to the running stack so the dashboards have data |
 
 ```mermaid
 flowchart LR
@@ -772,6 +787,7 @@ Full scope and dependencies: [spec backlog](docs/specs/README.md).
 | 🛡️ [Threat model](docs/threat-model.md) | STRIDE analysis and mitigations |
 | 💰 [Budgets guide](docs/budgets.md) | Prices, cost per request, budgets, headers, overshoot bound, Redis failure policy |
 | 🔐 [PII redaction guide](docs/pii.md) | Modes, detectors, placeholders, headers and limits of `mask` / `block` |
+| 📊 [Observability guide](docs/observability.md) | Dashboards, alert rules, metric and span reference, duration and overhead definitions, demo traffic |
 | 📈 [Benchmarks](docs/benchmarks.md) | Method for the k6 benchmarks; numbers are published only once measured |
 
 ## 🤝 Contributing
