@@ -21,7 +21,7 @@ One commit per task, ending in `[spec-009]`. Lint, typecheck and the task's test
   - Test: `test/unit/cache/chunks.test.ts` › cacheable finish reasons, assemble content / tool_calls / usage from chunks, rechunk round trip (assemble(rechunk(x)) ≡ x), usage chunk last.
   - Files: `src/modules/cache/chunks.ts`
 
-- [ ] **T4. In-memory stores**
+- [x] **T4. In-memory stores**
   - ACs: AC-3, AC-6 (expiry)
   - Test: `test/unit/cache/memory-stores.test.ts` › exact TTL on injected clock, bound, getMany order; semantic nearest in scope only, expired never returned, hits, deleteExpired.
   - Files: `src/infra/memory/{exact-cache,semantic-cache}.ts`
