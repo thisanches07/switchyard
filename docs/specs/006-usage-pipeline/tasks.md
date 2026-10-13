@@ -45,7 +45,7 @@ One commit per task, ending in `[spec-006]`. `pnpm verify` exit code checked aft
   - Do: `src/modules/usage/consume.ts` (+ worker metric and span).
   - Test: `test/unit/usage/consume.test.ts` › valid stored, duplicates counted, invalid JSON and schema failures → DLQ with original bytes and headers, Postgres error → throws before any DLQ, in-batch duplicate ids, `switchyard_usage_worker_events_total`, `switchyard.usage.consume` span without content.
 
-- [ ] **T9. Worker process and consumer**
+- [x] **T9. Worker process and consumer**
   - ACs: AC-8, AC-9, AC-10, AC-13
   - Do: `src/infra/kafka/{consumer,topics}.ts`, `src/worker.ts`, `pnpm dev:worker`.
   - Test: `test/integration/usage-pipeline.int.test.ts` › topics created, publish → row + aggregate, same event twice → counted once, malformed → DLQ while the next valid one is stored, worker restart mid-stream → no loss and no double count.

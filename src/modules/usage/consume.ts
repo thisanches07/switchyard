@@ -8,6 +8,7 @@ import { SpanStatusCode, trace } from "@opentelemetry/api";
 import type { FastifyBaseLogger } from "fastify";
 import { formatPath } from "../../config/zod-issues.js";
 import {
+  type InboundMessage,
   type MessageProducer,
   type OutboundMessage,
   type UsageEvent,
@@ -16,13 +17,7 @@ import {
 } from "../../core/usage.js";
 import { usageMetrics } from "./telemetry.js";
 
-export interface InboundMessage {
-  topic: string;
-  partition: number;
-  offset: string;
-  key: Buffer | null;
-  value: Buffer | null;
-}
+export type { InboundMessage };
 
 export interface BatchDeps {
   store: UsageStore;

@@ -89,6 +89,15 @@ export interface MessageProducer {
   close(): Promise<void>;
 }
 
+/** A message read from Kafka. */
+export interface InboundMessage {
+  topic: string;
+  partition: number;
+  offset: string;
+  key: Buffer | null;
+  value: Buffer | null;
+}
+
 /** Durable usage storage used by the worker (spec 006, AC-8..AC-10). */
 export interface UsageStore {
   /**
