@@ -79,7 +79,7 @@ One commit per task, ending in `[spec-014]`. `pnpm verify` green after each.
   - ACs: AC-16
   - Test: `test/contract/anthropic-sdk.contract.test.ts` › create, stream + `finalMessage()`, tool round trip, RateLimitError/AuthenticationError/NotFoundError/InternalServerError on mock; same-family on the fake server; `openai-sdk.contract.test.ts` › plain, streamed and tool calls routed to the fake Anthropic server.
 
-- [ ] **T16. Python SDK contract**
+- [x] **T16. Python SDK contract**
   - ACs: AC-16
   - Do: `anthropic` pinned in `test/contract/python/requirements.txt`; `scripts/contract-python.ts` starts the fake Anthropic server and configures a `claude` provider.
   - Test: `test/contract/python/test_anthropic_sdk.py` › same cases as T15 with `get_final_message()`.
