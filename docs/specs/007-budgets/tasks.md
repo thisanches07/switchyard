@@ -59,7 +59,7 @@ One commit per task, ending in `[spec-007]`. `pnpm verify` green after each (exi
   - ACs: AC-6, AC-7, AC-10, AC-11, AC-14
   - Test: `test/integration/budgets.int.test.ts` › real Redis + Postgres: hard limit, overshoot bound under concurrent waves, Redis flush → enforcement restored by one reconciliation, dead Redis closed → 503 for budgeted / 200 for unbudgeted, open → 200 + metric.
 
-- [ ] **T12. SDK contract tests**
+- [x] **T12. SDK contract tests**
   - ACs: AC-14
   - Test: `openai-sdk.contract.test.ts` › `RateLimitError` with status 429 and code `budget_exceeded`, not retried with default `maxRetries`; `test/contract/python/test_openai_sdk.py` › same with the Python SDK.
 

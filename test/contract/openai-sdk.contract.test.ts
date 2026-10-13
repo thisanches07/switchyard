@@ -122,6 +122,33 @@ describe("official OpenAI Node SDK against Switchyard", () => {
     expect(Number(headers?.get("retry-after"))).toBeGreaterThanOrEqual(1);
   });
 
+  it("surfaces an exhausted budget as RateLimitError budget_exceeded, not retried (spec 007)", async () => {
+    const budgetKey = await createKeyViaAdmin(baseUrl, TEST_ADMIN_TOKEN, {
+      team: `budget-${Date.now()}`,
+      monthlyBudgetUsd: 0,
+    });
+    let calls = 0;
+    // Default maxRetries (2): x-should-retry: false must stop the SDK from retrying the 429.
+    const budgeted = new OpenAI({
+      baseURL: `${baseUrl}/v1`,
+      apiKey: budgetKey,
+      fetch: (input, init) => {
+        calls += 1;
+        return fetch(input, init);
+      },
+    });
+    const error = await budgeted.chat.completions
+      .create({ model: "fast", messages: [{ role: "user", content: "hi" }] })
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(OpenAI.RateLimitError);
+    const rateLimit = error as InstanceType<typeof OpenAI.RateLimitError>;
+    expect(rateLimit.status).toBe(429);
+    expect(rateLimit.code).toBe("budget_exceeded");
+    expect(rateLimit.type).toBe("insufficient_quota");
+    expect(rateLimit.headers?.get("x-switchyard-budget-remaining-usd")).toBe("0");
+    expect(calls).toBe(1);
+  });
+
   it("surfaces a PII block as BadRequestError with code pii_detected (spec 010)", async () => {
     const blockKey = await createKeyViaAdmin(baseUrl, TEST_ADMIN_TOKEN, {
       team: `pii-block-${Date.now()}`,
