@@ -107,7 +107,9 @@ export async function streamChat({
   const responseModel = first.done ? undefined : modelOf(first.value);
   const encoder = customEncoder ?? openAiEncoder(includeUsage(request));
   // Spec 015: restore runs on the serving candidate's chunks only, after the attempt loop.
-  const restoring = restore?.open(first.done ? undefined : first.value);
+  const restoring = restore?.open(first.done ? undefined : first.value, (attributes) =>
+    upstream.annotate(attributes),
+  );
 
   reply
     .header("content-type", "text/event-stream; charset=utf-8")

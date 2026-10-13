@@ -1,19 +1,13 @@
-import type { Span } from "@opentelemetry/api";
 import type { Histogram } from "@opentelemetry/sdk-metrics";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { streamHoldRecorder } from "../../../src/modules/pii/telemetry.js";
+import { type SpanAnnotator, streamHoldRecorder } from "../../../src/modules/pii/telemetry.js";
 import { installTestMetrics } from "../../helpers/metrics.js";
 
-/** A span stub that keeps the attributes set on it. */
+/** An annotator that keeps the attributes set through it. */
 function spanStub() {
   const attributes: Record<string, unknown> = {};
-  const span = {
-    setAttribute(key: string, value: unknown) {
-      attributes[key] = value;
-      return span;
-    },
-  };
-  return { span: span as unknown as Span, attributes };
+  const span: SpanAnnotator = (attrs) => Object.assign(attributes, attrs);
+  return { span, attributes };
 }
 
 describe("stream restore telemetry (spec 015, AC-5)", () => {

@@ -40,7 +40,7 @@ One commit per task, ending in `[spec-015]`. Lint, typecheck and the task's test
   - Do: `messages.ts` passes `masked.stream`; native first chunk → `masked-unrestored`. (Committed with T6: the stage sends `masked` for every masked stream, so the route had to restore in the same commit.)
   - Test: `test/unit/proxy/messages-usage.test.ts` › cross-family stream restored in `text_delta` + `masked`; same-family native stream stays `masked-unrestored`.
 
-- [ ] **T8. Privacy proof for streams**
+- [x] **T8. Privacy proof for streams**
   - ACs: AC-8
   - Test: `test/unit/pii/stream-privacy.test.ts` › a streamed `mask` request whose answer splits placeholders: trace-level logs, spans and metric points contain no original value; the response body does.
 

@@ -1,4 +1,3 @@
-import type { Span } from "@opentelemetry/api";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { AppConfig } from "../../config/schema.js";
 import { nativeEventOf } from "../../core/anthropic.js";
@@ -18,7 +17,7 @@ import {
   type StreamStep,
   systemHoldClock,
 } from "./stream-restore.js";
-import { recordPiiScan, streamHoldRecorder } from "./telemetry.js";
+import { recordPiiScan, type SpanAnnotator, streamHoldRecorder } from "./telemetry.js";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -56,8 +55,9 @@ export interface StreamRestore {
    * The restore session for a stream starting with `first`, or undefined when its chunks cannot be
    * restored: native same-family `/v1/messages` events carry the provider's raw bytes, so the
    * answer keeps its placeholders and the header becomes `masked-unrestored` (spec 015 non-goal).
+   * `annotate` receives hold counts for the serving attempt's span.
    */
-  open(first: ChatChunk | undefined): StreamRestoreSession | undefined;
+  open(first: ChatChunk | undefined, annotate?: SpanAnnotator): StreamRestoreSession | undefined;
 }
 
 export interface StreamRestoreSession {
@@ -77,7 +77,7 @@ function streamRestore(
   clock: HoldClock,
 ): StreamRestore {
   return {
-    open(first) {
+    open(first, annotate) {
       if (first !== undefined && nativeEventOf(first) !== undefined) {
         ctx.reply.header(PII_HEADER, "masked-unrestored");
         return undefined;
@@ -85,7 +85,7 @@ function streamRestore(
       const restorer = createChunkRestorer({
         index: indexPlaceholders(map),
         limits,
-        onHold: streamHoldRecorder(requestSpan(ctx.request)),
+        onHold: streamHoldRecorder(annotate),
       });
       return {
         steps: (start, iterator) => restoreSteps(start, iterator, restorer, clock),
@@ -93,13 +93,6 @@ function streamRestore(
       };
     },
   };
-}
-
-/** The request span (as in `recordPiiScan`), if the request is traced. */
-function requestSpan(request: FastifyRequest): Span | undefined {
-  return typeof request.opentelemetry === "function"
-    ? (request.opentelemetry().span ?? undefined)
-    : undefined;
 }
 
 const NOTHING: RestoreMap = new Map();

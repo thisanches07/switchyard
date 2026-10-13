@@ -76,21 +76,25 @@ function streamRestoreInstruments() {
 
 /**
  * Hold listener of one streamed request (spec 015, AC-5): the hold histogram, the failure counter
- * (`reason="hold_limit"`) and running counts on the request span. Durations and counts only,
- * never the held text (ADR-0010).
+ * (`reason="hold_limit"`) and running counts through `annotate` (the serving attempt's upstream
+ * span: the request span has already ended once a stream's body flows). Durations and counts
+ * only, never the held text (ADR-0010).
  */
-export function streamHoldRecorder(span: Span | undefined): HoldListener {
+export function streamHoldRecorder(annotate?: SpanAnnotator): HoldListener {
   let holds = 0;
   let failures = 0;
   return ({ heldMs, outcome }) => {
     const instruments = streamRestoreInstruments();
     instruments.hold.record(heldMs / 1000);
     holds += 1;
-    span?.setAttribute("switchyard.pii.stream_holds", holds);
+    annotate?.({ "switchyard.pii.stream_holds": holds });
     if (outcome === "hold_limit") {
       instruments.failures.add(1, { reason: outcome });
       failures += 1;
-      span?.setAttribute("switchyard.pii.stream_restore_failures", failures);
+      annotate?.({ "switchyard.pii.stream_restore_failures": failures });
     }
   };
 }
+
+/** Sets metadata attributes on a span (never content). */
+export type SpanAnnotator = (attributes: Record<string, number>) => void;
