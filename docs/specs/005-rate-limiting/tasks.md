@@ -22,7 +22,7 @@ One commit per task, ending in `[spec-005]`. `pnpm verify` exit code checked aft
   - ACs: AC-7
   - Test: `test/unit/ratelimit/headers.test.ts` › duration format, most-restrictive selection, omission when unlimited, `retry-after` ≥ 1.
 
-- [ ] **T5. `RateLimiter` port and `MemoryRateLimiter`**
+- [x] **T5. `RateLimiter` port and `MemoryRateLimiter`**
   - ACs: AC-3, AC-4, AC-6
   - Test: `test/unit/ratelimit/memory-limiter.test.ts` › all-or-nothing, refill with a fake clock, adjust (refund capped at capacity, charge below zero), peek.
 
