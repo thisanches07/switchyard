@@ -70,7 +70,7 @@ One commit per task, ending in `[spec-014]`. `pnpm verify` green after each.
   - Test: `test/unit/providers/mock.test.ts` › tools present and last message not a tool result → tool call (non-stream and stream); otherwise text.
   - Files: `src/modules/providers/mock.ts`
 
-- [ ] **T14. Fake Anthropic server, integration and live tests**
+- [x] **T14. Fake Anthropic server, integration and live tests**
   - ACs: AC-15
   - Test: `test/integration/anthropic.int.test.ts` › real HTTP: request headers/body (AC-1 to AC-3), streaming, 429/529/500 mapping, same-family byte-for-byte; `test/contract/anthropic-live.contract.test.ts` › skipped with a message unless `ANTHROPIC_API_KEY` and `SWITCHYARD_LIVE_ANTHROPIC=1`.
   - Files: `test/helpers/fake-anthropic.ts`
