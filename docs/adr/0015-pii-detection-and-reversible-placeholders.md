@@ -1,6 +1,6 @@
 # 0015. Detect PII with validated patterns and mask it with typed, numbered placeholders
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-13
 - **Related specs:** 010, 015
 

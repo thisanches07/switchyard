@@ -1,10 +1,10 @@
 # Spec 008: Routing strategies, retries, circuit breakers and config hot reload
 
-- **Status:** Draft
+- **Status:** Approved (2026-10-13)
 - **Owner:** @thisanches07
 - **Release:** v0.1
 - **Depends on:** 003, 006 (and the pricing module of 007 for `lowest-cost`, see Open questions)
-- **Related ADRs:** 0003 (OpenAI-compatible API), 0004 (canonical format, retryable error classes), 0008 (no retry after first byte), 0011 (OpenTelemetry), 0017 (budget periods and cost accounting), 0018 (config hot reload, Proposed)
+- **Related ADRs:** 0003 (OpenAI-compatible API), 0004 (canonical format, retryable error classes), 0008 (no retry after first byte), 0011 (OpenTelemetry), 0017 (budget periods and cost accounting), 0018 (config hot reload)
 
 ## Problem
 Aliases already list several candidates (`fast: [groq/…, gemini/…, ollama/…]`), but the gateway only ever calls the first one (`src/modules/routing/resolve.ts`). The `strategy` field, the `retry` and `circuitBreaker` sections and `server.timeouts.totalMs` are accepted by the config schema and then ignored, so:

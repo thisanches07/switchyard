@@ -1,10 +1,10 @@
 # Spec 010: PII redaction (mask and block)
 
-- **Status:** Draft
+- **Status:** Approved (2026-10-13)
 - **Owner:** @thisanches07
 - **Release:** v0.2
 - **Depends on:** 004 (implemented in wave A, in parallel with 006 and 014; merges **after 006** and adds `piiDetections` through 006's request-outcome hook, see `docs/specs/waves.md`)
-- **Related ADRs:** 0015 (PII detection and reversible placeholders, proposed with this spec), 0010 (no prompt persistence), 0008 (no retry after first byte), 0011 (OpenTelemetry)
+- **Related ADRs:** 0015 (PII detection and reversible placeholders), 0010 (no prompt persistence), 0008 (no retry after first byte), 0011 (OpenTelemetry)
 
 ## Problem
 Every prompt that goes through Switchyard is forwarded to a third-party provider. Prompts routinely carry personal data: customer e-mails, phone numbers, card numbers pasted into support tickets and, for Brazilian users, CPF and CNPJ numbers. Under LGPD and GDPR, sending that data to a provider is a transfer the operator has to justify, and most applications calling the gateway were never written to scrub it. The threat model already lists "PII sent to third-party providers" as an open risk owned by this spec.

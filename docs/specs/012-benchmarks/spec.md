@@ -1,10 +1,10 @@
 # Spec 012: Benchmarks (k6, measured overhead, published honestly)
 
-- **Status:** Draft
+- **Status:** Approved (2026-10-13)
 - **Owner:** @thisanches07
 - **Release:** v0.3
 - **Depends on:** 009, 011
-- **Related ADRs:** 0008 (no retry after first byte), 0011 (OpenTelemetry), 0021 (benchmark methodology, Proposed)
+- **Related ADRs:** 0008 (no retry after first byte), 0011 (OpenTelemetry), 0021 (benchmark methodology)
 
 ## Problem
 The plan makes two measurable promises: the gateway adds **little latency** (target: p95 overhead under 15 ms with a mock provider and no cache) and it **survives a failing provider** (target: with the primary failing 30% of the time, at least 99% of requests still succeed). Neither has been measured. `docs/benchmarks.md` describes a method but its results are `TBD`, and the README has no numbers.

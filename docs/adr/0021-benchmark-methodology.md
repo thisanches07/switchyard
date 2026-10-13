@@ -1,6 +1,6 @@
 # 0021. Benchmark methodology: containerised k6 on the reference machine, paired with a direct baseline
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-13
 - **Related specs:** 012-benchmarks, 011-observability
 

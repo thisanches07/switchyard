@@ -1,6 +1,6 @@
 # 0018. Hot-reload the config file by polling it, with an admin endpoint and SIGHUP as explicit triggers
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-13
 - **Related specs:** 008
 

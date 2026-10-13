@@ -1,10 +1,10 @@
 # Spec 009: Exact and semantic response caching
 
-- **Status:** Draft
+- **Status:** Approved (2026-10-13)
 - **Owner:** @thisanches07
 - **Release:** v0.2
 - **Depends on:** 007, 008 (also uses 006 usage events and 010 PII masking, both merged earlier)
-- **Related ADRs:** 0005 (Postgres + pgvector), 0006 (Redis, exact cache), 0008 (no retry after first byte), 0009 (semantic cache scoping), 0010 (no prompt persistence), 0019 (exact cache key normalisation, Proposed)
+- **Related ADRs:** 0005 (Postgres + pgvector), 0006 (Redis, exact cache), 0008 (no retry after first byte), 0009 (semantic cache scoping), 0010 (no prompt persistence), 0019 (exact cache key normalisation)
 
 ## Problem
 Many LLM workloads send the same request again and again: classification and extraction prompts at `temperature: 0`, test suites, retries from clients, FAQ-style questions phrased slightly differently. Each one costs a provider call, provider quota and seconds of latency, even though the answer is already known. The config schema already has `cache.exact` and `cache.semantic` sections, but nothing reads them.

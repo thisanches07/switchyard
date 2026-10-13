@@ -1,10 +1,10 @@
 # Spec 013: Deploy (multi-arch images, release workflow, Terraform for Oracle Always Free)
 
-- **Status:** Draft
+- **Status:** Approved (2026-10-13)
 - **Owner:** @thisanches07
 - **Release:** v0.3
 - **Depends on:** 012
-- **Related ADRs:** 0006 (Redis limits), 0010 (no prompt persistence), 0012 (Oracle Cloud Always Free with Terraform), 0020 (dashboards as code, Proposed). ADR number 0022 is reserved for the fallback in ADR-0012 and is written only if that fallback is used.
+- **Related ADRs:** 0006 (Redis limits), 0010 (no prompt persistence), 0012 (Oracle Cloud Always Free with Terraform), 0020 (dashboards as code). ADR number 0022 is reserved for the fallback in ADR-0012 and is written only if that fallback is used.
 
 ## Problem
 Switchyard only runs from a local clone: images are built on the developer's machine, there are no versioned releases, and there is no public demo. ADR-0012 chose Oracle Cloud Always Free (ARM VM) with Terraform and multi-arch images on GHCR, but none of it exists.

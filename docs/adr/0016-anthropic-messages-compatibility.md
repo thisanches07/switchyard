@@ -1,6 +1,6 @@
 # 0016. Add an Anthropic Messages surface translated through the canonical format
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-13
 - **Related specs:** 014 (also affects 006, 007, 008, 009, 010)
 

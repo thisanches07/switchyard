@@ -1,10 +1,10 @@
 # Spec 011: Observability (dashboards, alerts and GenAI conventions as code)
 
-- **Status:** Draft
+- **Status:** Approved (2026-10-13)
 - **Owner:** @thisanches07
 - **Release:** v0.3
 - **Depends on:** 008 (and the metrics of 006, 007 and 009, which merge before it; see [waves](../waves.md))
-- **Related ADRs:** 0010 (no prompt persistence), 0011 (OpenTelemetry), 0020 (dashboards and alerts as code, Proposed)
+- **Related ADRs:** 0010 (no prompt persistence), 0011 (OpenTelemetry), 0020 (dashboards and alerts as code)
 
 ## Problem
 Since spec 001 the gateway exports traces and metrics over OTLP to `grafana/otel-lgtm`, but an operator who runs `docker compose up` gets an **empty Grafana**: every question ("what is my error rate?", "which provider is slow?", "how much did team X spend today?", "is the cache paying off?") needs hand-written PromQL in Explore. Nothing alerts when the circuit breaker opens or usage events are dropped, and the README can only describe telemetry, not show it.

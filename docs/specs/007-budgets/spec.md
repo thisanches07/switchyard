@@ -1,10 +1,10 @@
 # Spec 007: Cost accounting and monthly budgets
 
-- **Status:** Draft
+- **Status:** Approved (2026-10-13)
 - **Owner:** @thisanches07
 - **Release:** v0.1
 - **Depends on:** 005, 006
-- **Related ADRs:** 0006 (Redis + Lua for limits and counters), 0007 (Kafka usage events), 0017 (budget periods and cost accounting, Proposed)
+- **Related ADRs:** 0006 (Redis + Lua for limits and counters), 0007 (Kafka usage events), 0017 (budget periods and cost accounting)
 
 ## Problem
 Rate limits (spec 005) cap how *fast* a key spends, not how *much*. A key well inside its RPM and TPM can still run up a large provider bill over a month, and a leaked key is a "denial of wallet" attack (threat model). Since spec 006 every request is recorded with its tokens, but nothing turns tokens into money, so operators cannot see what a team costs, and nothing stops spending.

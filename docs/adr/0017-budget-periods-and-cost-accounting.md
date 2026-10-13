@@ -1,6 +1,6 @@
 # 0017. Account costs as exact decimals per calendar month (UTC) and enforce budgets without cost reservation
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-13
 - **Related specs:** 006-usage-pipeline, 007-budgets
 

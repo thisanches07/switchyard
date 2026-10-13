@@ -1,6 +1,6 @@
 # 0019. Build exact cache keys from a canonical JSON form hashed with SHA-256, scoped by team
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-13
 - **Related specs:** 009
 

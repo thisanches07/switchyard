@@ -1,10 +1,10 @@
 # Spec 014: Anthropic provider adapter and Messages API
 
-- **Status:** Draft
+- **Status:** Approved (2026-10-13)
 - **Owner:** @thisanches07
 - **Release:** stretch (implemented in wave A)
 - **Depends on:** 003, 004, 005
-- **Related ADRs:** 0003 (OpenAI-compatible API), 0004 (canonical format + adapters), 0008 (no retry after first byte), 0010 (no content in logs), 0011 (OpenTelemetry), 0016 (Anthropic Messages compatibility surface, proposed with this spec)
+- **Related ADRs:** 0003 (OpenAI-compatible API), 0004 (canonical format + adapters), 0008 (no retry after first byte), 0010 (no content in logs), 0011 (OpenTelemetry), 0016 (Anthropic Messages compatibility surface)
 
 ## Problem
 The example config routes the `smart` alias to `claude/claude-sonnet-5-5`, but the `anthropic` provider type is still a placeholder that answers `501 provider_not_implemented` (spec 002). Any alias with a Claude candidate is therefore broken, and operators who pay for Claude cannot use it through the gateway.

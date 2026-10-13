@@ -18,10 +18,10 @@ Format: [MADR](0000-template.md). New ADRs start as **Proposed** and become **Ac
 | [0012](0012-deploy-oracle-always-free.md) | Demo on Oracle Cloud Always Free via Terraform | Accepted |
 | [0013](0013-toolchain.md) | Toolchain: pnpm, ESM, tsc, tsx, Vitest, Biome, Testcontainers | Accepted |
 | [0014](0014-zod-validation-openapi-docs.md) | Zod validation; Fastify route schemas only for OpenAPI docs | Accepted |
-| [0015](0015-pii-detection-and-reversible-placeholders.md) | PII detection with validated patterns and typed, numbered placeholders | Proposed |
-| [0016](0016-anthropic-messages-compatibility.md) | Anthropic Messages surface translated through the canonical format | Proposed |
-| [0017](0017-budget-periods-and-cost-accounting.md) | Exact-decimal costs, calendar-month (UTC) budgets, no cost reservation | Proposed |
-| [0018](0018-config-hot-reload.md) | Config hot reload by polling, plus admin endpoint and SIGHUP | Proposed |
-| [0019](0019-exact-cache-key-normalisation.md) | Exact cache keys: canonical JSON + SHA-256, scoped by team | Proposed |
-| [0020](0020-dashboards-and-alerts-as-code.md) | Grafana dashboards and alerts as file-provisioned JSON/YAML | Proposed |
-| [0021](0021-benchmark-methodology.md) | Benchmark methodology: containerised k6 with a direct baseline | Proposed |
+| [0015](0015-pii-detection-and-reversible-placeholders.md) | PII detection with validated patterns and typed, numbered placeholders | Accepted |
+| [0016](0016-anthropic-messages-compatibility.md) | Anthropic Messages surface translated through the canonical format | Accepted |
+| [0017](0017-budget-periods-and-cost-accounting.md) | Exact-decimal costs, calendar-month (UTC) budgets, no cost reservation | Accepted |
+| [0018](0018-config-hot-reload.md) | Config hot reload by polling, plus admin endpoint and SIGHUP | Accepted |
+| [0019](0019-exact-cache-key-normalisation.md) | Exact cache keys: canonical JSON + SHA-256, scoped by team | Accepted |
+| [0020](0020-dashboards-and-alerts-as-code.md) | Grafana dashboards and alerts as file-provisioned JSON/YAML | Accepted |
+| [0021](0021-benchmark-methodology.md) | Benchmark methodology: containerised k6 with a direct baseline | Accepted |

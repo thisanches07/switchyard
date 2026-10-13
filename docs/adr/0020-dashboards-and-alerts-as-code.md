@@ -1,6 +1,6 @@
 # 0020. Ship Grafana dashboards and alerts as file-provisioned JSON/YAML
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-13
 - **Related specs:** 011-observability, 013-deploy
 
