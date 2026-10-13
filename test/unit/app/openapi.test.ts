@@ -43,6 +43,9 @@ describe("OpenAPI documentation", () => {
     // Spec 010: the key's PII mode is documented on create and PATCH.
     expect(JSON.stringify(doc.paths["/admin/keys"])).toContain("piiMode");
     expect(JSON.stringify(doc.paths["/admin/keys/{id}"])).toContain("piiMode");
+    // Spec 009: the semantic cache opt-in is documented on create and PATCH.
+    expect(JSON.stringify(doc.paths["/admin/keys"])).toContain("semanticCacheEnabled");
+    expect(JSON.stringify(doc.paths["/admin/keys/{id}"])).toContain("semanticCacheEnabled");
     // Spec 014: the Anthropic SDKs send the key as x-api-key.
     expect(JSON.stringify(doc.components)).toContain('"name":"x-api-key"');
   });

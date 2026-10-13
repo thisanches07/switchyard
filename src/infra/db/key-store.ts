@@ -79,6 +79,7 @@ export class DrizzleKeyStore implements KeyStore {
         tpm: input.tpm ?? null,
         piiMode: input.piiMode ?? null,
         monthlyBudgetUsd: input.monthlyBudgetUsd ?? null,
+        semanticCacheEnabled: input.semanticCacheEnabled ?? false,
       })
       .returning();
     if (!row) throw new Error("insert returned no row");
@@ -118,6 +119,9 @@ export class DrizzleKeyStore implements KeyStore {
     const values: Partial<typeof apiKeys.$inferInsert> = limitValues(patch);
     if (patch.piiMode !== undefined) values.piiMode = patch.piiMode;
     if (patch.monthlyBudgetUsd !== undefined) values.monthlyBudgetUsd = patch.monthlyBudgetUsd;
+    if (patch.semanticCacheEnabled !== undefined) {
+      values.semanticCacheEnabled = patch.semanticCacheEnabled;
+    }
     if (Object.keys(values).length === 0) {
       const [row] = await this.db.select().from(apiKeys).where(eq(apiKeys.id, id)).limit(1);
       return row && toRecord(row);
@@ -175,6 +179,7 @@ function toRecord(row: KeyRow): ApiKeyRecord {
     tpm: row.tpm,
     piiMode: row.piiMode,
     monthlyBudgetUsd: money(row.monthlyBudgetUsd),
+    semanticCacheEnabled: row.semanticCacheEnabled,
     expiresAt: row.expiresAt,
     createdAt: row.createdAt,
     revokedAt: row.revokedAt,

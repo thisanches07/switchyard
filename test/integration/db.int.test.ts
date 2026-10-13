@@ -32,6 +32,7 @@ describe("Postgres: migrations and DrizzleKeyStore", () => {
     );
     expect(rows.map((r) => r.table_name)).toEqual([
       "api_keys",
+      "semantic_cache_entries",
       "teams",
       "usage_daily",
       "usage_events",
@@ -144,6 +145,60 @@ describe("Postgres: migrations and DrizzleKeyStore", () => {
       await store.updateKeyLimits("00000000-0000-0000-0000-000000000000", { rpm: 1 }),
     ).toBeUndefined();
     expect(await store.updateTeamLimits("nope", { rpm: 1 })).toBeUndefined();
+  });
+
+  it("adds the semantic cache opt-in and table with its indexes (spec 009, AC-1)", async () => {
+    const column = await pool.query(
+      "SELECT data_type, is_nullable, column_default FROM information_schema.columns WHERE table_name = 'api_keys' AND column_name = 'semantic_cache_enabled'",
+    );
+    expect(column.rows).toEqual([
+      { data_type: "boolean", is_nullable: "NO", column_default: "false" },
+    ]);
+    const columns = await pool.query<{ column_name: string; udt_name: string }>(
+      "SELECT column_name, udt_name FROM information_schema.columns WHERE table_name = 'semantic_cache_entries' ORDER BY ordinal_position",
+    );
+    expect(columns.rows.map((r) => [r.column_name, r.udt_name])).toEqual([
+      ["id", "uuid"],
+      ["team_id", "uuid"],
+      ["model", "text"],
+      ["params_hash", "bpchar"],
+      ["embedding", "vector"],
+      ["response", "jsonb"],
+      ["created_at", "timestamptz"],
+      ["expires_at", "timestamptz"],
+      ["hits", "int4"],
+    ]);
+    const indexes = await pool.query<{ indexname: string; indexdef: string }>(
+      "SELECT indexname, indexdef FROM pg_indexes WHERE tablename = 'semantic_cache_entries' ORDER BY indexname",
+    );
+    const defs = Object.fromEntries(indexes.rows.map((r) => [r.indexname, r.indexdef]));
+    expect(defs.semantic_cache_entries_embedding_idx).toContain(
+      "USING hnsw (embedding vector_cosine_ops)",
+    );
+    expect(defs.semantic_cache_entries_expires_at_idx).toContain("USING btree (expires_at)");
+    expect(defs.semantic_cache_entries_scope_idx).toContain("USING btree (team_id, params_hash)");
+    // vector(768): another dimension is refused.
+    await expect(
+      pool.query(
+        "INSERT INTO semantic_cache_entries (team_id, model, params_hash, embedding, response, expires_at) VALUES (gen_random_uuid(), 'm/x', repeat('a', 64), '[1,2,3]', '{}', now())",
+      ),
+    ).rejects.toThrow(/dimensions/);
+
+    const team = await store.createTeam("semantic");
+    const key = await store.createKey({
+      teamId: team.id,
+      name: "opted",
+      hash: "5".repeat(64),
+      prefix: "sk-sy-5555",
+      allowedModels: null,
+      expiresAt: null,
+      semanticCacheEnabled: true,
+    });
+    expect(key.semanticCacheEnabled).toBe(true);
+    expect((await store.findKeyByHash("5".repeat(64)))?.key.semanticCacheEnabled).toBe(true);
+    expect(await store.updateKeyLimits(key.id, { semanticCacheEnabled: false })).toMatchObject({
+      semanticCacheEnabled: false,
+    });
   });
 
   it("stores, updates and clears the key's PII mode (spec 010)", async () => {

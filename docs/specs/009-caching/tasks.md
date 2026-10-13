@@ -26,7 +26,7 @@ One commit per task, ending in `[spec-009]`. Lint, typecheck and the task's test
   - Test: `test/unit/cache/memory-stores.test.ts` › exact TTL on injected clock, bound, getMany order; semantic nearest in scope only, expired never returned, hits, deleteExpired.
   - Files: `src/infra/memory/{exact-cache,semantic-cache}.ts`
 
-- [ ] **T5. Key opt-in: migration, store, admin, principal**
+- [x] **T5. Key opt-in: migration, store, admin, principal**
   - ACs: AC-1
   - Do: Drizzle schema (`semantic_cache_enabled`, `semantic_cache_entries`, HNSW, btree), `pnpm db:generate --name semantic_cache` + `CREATE EXTENSION`; key store, memory key store, admin body/patch/view, OpenAPI docs, `Principal.semanticCacheEnabled`.
   - Test: `test/unit/admin/admin-cache.test.ts` › create/patch/list, invalid type 400, principal after patch; `test/integration/db.int.test.ts` › semantic cache migration (column default, table, indexes).

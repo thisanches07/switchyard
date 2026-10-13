@@ -25,6 +25,13 @@ const budgetSchema = {
     "Monthly budget in USD (calendar month, UTC): 0 to 99999999.9999, at most 4 decimal places; null clears. Returned as a decimal string",
 };
 
+/** Semantic cache opt-in of a key (spec 009). */
+const semanticCacheSchema = {
+  type: "boolean",
+  description:
+    "Serve near-match answers from the team's semantic cache (also needs cache.semantic.enabled); default false",
+};
+
 /** Soft limit of a team's budgets, percent (spec 007). */
 const softLimitPctSchema = {
   type: "integer",
@@ -272,12 +279,14 @@ export const docs = {
         tpm: limitSchema,
         piiMode: piiModeSchema,
         monthlyBudgetUsd: budgetSchema,
+        semanticCacheEnabled: semanticCacheSchema,
       },
     },
   },
   patchKeyLimits: {
     tags: ["Admin"],
-    summary: "Set or clear (null) the per-minute limits, PII mode and monthly budget of a key",
+    summary:
+      "Set or clear (null) the per-minute limits, PII mode and monthly budget of a key, or its semantic cache opt-in",
     security: adminAuth,
     params: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
     body: {
@@ -287,6 +296,7 @@ export const docs = {
         tpm: limitSchema,
         piiMode: piiModeSchema,
         monthlyBudgetUsd: budgetSchema,
+        semanticCacheEnabled: semanticCacheSchema,
       },
     },
   },
