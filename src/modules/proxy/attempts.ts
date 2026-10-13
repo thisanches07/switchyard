@@ -1,7 +1,7 @@
 /**
  * The attempt loop (spec 008): tries a request's candidates in strategy order with retries,
  * full-jitter backoff, circuit breakers and a request-wide time budget, until the first byte
- * (ADR-0008). One `switchyard.upstream` span per attempt.
+ * (ADR-0008). One upstream span per attempt.
  */
 import type { FastifyBaseLogger } from "fastify";
 import type { Principal } from "../../core/auth.js";
@@ -63,6 +63,8 @@ export interface RunAttemptsArgs<T> {
     principal?: Principal | undefined;
     /** Cache status of the request (spec 009), for requests_total. */
     cache?: CacheStatus | undefined;
+    /** `gen_ai.provider.name` configured for a provider (spec 011). */
+    genAiProviderName?: ((provider: string) => string | undefined) | undefined;
   };
   /**
    * One attempt. For streams it opens the stream and reads the first chunk, so every failure
@@ -191,6 +193,7 @@ export async function runAttempts<T>(args: RunAttemptsArgs<T>): Promise<Served<T
       args.report(candidate, attempts);
       const info: UpstreamCallInfo = {
         provider,
+        genAiProviderName: args.telemetry.genAiProviderName?.(candidate.provider),
         model: candidate.model,
         logger: args.telemetry.logger,
         stream: args.telemetry.stream,

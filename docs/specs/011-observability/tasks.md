@@ -11,7 +11,7 @@ One commit per task, ending in `[spec-011]`. T13 and T14 are blocked on things o
   - Test: `test/unit/scripts/metric-catalogue.test.ts` › translation (seconds kept, `_total`, `_ratio`, braces, `USD` case), real catalogue has the fixed names; `test/unit/scripts/grafana-check.test.ts` › invalid JSON/YAML, duplicate uid, unknown datasource, unknown metric names file + panel + metric, nested rows, templating, rules, allowlist, PromQL functions/labels ignored.
   - Files: `scripts/**`, `deploy/grafana/metrics-allowlist.json`, `package.json`, `src/modules/budgets/telemetry.ts`
 
-- [ ] **T2. GenAI semantic conventions on the upstream span**
+- [x] **T2. GenAI semantic conventions on the upstream span**
   - ACs: AC-4
   - Do: span name `{operation} {model}`, `gen_ai.provider.name`, `switchyard.provider.name`, `switchyard.stage`, `error.type`; drop `gen_ai.system`; optional `genAiProviderName` per provider; update tests that look spans up by name.
   - Test: `test/unit/proxy/telemetry.test.ts` › GenAI attributes and name, error.type, no gen_ai.system, default and configured provider name; `test/unit/config/schema.test.ts` › genAiProviderName.

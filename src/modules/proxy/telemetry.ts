@@ -47,6 +47,8 @@ function getInstruments(): Instruments {
 
 export interface UpstreamCallInfo {
   provider: { name: string; type: string };
+  /** `gen_ai.provider.name` from config (spec 011); see `genAiProviderName()` for the default. */
+  genAiProviderName?: string | undefined;
   model: string;
   logger: FastifyBaseLogger;
   operation?: "chat" | "embeddings";
@@ -115,20 +117,30 @@ export function countCachedRequest(labels: {
   getInstruments().requests.add(1, { ...labels, status: "200" });
 }
 
+/** `gen_ai.provider.name`: configured, else `anthropic` for that type, else the config name. */
+export function genAiProviderName(info: Pick<UpstreamCallInfo, "provider" | "genAiProviderName">) {
+  if (info.genAiProviderName) return info.genAiProviderName;
+  return info.provider.type === "anthropic" ? "anthropic" : info.provider.name;
+}
+
 /**
- * Starts a `switchyard.upstream` span (spec 002 AC-9, spec 003 AC-8).
- * Only metadata is recorded: never message content (ADR-0010).
+ * Starts the upstream span (spec 002 AC-9, spec 003 AC-8), named and attributed after the
+ * OpenTelemetry GenAI conventions (spec 011, AC-4): `{operation} {model}`, kind CLIENT, with
+ * `switchyard.stage: "upstream"` for searches by stage.
+ * Only metadata is recorded: never message content (ADR-0010, spec 011 AC-5).
  */
 export function startUpstreamSpan(info: UpstreamCallInfo): UpstreamSpan {
   const { provider, model, logger } = info;
   const operation = info.operation ?? "chat";
   // Looked up per call so a swapped global provider (tests) is always honoured.
-  const span: Span = trace.getTracer("switchyard").startSpan("switchyard.upstream", {
+  const span: Span = trace.getTracer("switchyard").startSpan(`${operation} ${model}`, {
     kind: SpanKind.CLIENT,
     attributes: {
       "gen_ai.operation.name": operation,
-      "gen_ai.system": provider.name,
+      "gen_ai.provider.name": genAiProviderName(info),
       "gen_ai.request.model": model,
+      "switchyard.stage": "upstream",
+      "switchyard.provider.name": provider.name,
       "switchyard.provider.type": provider.type,
       "switchyard.stream": info.stream ?? false,
       ...(info.principal && {
@@ -189,6 +201,7 @@ export function startUpstreamSpan(info: UpstreamCallInfo): UpstreamSpan {
       const code = error instanceof GatewayError ? error.code : "internal_error";
       const outcome = code === "upstream_timeout" ? "timeout" : "error";
       span.setStatus({ code: SpanStatusCode.ERROR, message: code });
+      span.setAttribute("error.type", code);
       if (phase === "midstream") {
         // Headers (200) were already sent; ADR-0008 forbids retrying from here.
         span.setAttribute("switchyard.midstream_error", true);

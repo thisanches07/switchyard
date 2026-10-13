@@ -141,6 +141,7 @@ export async function proxyRoutes(app: FastifyInstance, opts: ProxyRoutesOptions
         logger: request.log,
         stream: options.stream,
         principal: request.principal,
+        genAiProviderName: (name) => config.providers[name]?.genAiProviderName,
         ...(options.operation && { operation: options.operation }),
         ...(options.cache && { cache: options.cache }),
       },

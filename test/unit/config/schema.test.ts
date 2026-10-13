@@ -106,6 +106,31 @@ describe("configSchema", () => {
     expect(parsed.providers.mock).toMatchObject({ type: "mock", chunkDelayMs: 25 });
   });
 
+  it("every provider type accepts an optional genAiProviderName (spec 011)", () => {
+    const config = example();
+    config.providers = {
+      mock: { type: "mock", genAiProviderName: "openai" },
+      groq: { type: "openai-compatible", baseUrl: "http://x", genAiProviderName: "groq" },
+      claude: { type: "anthropic", apiKeyEnv: "ANTHROPIC_API_KEY", genAiProviderName: "gcp.x" },
+      plain: { type: "mock" },
+    };
+    config.aliases = {};
+    config.cache = { exact: { enabled: false, ttlSeconds: 1 } };
+    const parsed = configSchema.parse(config);
+    expect(parsed.providers.mock).toMatchObject({ genAiProviderName: "openai" });
+    expect(parsed.providers.claude).toMatchObject({ genAiProviderName: "gcp.x" });
+    expect(parsed.providers.plain).not.toHaveProperty("genAiProviderName");
+
+    config.providers = { mock: { type: "mock", genAiProviderName: "Not Valid" } };
+    expect(issues(config)[0]?.path).toBe("providers.mock.genAiProviderName");
+  });
+
+  it("example config names well-known GenAI providers (spec 011)", () => {
+    const providers = configSchema.parse(example()).providers;
+    expect(providers.gemini).toMatchObject({ genAiProviderName: "gcp.gemini" });
+    expect(providers.groq).toMatchObject({ genAiProviderName: "groq" });
+  });
+
   it("anthropic providers default defaultMaxTokens to 4096 (spec 014)", () => {
     const config = example();
     config.providers = {

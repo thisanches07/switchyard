@@ -6,7 +6,7 @@ import { createMockProvider } from "../../../src/modules/providers/mock.js";
 import { testApp } from "../../helpers/app.js";
 import { MemoryKeyStore } from "../../helpers/memory-key-store.js";
 import { spiedRegistry } from "../../helpers/providers.js";
-import { installInMemoryTracing } from "../../helpers/telemetry.js";
+import { installInMemoryTracing, isUpstreamSpan } from "../../helpers/telemetry.js";
 
 const messages = [{ role: "user", content: "12345678" }];
 
@@ -136,7 +136,7 @@ describe("POST /v1/chat/completions with stream: true", () => {
     tracing.exporter.reset();
     const res = await post({ model: "mock/m", stream_options: { include_usage: true } }, registry);
     expect(res.statusCode).toBe(200);
-    const span = tracing.exporter.getFinishedSpans().find((s) => s.name === "switchyard.upstream");
+    const span = tracing.exporter.getFinishedSpans().find(isUpstreamSpan);
     expect(span?.attributes).toMatchObject({
       "switchyard.usage.estimated": true,
       "gen_ai.usage.input_tokens": 2,

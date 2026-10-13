@@ -6,6 +6,11 @@ import {
   SimpleSpanProcessor,
 } from "@opentelemetry/sdk-trace-base";
 
+/** The upstream (provider call) span, named `{operation} {model}` since spec 011. */
+export function isUpstreamSpan(span: { attributes: Record<string, unknown> }): boolean {
+  return span.attributes["switchyard.stage"] === "upstream";
+}
+
 /** Installs a global tracer provider that records finished spans in memory. */
 export function installInMemoryTracing() {
   const exporter = new InMemorySpanExporter();
