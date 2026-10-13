@@ -1,0 +1,72 @@
+import { describe, expect, it } from "vitest";
+import {
+  GatewayError,
+  internalError,
+  invalidJson,
+  invalidRequest,
+  modelNotFound,
+  providerNotConfigured,
+  providerNotImplemented,
+  requestTooLarge,
+  streamNotSupported,
+  unsupportedMediaType,
+  upstreamClientError,
+  upstreamError,
+  upstreamTimeout,
+} from "../../../src/core/errors.js";
+
+describe("gateway errors", () => {
+  it.each([
+    [invalidRequest("messages: Required"), 400, "invalid_request_error", "invalid_request"],
+    [invalidJson("Unexpected token"), 400, "invalid_request_error", "invalid_json"],
+    [requestTooLarge(), 413, "invalid_request_error", "request_too_large"],
+    [unsupportedMediaType("text/plain"), 415, "invalid_request_error", "unsupported_media_type"],
+    [streamNotSupported(), 400, "invalid_request_error", "stream_not_supported"],
+    [modelNotFound("gpt-9"), 404, "invalid_request_error", "model_not_found"],
+    [
+      providerNotImplemented("claude", "anthropic"),
+      501,
+      "server_error",
+      "provider_not_implemented",
+    ],
+    [providerNotConfigured("groq", "GROQ_API_KEY"), 503, "server_error", "provider_not_configured"],
+    [upstreamError("groq"), 502, "server_error", "upstream_error"],
+    [upstreamTimeout("groq"), 504, "server_error", "upstream_timeout"],
+    [internalError(), 500, "server_error", "internal_error"],
+  ])("%s has status %i, type %s, code %s", (error, status, type, code) => {
+    expect(error).toBeInstanceOf(GatewayError);
+    expect(error.status).toBe(status);
+    expect(error.toBody()).toEqual({ error: { message: error.message, type, code } });
+  });
+
+  it("modelNotFound names the model", () => {
+    expect(modelNotFound("gpt-9").message).toContain('"gpt-9"');
+  });
+
+  it("providerNotConfigured names the variable", () => {
+    expect(providerNotConfigured("groq", "GROQ_API_KEY").message).toContain("GROQ_API_KEY");
+  });
+
+  it("upstreamClientError keeps upstream status, type, code and message", () => {
+    const error = upstreamClientError(429, {
+      type: "rate_limit_error",
+      code: "rate_limited",
+      message: "slow down",
+    });
+    expect(error.status).toBe(429);
+    expect(error.toBody()).toEqual({
+      error: { message: "slow down", type: "rate_limit_error", code: "rate_limited" },
+    });
+  });
+
+  it("upstreamClientError falls back to generic type and code", () => {
+    const error = upstreamClientError(422, { message: "bad field" });
+    expect(error.toBody()).toEqual({
+      error: { message: "bad field", type: "invalid_request_error", code: "upstream_422" },
+    });
+  });
+
+  it("internalError never exposes details", () => {
+    expect(internalError().message).toBe("Internal server error");
+  });
+});

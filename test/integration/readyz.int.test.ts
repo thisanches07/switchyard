@@ -8,6 +8,7 @@ import { buildApp } from "../../src/app.js";
 import { createPostgresPool, postgresCheck } from "../../src/infra/db/postgres.js";
 import { createLogger } from "../../src/infra/logger.js";
 import { createRedisClient, redisCheck } from "../../src/infra/redis/client.js";
+import { testConfig } from "../helpers/config.js";
 
 describe("/readyz with real dependencies", () => {
   let postgres: StartedPostgreSqlContainer;
@@ -26,6 +27,8 @@ describe("/readyz with real dependencies", () => {
     app = await buildApp({
       logger: createLogger({ level: "silent" }),
       checks: [postgresCheck(pool), redisCheck(redis)],
+      config: testConfig(),
+      providers: new Map(),
       readinessTimeoutMs: 1_000,
     });
   });

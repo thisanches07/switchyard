@@ -21,11 +21,25 @@ export default defineConfig({
           env: { OTEL_SDK_DISABLED: "true" },
         },
       },
+      {
+        test: {
+          name: "contract",
+          include: ["test/contract/**/*.contract.test.ts"],
+          environment: "node",
+          testTimeout: 30_000,
+          env: { OTEL_SDK_DISABLED: "true" },
+        },
+      },
     ],
     coverage: {
       provider: "v8",
       include: ["src/**/*.ts"],
-      reporter: ["text", "html"],
+      reporter: ["text-summary", "html"],
+      // Spec 002 AC-12: business logic must stay covered by unit tests.
+      thresholds: {
+        "src/core/**": { lines: 80 },
+        "src/modules/**": { lines: 80 },
+      },
     },
   },
 });

@@ -25,6 +25,7 @@ jobs:
       - run: corepack enable
       - run: pnpm install --frozen-lockfile
       - run: pnpm verify
+      - run: pnpm test:contract
 
   integration:
     name: Integration tests (Testcontainers)
