@@ -43,6 +43,25 @@ describe("installShutdown", () => {
     expect(exit).toHaveBeenCalledExactlyOnceWith(0);
   });
 
+  it("gives closers the shutdown deadline (spec 006: usage flush)", async () => {
+    const signals = new EventEmitter();
+    const deadlines: number[] = [];
+    vi.setSystemTime(1_000_000);
+    installShutdown({
+      app: { close: async () => {} },
+      closers: [
+        { name: "usage", close: async ({ deadlineAt }) => void deadlines.push(deadlineAt) },
+      ],
+      timeoutMs: 9_000,
+      exit: vi.fn<(code: number) => void>(),
+      logger: createLogger({ level: "silent" }),
+      signals,
+    });
+    signals.emit("SIGTERM");
+    await vi.runAllTimersAsync();
+    expect(deadlines).toEqual([1_009_000]);
+  });
+
   it("keeps closing remaining resources when one closer fails", async () => {
     const exit = vi.fn<(code: number) => void>();
     const signals = new EventEmitter();

@@ -3,7 +3,8 @@ import type { FastifyBaseLogger } from "fastify";
 
 export interface Closer {
   name: string;
-  close(): Promise<void>;
+  /** `deadlineAt`: epoch ms at which the process is forced to exit (e.g. to bound a flush). */
+  close(context: { deadlineAt: number }): Promise<void>;
 }
 
 export interface ShutdownOptions {
@@ -34,6 +35,7 @@ export function installShutdown(options: ShutdownOptions): void {
       return;
     }
     shuttingDown = true;
+    const deadlineAt = Date.now() + timeoutMs;
     logger.info({ signal, timeoutMs }, "shutdown started");
 
     const deadline = setTimeout(() => {
@@ -51,7 +53,7 @@ export function installShutdown(options: ShutdownOptions): void {
     }
     for (const closer of closers) {
       try {
-        await closer.close();
+        await closer.close({ deadlineAt });
       } catch (error) {
         failed = true;
         logger.error({ err: error, resource: closer.name }, "failed to close resource");

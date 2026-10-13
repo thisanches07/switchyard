@@ -30,7 +30,7 @@ One commit per task, ending in `[spec-006]`. `pnpm verify` exit code checked aft
   - Do: `src/modules/usage/publisher.ts`, `telemetry.ts`.
   - Test: `test/unit/usage/publisher.test.ts` › validates before buffering, disabled never sends, record is synchronous, key = team id, periodic flush, failed send kept and retried, buffer full → drop + metric + one warning per minute, close flushes and counts leftovers as `shutdown`, gauge and published counter.
 
-- [ ] **T6. Kafka producer and gateway wiring**
+- [x] **T6. Kafka producer and gateway wiring**
   - ACs: AC-4, AC-5, AC-6, AC-7
   - Do: `src/infra/kafka/{client,producer}.ts`, `server.ts` (required `KAFKA_BROKERS`, publisher start, closer with deadline), `installShutdown` passes `{ deadlineAt }`, `@testcontainers/redpanda`.
   - Test: `boot.test.ts` › missing `KAFKA_BROKERS` exits naming it, starts with Kafka unreachable; `shutdown.test.ts` › closers receive the deadline; `test/integration/usage-producer.int.test.ts` › events published to Redpanda with the team id as key.
