@@ -1,5 +1,13 @@
 import { and, eq } from "drizzle-orm";
-import type { ApiKeyRecord, AuthRecord, KeyStore, Limits, NewKey, Team } from "../../core/auth.js";
+import type {
+  ApiKeyRecord,
+  AuthRecord,
+  KeyStore,
+  Limits,
+  LimitsPatch,
+  NewKey,
+  Team,
+} from "../../core/auth.js";
 import { conflict } from "../../core/errors.js";
 import type { Database } from "./client.js";
 import { apiKeys, teams } from "./schema.js";
@@ -88,7 +96,7 @@ export class DrizzleKeyStore implements KeyStore {
     return existing && toRecord(existing);
   }
 
-  async updateKeyLimits(id: string, patch: Partial<Limits>): Promise<ApiKeyRecord | undefined> {
+  async updateKeyLimits(id: string, patch: LimitsPatch): Promise<ApiKeyRecord | undefined> {
     if (!UUID.test(id)) return undefined;
     const values = limitValues(patch);
     if (Object.keys(values).length === 0) {
@@ -99,7 +107,7 @@ export class DrizzleKeyStore implements KeyStore {
     return row && toRecord(row);
   }
 
-  async updateTeamLimits(id: string, patch: Partial<Limits>): Promise<Team | undefined> {
+  async updateTeamLimits(id: string, patch: LimitsPatch): Promise<Team | undefined> {
     if (!UUID.test(id)) return undefined;
     const values = limitValues(patch);
     if (Object.keys(values).length === 0) return this.getTeam(id);
@@ -109,7 +117,7 @@ export class DrizzleKeyStore implements KeyStore {
 }
 
 /** Only the fields present in the patch; `null` clears a limit. */
-function limitValues(patch: Partial<Limits>): Partial<Limits> {
+function limitValues(patch: LimitsPatch): Partial<Limits> {
   const values: Partial<Limits> = {};
   if (patch.rpm !== undefined) values.rpm = patch.rpm;
   if (patch.tpm !== undefined) values.tpm = patch.tpm;

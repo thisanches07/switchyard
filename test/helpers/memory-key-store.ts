@@ -4,6 +4,7 @@ import type {
   AuthRecord,
   KeyStore,
   Limits,
+  LimitsPatch,
   NewKey,
   Team,
 } from "../../src/core/auth.js";
@@ -87,7 +88,7 @@ export class MemoryKeyStore implements KeyStore {
     return strip(key);
   }
 
-  async updateKeyLimits(id: string, patch: Partial<Limits>) {
+  async updateKeyLimits(id: string, patch: LimitsPatch) {
     const key = this.keys.get(id);
     if (!key) return undefined;
     if (patch.rpm !== undefined) key.rpm = patch.rpm;
@@ -95,7 +96,7 @@ export class MemoryKeyStore implements KeyStore {
     return strip(key);
   }
 
-  async updateTeamLimits(id: string, patch: Partial<Limits>) {
+  async updateTeamLimits(id: string, patch: LimitsPatch) {
     const team = this.teams.get(id);
     if (!team) return undefined;
     if (patch.rpm !== undefined) team.rpm = patch.rpm;
