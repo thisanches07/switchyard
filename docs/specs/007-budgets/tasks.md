@@ -63,7 +63,7 @@ One commit per task, ending in `[spec-007]`. `pnpm verify` green after each (exi
   - ACs: AC-14
   - Test: `openai-sdk.contract.test.ts` › `RateLimitError` with status 429 and code `budget_exceeded`, not retried with default `maxRetries`; `test/contract/python/test_openai_sdk.py` › same with the Python SDK.
 
-- [ ] **T13. Compose stack and smoke**
+- [x] **T13. Compose stack and smoke**
   - ACs: AC-14
   - Do: worker `REDIS_URL`; smoke steps.
   - Test: `scripts/compose-smoke.ts` › mock request has `x-switchyard-cost-usd`; key `monthlyBudgetUsd: 0` → `429 budget_exceeded`.
