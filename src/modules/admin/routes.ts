@@ -5,6 +5,7 @@ import type { ApiKeyRecord, KeyStore } from "../../core/auth.js";
 import { invalidAdminToken, notFound } from "../../core/errors.js";
 import type { AuthCache } from "../auth/cache.js";
 import { displayPrefix, generateKey, hashKey, parseBearer } from "../auth/keys.js";
+import { docs } from "../docs.js";
 import { parseWith } from "../validation.js";
 
 export interface AdminRoutesOptions {
@@ -57,15 +58,17 @@ export async function adminRoutes(app: FastifyInstance, opts: AdminRoutesOptions
     if (!token || !timingSafeEqual(digest(token), expected)) throw invalidAdminToken();
   });
 
-  app.post("/admin/teams", async (request, reply) => {
+  app.post("/admin/teams", { schema: docs.createTeam }, async (request, reply) => {
     const { name } = parseWith(teamBody, request.body);
     const team = await opts.store.createTeam(name);
     return reply.code(201).send(team);
   });
 
-  app.get("/admin/teams", async () => ({ data: await opts.store.listTeams() }));
+  app.get("/admin/teams", { schema: docs.listTeams }, async () => ({
+    data: await opts.store.listTeams(),
+  }));
 
-  app.post("/admin/keys", async (request, reply) => {
+  app.post("/admin/keys", { schema: docs.createKey }, async (request, reply) => {
     const body = parseWith(keyBody, request.body);
     const team = await opts.store.getTeam(body.teamId);
     if (!team) throw notFound("Team", body.teamId);
@@ -84,12 +87,12 @@ export async function adminRoutes(app: FastifyInstance, opts: AdminRoutesOptions
     return reply.code(201).send({ ...keyView(record), key });
   });
 
-  app.get("/admin/keys", async (request) => {
+  app.get("/admin/keys", { schema: docs.listKeys }, async (request) => {
     const { teamId } = parseWith(keysQuery, request.query);
     return { data: (await opts.store.listKeys(teamId)).map(keyView) };
   });
 
-  app.post("/admin/keys/:id/revoke", async (request) => {
+  app.post("/admin/keys/:id/revoke", { schema: docs.revokeKey }, async (request) => {
     const { id } = parseWith(keyParams, request.params);
     const record = await opts.store.revokeKey(id);
     if (!record) throw notFound("API key", id);

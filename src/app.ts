@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { FastifyOtelInstrumentation } from "@fastify/otel";
+import swagger from "@fastify/swagger";
+import swaggerUi from "@fastify/swagger-ui";
 import Fastify, {
   type FastifyBaseLogger,
   type FastifyError,
@@ -22,6 +24,7 @@ import type { ChatProvider } from "./core/provider.js";
 import { adminRoutes } from "./modules/admin/routes.js";
 import { AuthCache } from "./modules/auth/cache.js";
 import { recordAuthFailure } from "./modules/auth/telemetry.js";
+import { openApiInfo } from "./modules/docs.js";
 import { healthRoutes } from "./modules/health/routes.js";
 import { proxyRoutes } from "./modules/proxy/routes.js";
 
@@ -48,6 +51,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
   // JSON-only API: anything else gets 415 instead of reaching a route as a string.
   app.removeContentTypeParser("text/plain");
+
+  // ADR-0014: route schemas only document the API. Zod validates; bodies are sent untouched.
+  app.setValidatorCompiler(() => () => true);
+  app.setSerializerCompiler(() => (data) => JSON.stringify(data));
+  await app.register(swagger, openApiInfo);
+  await app.register(swaggerUi, { routePrefix: "/docs" });
 
   // Request spans (ADR-0011). Uses the global tracer provider, so tests can swap it.
   await app.register(new FastifyOtelInstrumentation().plugin());

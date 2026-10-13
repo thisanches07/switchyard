@@ -38,7 +38,7 @@ One commit per task, ending in `[spec-004]`. `pnpm verify` green after each (exi
   - ACs: AC-6, AC-7, AC-8
   - Test: `test/unit/admin/admin.test.ts` › all routes, 400/401/404/409, key shown once, revoke invalidates cache immediately, absent without `ADMIN_TOKEN`.
 
-- [ ] **T9. OpenAPI docs**
+- [x] **T9. OpenAPI docs**
   - ACs: AC-10
   - Test: `test/unit/app/openapi.test.ts`; ADR-0014 compilers keep passthrough intact (existing proxy tests).
 

@@ -4,6 +4,7 @@ import { internalError, modelNotAllowed, modelNotFound } from "../../core/errors
 import type { ChatProvider } from "../../core/provider.js";
 import { type AuthenticateOptions, createAuthenticate } from "../auth/authenticate.js";
 import { isModelAllowed } from "../auth/models.js";
+import { docs } from "../docs.js";
 import { listModels } from "../routing/models.js";
 import { type ResolvedModel, resolveModel } from "../routing/resolve.js";
 import { parseChatRequest, parseEmbeddingsRequest } from "./schema.js";
@@ -41,7 +42,7 @@ export async function proxyRoutes(app: FastifyInstance, opts: ProxyRoutesOptions
     return [resolved, provider];
   }
 
-  app.get("/v1/models", async (request) => {
+  app.get("/v1/models", { schema: docs.models }, async (request) => {
     const list = listModels(opts.config, opts.startedAt);
     const allowed = allowedModels(request);
     if (!allowed || allowed.length === 0) return list;
@@ -52,7 +53,7 @@ export async function proxyRoutes(app: FastifyInstance, opts: ProxyRoutesOptions
     return { ...list, data };
   });
 
-  app.post("/v1/chat/completions", async (request, reply) => {
+  app.post("/v1/chat/completions", { schema: docs.chatCompletions }, async (request, reply) => {
     const body = parseChatRequest(request.body);
     const [resolved, provider] = route(body.model, request, reply);
     const upstreamRequest = { ...body, model: resolved.model };
@@ -80,7 +81,7 @@ export async function proxyRoutes(app: FastifyInstance, opts: ProxyRoutesOptions
     }
   });
 
-  app.post("/v1/embeddings", async (request, reply) => {
+  app.post("/v1/embeddings", { schema: docs.embeddings }, async (request, reply) => {
     const body = parseEmbeddingsRequest(request.body);
     const [resolved, provider] = route(body.model, request, reply);
 
