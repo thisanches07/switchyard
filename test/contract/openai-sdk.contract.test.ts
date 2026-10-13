@@ -178,6 +178,26 @@ describe("official OpenAI Node SDK against Switchyard", () => {
     expect(data.choices[0]?.message.content).toBe("CPF 529.982.247-25");
   });
 
+  it("restores masked values in a streamed answer (spec 015)", async () => {
+    const maskKey = await createKeyViaAdmin(baseUrl, TEST_ADMIN_TOKEN, {
+      team: `pii-mask-stream-${Date.now()}`,
+      piiMode: "mask",
+    });
+    const masked = new OpenAI({ baseURL: `${baseUrl}/v1`, apiKey: maskKey, maxRetries: 0 });
+    const { data: stream, response } = await masked.chat.completions
+      .create({
+        model: "mock/echo",
+        messages: [{ role: "user", content: "CPF 529.982.247-25" }],
+        stream: true,
+      })
+      .withResponse();
+    let text = "";
+    for await (const chunk of stream) text += chunk.choices[0]?.delta?.content ?? "";
+    expect(response.headers.get("x-switchyard-pii")).toBe("masked");
+    // `mock/echo` streams "CPF <CPF_1>" in three pieces, splitting the placeholder.
+    expect(text).toBe("CPF 529.982.247-25");
+  });
+
   it("lists models", async () => {
     const ids: string[] = [];
     for await (const model of client.models.list()) ids.push(model.id);

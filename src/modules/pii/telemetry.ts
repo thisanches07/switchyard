@@ -1,6 +1,13 @@
-import { type Counter, type MeterProvider, metrics, type Span } from "@opentelemetry/api";
+import {
+  type Counter,
+  type Histogram,
+  type MeterProvider,
+  metrics,
+  type Span,
+} from "@opentelemetry/api";
 import type { FastifyRequest } from "fastify";
 import { PII_TYPES, type PiiRequestResult } from "../../core/pii.js";
+import type { HoldListener } from "./stream-restore.js";
 
 let instruments: { provider: MeterProvider; detections: Counter } | undefined;
 
@@ -46,3 +53,48 @@ export function recordPiiScan(request: FastifyRequest, result: PiiRequestResult)
     "pii scan",
   );
 }
+
+let streamInstruments: { provider: MeterProvider; hold: Histogram; failures: Counter } | undefined;
+
+function streamRestoreInstruments() {
+  const provider = metrics.getMeterProvider();
+  if (streamInstruments?.provider !== provider) {
+    const meter = provider.getMeter("switchyard");
+    streamInstruments = {
+      provider,
+      hold: meter.createHistogram("switchyard_pii_stream_hold_seconds", {
+        description: "Time streamed text was held back while it could still be a PII placeholder",
+        unit: "s",
+      }),
+      failures: meter.createCounter("switchyard_pii_stream_restore_failures_total", {
+        description: "Held stream fragments released unrestored, by reason",
+      }),
+    };
+  }
+  return streamInstruments;
+}
+
+/**
+ * Hold listener of one streamed request (spec 015, AC-5): the hold histogram, the failure counter
+ * (`reason="hold_limit"`) and running counts through `annotate` (the serving attempt's upstream
+ * span: the request span has already ended once a stream's body flows). Durations and counts
+ * only, never the held text (ADR-0010).
+ */
+export function streamHoldRecorder(annotate?: SpanAnnotator): HoldListener {
+  let holds = 0;
+  let failures = 0;
+  return ({ heldMs, outcome }) => {
+    const instruments = streamRestoreInstruments();
+    instruments.hold.record(heldMs / 1000);
+    holds += 1;
+    annotate?.({ "switchyard.pii.stream_holds": holds });
+    if (outcome === "hold_limit") {
+      instruments.failures.add(1, { reason: outcome });
+      failures += 1;
+      annotate?.({ "switchyard.pii.stream_restore_failures": failures });
+    }
+  };
+}
+
+/** Sets metadata attributes on a span (never content). */
+export type SpanAnnotator = (attributes: Record<string, number>) => void;

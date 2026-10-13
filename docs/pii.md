@@ -51,7 +51,7 @@ Detection is linear in the size of the request (bounded patterns only, tested on
 
 - Chat: `messages[].content` of **every** role, as a string or as `type: "text"` parts, and `messages[].tool_calls[].function.arguments` of earlier assistant turns (string values inside the JSON).
 - Embeddings: `input` as a string or an array of strings.
-- Anthropic Messages (`/v1/messages`, spec 014): `system`, `text` blocks, `tool_result` text and `tool_use` inputs, through the same canonical fields as chat. On Claude models the masked text is written back into the client's own blocks; `thinking` / `redacted_thinking` blocks (signed by Anthropic) and `document` blocks are forwarded **unscanned** (ADR-0016). Non-streaming answers are restored, including `tool_use` inputs; thinking in answers is left as sent.
+- Anthropic Messages (`/v1/messages`, spec 014): `system`, `text` blocks, `tool_result` text and `tool_use` inputs, through the same canonical fields as chat. On Claude models the masked text is written back into the client's own blocks; `thinking` / `redacted_thinking` blocks (signed by Anthropic) and `document` blocks are forwarded **unscanned** (ADR-0016). Answers are restored, including `tool_use` inputs (streams: see below); thinking in answers is left as sent.
 - **Not inspected:** images, audio and files; `tools` / `functions` definitions; message `name`; every other parameter. Token-array embeddings input is passed through unchanged and marked `switchyard.pii.uninspected=true` on the request span.
 
 ## Placeholders and restore (`mask`)
@@ -62,8 +62,24 @@ The model sees what kind of value is there and can refer back to it. On a **non-
 
 Restore is **best-effort**: a placeholder the model reformats (`<cpf_1>`, `CPF 1`) or invents (`<CPF_9>`) is left as it is.
 
-> [!WARNING]
-> **Streaming:** streamed answers are masked like any other request, but the chunks are forwarded **without** restoring placeholders, and the response carries `x-switchyard-pii: masked-unrestored`. Restoring inside a stream (where a placeholder can be split across chunks) is [spec 015](specs/015-pii-streaming-restore/spec.md).
+### Streaming ([spec 015](specs/015-pii-streaming-restore/spec.md))
+
+Streamed answers are restored too (`x-switchyard-pii: masked`): `delta.content` and tool-call `arguments`, independently per choice and per tool call. Providers split text anywhere, so a placeholder may arrive as `<CP` + `F_1>` or one character per chunk. The gateway:
+
+- sends text that cannot start a known placeholder **at once** (a stream without `<` keeps exactly its chunk boundaries);
+- **holds** only a fragment that could still become a placeholder of this request (`<`, `<CP`, `<CPF_`), and releases it as soon as it completes (restored) or the next character rules it out (`<CPF_9>`, `<cpf_1>`, a literal `<` go out unchanged);
+- never holds a fragment longer than `pii.streamRestore.maxHoldMs` (default 250) or `maxHoldChars` characters (default: the longest placeholder): then the fragment is released **unrestored**, in a chunk of its own if the upstream is stalled;
+- releases anything still held before the chunk carrying `finish_reason`, before the usage chunk, and before the SSE error event of a mid-stream failure. Usage estimates count the upstream text; nothing changes before the first chunk (retries, fallback, TTFB).
+
+```yaml
+pii:
+  streamRestore:
+    maxHoldMs: 250      # latency wins over restoring a placeholder that is not arriving
+    # maxHoldChars: 12  # default: the longest placeholder in the request
+```
+
+> [!NOTE]
+> On `/v1/messages`, streams served by a **Claude** model are forwarded byte for byte (ADR-0016), so their placeholders are **not** restored and the response says `x-switchyard-pii: masked-unrestored`. Streams served by other providers on `/v1/messages` are restored.
 
 ## Blocking (`block`)
 
@@ -80,8 +96,11 @@ The message lists detected **types** in alphabetical order, never a value or a p
 
 | Signal | Values |
 |---|---|
-| `x-switchyard-pii` | `masked`, `masked-unrestored`, `none` (scanned, nothing found), `blocked`; absent when the mode is `off` |
+| `x-switchyard-pii` | `masked`, `masked-unrestored` (Claude-native `/v1/messages` streams), `none` (scanned, nothing found), `blocked`; absent when the mode is `off` |
 | `switchyard_pii_detections_total{type}` | Occurrences found per type, for `mask` and `block` |
+| `switchyard_pii_stream_hold_seconds` | Time streamed text was held while it could still be a placeholder (every hold) |
+| `switchyard_pii_stream_restore_failures_total{reason}` | Fragments released unrestored; `reason="hold_limit"` |
+| Upstream span (streams) | `switchyard.pii.stream_holds`, `switchyard.pii.stream_restore_failures` (counts) |
 | Request span | `switchyard.pii.mode`, `switchyard.pii.action` (`none` / `masked` / `blocked`), `switchyard.pii.detections` (total), `switchyard.pii.uninspected` |
 
 Usage events (spec 006) carry `piiDetections` (`{ type: count }`) and blocked requests are recorded with `outcome: "rejected"`.

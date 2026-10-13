@@ -71,6 +71,9 @@ pii:                           # spec 010: PII redaction, see docs/pii.md
   defaultMode: off             # off | mask | block, for keys without their own piiMode
   detectors: [email, phone, card, cpf, cnpj, ip, term]
   denyList: []                 # literal terms (not regexes), case-insensitive, whole words
+  streamRestore:               # spec 015: placeholders restored in streamed answers
+    maxHoldMs: 250             # a possible placeholder fragment is held at most this long
+    # maxHoldChars: 12         # default: the longest placeholder of the request
 
 retry:                       # spec 008: retries and fallback, only before the first byte
   maxAttempts: 3             # attempts in total, across all candidates of a request

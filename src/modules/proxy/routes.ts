@@ -227,6 +227,7 @@ export async function proxyRoutes(app: FastifyInstance, opts: ProxyRoutesOptions
         outcome: request.outcome,
         attempt: (call, signal) =>
           attempt(request, reply, plan, { stream: true, estimate, signal, call }),
+        restore: masked.stream,
       });
     }
 

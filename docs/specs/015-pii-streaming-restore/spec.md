@@ -1,6 +1,6 @@
 # Spec 015: PII restore in streaming responses
 
-- **Status:** Approved (2026-10-13)
+- **Status:** Done (2026-10-13)
 - **Owner:** @thisanches07
 - **Release:** stretch
 - **Depends on:** 010

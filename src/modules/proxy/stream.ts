@@ -3,6 +3,8 @@ import type { FastifyReply } from "fastify";
 import type { ChatChunk, ChatRequest, Usage } from "../../core/chat.js";
 import { GatewayError, upstreamError } from "../../core/errors.js";
 import type { ChatProvider } from "../../core/provider.js";
+import type { StreamRestore } from "../pii/stage.js";
+import type { StreamStep } from "../pii/stream-restore.js";
 import type { Admission } from "../ratelimit/admission.js";
 import type { Candidate } from "../routing/resolve.js";
 import type { OutcomeTracker } from "../usage/outcome.js";
@@ -32,6 +34,8 @@ export interface StreamChatArgs {
   outcome?: OutcomeTracker | undefined;
   /** Wire format of the stream; defaults to OpenAI `chat.completion.chunk` SSE. */
   encoder?: StreamEncoder | undefined;
+  /** PII placeholders to restore in the forwarded chunks (spec 015). */
+  restore?: StreamRestore | undefined;
 }
 
 /** Turns canonical chunks into the SSE format of the route the client called (spec 014). */
@@ -72,6 +76,7 @@ export async function streamChat({
   admission,
   outcome,
   encoder: customEncoder,
+  restore,
 }: StreamChatArgs) {
   const controller = new AbortController();
   let clientClosed = false;
@@ -101,6 +106,10 @@ export async function streamChat({
   const ttfbMs = upstream.firstChunk();
   const responseModel = first.done ? undefined : modelOf(first.value);
   const encoder = customEncoder ?? openAiEncoder(includeUsage(request));
+  // Spec 015: restore runs on the serving candidate's chunks only, after the attempt loop.
+  const restoring = restore?.open(first.done ? undefined : first.value, (attributes) =>
+    upstream.annotate(attributes),
+  );
 
   reply
     .header("content-type", "text/event-stream; charset=utf-8")
@@ -125,13 +134,14 @@ export async function streamChat({
       return u.inputTokens + u.outputTokens;
     };
     try {
-      let result = first;
-      while (!result.done) {
-        const chunk = result.value;
-        usage = usageFromChunk(chunk) ?? usage;
-        outputChars += deltaText(chunk).length;
-        yield* encoder.chunk(chunk);
-        result = await iterator.next();
+      const steps = restoring ? restoring.steps(first, iterator) : upstreamSteps(first, iterator);
+      for await (const step of steps) {
+        // Usage and estimates count the upstream text, not the restored one (spec 015 AC-6).
+        if (step.upstream) {
+          usage = usageFromChunk(step.upstream) ?? usage;
+          outputChars += deltaText(step.upstream).length;
+        }
+        for (const chunk of step.out) yield* encoder.chunk(chunk);
       }
       settled = true;
       const final = sofar();
@@ -155,6 +165,8 @@ export async function streamChat({
       const gatewayError = error instanceof GatewayError ? error : upstreamError(provider.name);
       // Headers (200) are gone: the SSE error event is the error the client sees (ADR-0008).
       outcome?.failMidstream(gatewayError, sofar());
+      // Held text goes out as-is before the error event (spec 015 AC-7).
+      for (const chunk of restoring?.flush() ?? []) yield* encoder.chunk(chunk);
       yield encoder.error(gatewayError);
     } finally {
       if (!settled) {
@@ -170,6 +182,18 @@ export async function streamChat({
   }
 
   return reply.send(Readable.from(events()));
+}
+
+/** Upstream chunks forwarded as they are (no PII restore). */
+async function* upstreamSteps(
+  first: IteratorResult<ChatChunk>,
+  iterator: AsyncIterator<ChatChunk>,
+): AsyncGenerator<StreamStep> {
+  let result = first;
+  while (!result.done) {
+    yield { upstream: result.value, out: [result.value] };
+    result = await iterator.next();
+  }
 }
 
 function includeUsage(request: ChatRequest): boolean {

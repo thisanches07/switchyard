@@ -1,14 +1,23 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { AppConfig } from "../../config/schema.js";
+import { nativeEventOf } from "../../core/anthropic.js";
 import type { Principal } from "../../core/auth.js";
-import type { ChatRequest, EmbeddingsRequest } from "../../core/chat.js";
+import type { ChatChunk, ChatRequest, EmbeddingsRequest } from "../../core/chat.js";
 import { piiDetected } from "../../core/errors.js";
 import { PII_TYPES, type PiiMode, type PiiRequestResult } from "../../core/pii.js";
 import type { Admission } from "../ratelimit/admission.js";
 import { type MaskResult, maskChatRequest, maskEmbeddingsRequest } from "./mask.js";
 import type { RestoreMap } from "./placeholder.js";
 import { createScanner, type Scanner } from "./scan.js";
-import { recordPiiScan } from "./telemetry.js";
+import {
+  createChunkRestorer,
+  type HoldClock,
+  indexPlaceholders,
+  restoreSteps,
+  type StreamStep,
+  systemHoldClock,
+} from "./stream-restore.js";
+import { recordPiiScan, type SpanAnnotator, streamHoldRecorder } from "./telemetry.js";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -27,7 +36,7 @@ export interface PiiStageContext {
   reply: FastifyReply;
   /** Refunded in full when the request is blocked (spec 005 AC-6 semantics). */
   admission?: Admission | undefined;
-  /** Streamed answers keep their placeholders (restore in streams is spec 015). */
+  /** Streamed answers are restored chunk by chunk (spec 015): the result carries `stream`. */
   stream?: boolean;
 }
 
@@ -36,6 +45,54 @@ export interface PiiStageResult<T> {
   body: T;
   /** Placeholder → original value. Keep it in a local variable: never log, cache or attach it. */
   restore: RestoreMap;
+  /** Masked streaming requests only: restores the streamed answer (spec 015). */
+  stream?: StreamRestore | undefined;
+}
+
+/** Restore of one masked stream (spec 015), opened once the serving candidate's first chunk is in. */
+export interface StreamRestore {
+  /**
+   * The restore session for a stream starting with `first`, or undefined when its chunks cannot be
+   * restored: native same-family `/v1/messages` events carry the provider's raw bytes, so the
+   * answer keeps its placeholders and the header becomes `masked-unrestored` (spec 015 non-goal).
+   * `annotate` receives hold counts for the serving attempt's span.
+   */
+  open(first: ChatChunk | undefined, annotate?: SpanAnnotator): StreamRestoreSession | undefined;
+}
+
+export interface StreamRestoreSession {
+  /** Upstream chunks (from `first`) as steps to send, with hold deadlines applied. */
+  steps(
+    first: IteratorResult<ChatChunk>,
+    iterator: AsyncIterator<ChatChunk>,
+  ): AsyncGenerator<StreamStep>;
+  /** Everything still held, unrestored, as synthesised chunks (before an SSE error event). */
+  flush(): ChatChunk[];
+}
+
+function streamRestore(
+  ctx: PiiStageContext,
+  map: RestoreMap,
+  limits: AppConfig["pii"]["streamRestore"],
+  clock: HoldClock,
+): StreamRestore {
+  return {
+    open(first, annotate) {
+      if (first !== undefined && nativeEventOf(first) !== undefined) {
+        ctx.reply.header(PII_HEADER, "masked-unrestored");
+        return undefined;
+      }
+      const restorer = createChunkRestorer({
+        index: indexPlaceholders(map),
+        limits,
+        onHold: streamHoldRecorder(annotate),
+      });
+      return {
+        steps: (start, iterator) => restoreSteps(start, iterator, restorer, clock),
+        flush: () => restorer.flush(clock.now()),
+      };
+    },
+  };
 }
 
 const NOTHING: RestoreMap = new Map();
@@ -45,7 +102,10 @@ const OFF: PiiRequestResult = { mode: "off", action: "none", detections: {} };
  * PII stage (spec 010): runs after authentication, model authorization and rate-limit admission,
  * before the cache (spec 009) and any provider call.
  */
-export function createPiiStage(config: AppConfig["pii"]) {
+export function createPiiStage(
+  config: AppConfig["pii"],
+  { clock = systemHoldClock }: { clock?: HoldClock } = {},
+) {
   const scan = createScanner({ types: config.detectors, denyList: config.denyList });
 
   /** Effective mode: the key's own, else `pii.defaultMode`. */
@@ -89,8 +149,15 @@ export function createPiiStage(config: AppConfig["pii"]) {
       ctx.reply.header(PII_HEADER, "none");
       return { body, restore: NOTHING };
     }
-    ctx.reply.header(PII_HEADER, ctx.stream ? "masked-unrestored" : "masked");
-    return { body: masked.request, restore: masked.restore };
+    // Streams too (spec 015); `open` switches to `masked-unrestored` for native streams.
+    ctx.reply.header(PII_HEADER, "masked");
+    return {
+      body: masked.request,
+      restore: masked.restore,
+      ...(ctx.stream && {
+        stream: streamRestore(ctx, masked.restore, config.streamRestore, clock),
+      }),
+    };
   }
 
   return {

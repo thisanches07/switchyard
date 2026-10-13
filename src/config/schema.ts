@@ -104,6 +104,15 @@ const piiSchema = z.strictObject({
   detectors: z.array(z.enum(PII_TYPES)).default([...PII_TYPES]),
   /** Literal terms (never regular expressions), matched case-insensitively on word boundaries. */
   denyList: z.array(z.string().trim().min(1)).default([]),
+  /** Restoring placeholders in streamed answers (spec 015): bounds on held text. */
+  streamRestore: z
+    .strictObject({
+      /** Longest a possible placeholder fragment is held before it is sent unrestored. */
+      maxHoldMs: positiveInt.default(250),
+      /** Most characters held; default: the longest placeholder of the request. */
+      maxHoldChars: positiveInt.optional(),
+    })
+    .prefault({}),
 });
 
 /** Routing (spec 008): latency smoothing and config hot reload (ADR-0018). */

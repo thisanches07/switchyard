@@ -178,6 +178,7 @@ describe("pii config (spec 010)", () => {
       defaultMode: "off",
       detectors: ["card", "cnpj", "cpf", "email", "ip", "phone", "term"],
       denyList: [],
+      streamRestore: { maxHoldMs: 250 },
     });
   });
 
@@ -190,11 +191,21 @@ describe("pii config (spec 010)", () => {
       defaultMode: "mask",
       detectors: ["cpf", "email"],
       denyList: ["Project Falcon"],
+      streamRestore: { maxHoldMs: 250 },
     });
+  });
+
+  it("accepts stream restore hold limits (spec 015)", () => {
+    const config = configSchema.parse({
+      ...minimal(),
+      pii: { streamRestore: { maxHoldMs: 100, maxHoldChars: 4 } },
+    });
+    expect(config.pii.streamRestore).toEqual({ maxHoldMs: 100, maxHoldChars: 4 });
   });
 
   it("example config documents the pii section with mode off", () => {
     expect(configSchema.parse(example()).pii.defaultMode).toBe("off");
+    expect(configSchema.parse(example()).pii.streamRestore.maxHoldMs).toBe(250);
   });
 
   it.each([
@@ -203,6 +214,9 @@ describe("pii config (spec 010)", () => {
     [{ denyList: ["  "] }, "pii.denyList[0]"],
     [{ denyList: "acme" }, "pii.denyList"],
     [{ names: true }, "pii"],
+    [{ streamRestore: { maxHoldMs: 0 } }, "pii.streamRestore.maxHoldMs"],
+    [{ streamRestore: { maxHoldChars: -1 } }, "pii.streamRestore.maxHoldChars"],
+    [{ streamRestore: { maxHoldSeconds: 1 } }, "pii.streamRestore"],
   ])("rejects invalid pii config %j", (pii, path) => {
     const result = configSchema.safeParse({ ...minimal(), pii });
     expect(result.success).toBe(false);
