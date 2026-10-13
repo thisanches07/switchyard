@@ -1,7 +1,11 @@
+import type { FastifyRequest } from "fastify";
 import { afterEach, describe, expect, it } from "vitest";
+import type { AuthRecord } from "../../../src/core/auth.js";
+import { createAuthenticate } from "../../../src/modules/auth/authenticate.js";
+import { AuthCache } from "../../../src/modules/auth/cache.js";
 import { testApp } from "../../helpers/app.js";
 import { testConfig } from "../../helpers/config.js";
-import { MemoryKeyStore } from "../../helpers/memory-key-store.js";
+import { MemoryKeyStore, TEST_PEPPER } from "../../helpers/memory-key-store.js";
 import { spiedRegistry } from "../../helpers/providers.js";
 
 const payload = { model: "fast", messages: [{ role: "user", content: "hi" }] };
@@ -202,5 +206,29 @@ describe("auth-failure limit per client address (spec 005, AC-11)", () => {
       (await trusted.get(unknownKey, "10.0.0.1", { "x-forwarded-for": "198.51.100.99" }))
         .statusCode,
     ).toBe(401);
+  });
+});
+
+describe("principal (spec 010)", () => {
+  it("carries the key's own PII mode, null when it uses the config default", async () => {
+    const store = new MemoryKeyStore();
+    const authenticate = createAuthenticate({
+      store,
+      pepper: TEST_PEPPER,
+      cache: new AuthCache<AuthRecord>({ ttlMs: 1_000, maxEntries: 10 }),
+    });
+    const principalFor = async (key: string) => {
+      const request = {
+        headers: { authorization: `Bearer ${key}` },
+        ip: "127.0.0.1",
+        log: { child: () => request.log },
+      } as unknown as FastifyRequest;
+      await authenticate(request);
+      return request.principal;
+    };
+    const blocked = await store.issueKey({ piiMode: "block" });
+    const inherited = await store.issueKey();
+    expect((await principalFor(blocked.key))?.piiMode).toBe("block");
+    expect((await principalFor(inherited.key))?.piiMode).toBeNull();
   });
 });

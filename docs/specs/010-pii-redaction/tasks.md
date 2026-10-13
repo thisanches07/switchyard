@@ -10,7 +10,7 @@ One commit per task, ending in `[spec-010]`. `pnpm verify` green after each (exi
   - Do: `src/core/pii.ts`; `pii` in `src/config/schema.ts`; example config.
   - Test: `test/unit/config/schema.test.ts` › `pii` defaults (`off`, all detectors, empty deny-list), unknown mode/detector and empty term rejected.
 
-- [ ] **T2. `pii_mode` in the data model**
+- [x] **T2. `pii_mode` in the data model**
   - ACs: AC-1, AC-2
   - Do: enum + column, migration via `pnpm db:generate --name pii_mode`; `ApiKeyRecord`/`NewKey`/`Principal`/`KeyPatch`; Drizzle and memory stores; principal carries the key's mode.
   - Test: `db.int.test.ts` › column nullable, stored on create, updated and cleared; `memory-store.test.ts` › same semantics; `authenticate.test.ts` › principal `piiMode`.
