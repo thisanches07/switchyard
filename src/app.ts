@@ -70,7 +70,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     if (gatewayError.code === "internal_error") {
       request.log.error({ err: error }, "unhandled error");
     }
-    return reply.code(gatewayError.status).send(gatewayError.toBody());
+    return reply
+      .code(gatewayError.status)
+      .headers(gatewayError.headers)
+      .send(gatewayError.toBody());
   });
 
   app.setNotFoundHandler((request, reply) => {

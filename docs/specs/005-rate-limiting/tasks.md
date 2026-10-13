@@ -30,7 +30,7 @@ One commit per task, ending in `[spec-005]`. `pnpm verify` exit code checked aft
   - ACs: AC-13
   - Test: `test/integration/ratelimit.int.test.ts` › same scenarios as T5 on real Redis, key expiry, parity with the memory limiter.
 
-- [ ] **T7. Admission service**
+- [x] **T7. Admission service**
   - ACs: AC-3, AC-5, AC-6, AC-10, AC-12
   - Test: `test/unit/ratelimit/admission.test.ts` › admit/reject per scope and kind, reconcile rules, fail-open (metric, throttled warning) and fail-closed (503), span attributes, rejection counter.
 
