@@ -61,6 +61,8 @@ Each stage is a small module with its own span (`switchyard.auth`, `switchyard.r
 
 Every request admitted by the rate limiter gets an **outcome tracker** (`src/modules/usage/outcome.ts`, spec 006). The proxy routes end it exactly once (success, upstream error, mid-stream failure, client disconnect, policy rejection), and it hands one `UsageEvent` v1 to the configured `OutcomeRecorder` (`AppDeps.usageRecorder`). Later features add data to the tracker (`set({ attempts, cacheStatus, piiDetections, … })`) or wrap the recorder (cost and budget counters) instead of adding completion paths. The gateway's recorder is the usage publisher: it validates the event and appends it to a bounded in-memory buffer that is flushed to Kafka in the background.
 
+`POST /v1/messages` (Anthropic Messages API, spec 014) runs the **same pipeline**: the route converts the Anthropic body into the canonical request first, carrying Anthropic-only data (thinking blocks, `cache_control`, documents) in an opaque extension that only the `anthropic` adapter reads (ADR-0016). Same-family requests are re-emitted natively; cross-family requests are translated. Responses are converted back by the route, and errors take the shape of the route the client called.
+
 ## Code layout
 
 ```
@@ -68,7 +70,7 @@ src/
 ├─ server.ts / worker.ts / app.ts
 ├─ config/      Zod schema, loader, hot reload
 ├─ core/        canonical types, errors, ports (interfaces), no infra imports
-├─ modules/     auth · ratelimit · budget · pii · cache · routing · providers · proxy · usage · admin
+├─ modules/     auth · ratelimit · budget · pii · cache · routing · providers · anthropic · proxy · usage · admin
 └─ infra/       db (Drizzle) · redis · kafka · telemetry · logger
 ```
 
