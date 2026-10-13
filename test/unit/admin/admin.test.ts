@@ -161,3 +161,95 @@ describe("admin API", () => {
     });
   });
 });
+
+describe("admin API: limits (spec 005)", () => {
+  const apps: { close(): Promise<unknown> }[] = [];
+  afterEach(async () => {
+    await Promise.all(apps.splice(0).map((a) => a.close()));
+  });
+
+  async function setup() {
+    const { app, store } = await testApp({ authenticated: false, adminToken: TEST_ADMIN_TOKEN });
+    apps.push(app);
+    const call = (method: "GET" | "POST" | "PATCH", url: string, payload?: object) =>
+      app.inject({ method, url, headers: admin, ...(payload ? { payload } : {}) });
+    return { app, store, call };
+  }
+
+  it("creates teams and keys with limits", async () => {
+    const { call } = await setup();
+    const team = (
+      await call("POST", "/admin/teams", { name: "t", rpm: 600, tpm: 1_000_000 })
+    ).json();
+    expect(team).toMatchObject({ rpm: 600, tpm: 1_000_000 });
+    const key = await call("POST", "/admin/keys", { teamId: team.id, name: "k", rpm: 10 });
+    expect(key.statusCode).toBe(201);
+    expect(key.json()).toMatchObject({ rpm: 10, tpm: null });
+  });
+
+  it("patches key limits; null clears one; applies to the next request immediately", async () => {
+    const { app, call } = await setup();
+    const team = (await call("POST", "/admin/teams", { name: "t" })).json();
+    const key = (await call("POST", "/admin/keys", { teamId: team.id, name: "k", rpm: 1 })).json();
+    const useKey = () =>
+      app.inject({
+        method: "GET",
+        url: "/v1/models",
+        headers: { authorization: `Bearer ${key.key}` },
+      });
+    const chat = () =>
+      app.inject({
+        method: "POST",
+        url: "/v1/chat/completions",
+        headers: { authorization: `Bearer ${key.key}` },
+        payload: { model: "fast", messages: [{ role: "user", content: "hi" }] },
+      });
+    await useKey(); // caches the key with rpm 1
+    expect((await chat()).statusCode).toBe(200);
+    expect((await chat()).statusCode).toBe(429);
+
+    const patched = await call("PATCH", `/admin/keys/${key.id}`, { rpm: null, tpm: 5_000 });
+    expect(patched.statusCode).toBe(200);
+    expect(patched.json()).toMatchObject({ rpm: null, tpm: 5_000 });
+    expect((await chat()).statusCode).toBe(200);
+  });
+
+  it("patches team limits and invalidates cached keys of that team", async () => {
+    const { app, call } = await setup();
+    const team = (await call("POST", "/admin/teams", { name: "t" })).json();
+    const key = (await call("POST", "/admin/keys", { teamId: team.id, name: "k" })).json();
+    const chat = () =>
+      app.inject({
+        method: "POST",
+        url: "/v1/chat/completions",
+        headers: { authorization: `Bearer ${key.key}` },
+        payload: { model: "fast", messages: [{ role: "user", content: "hi" }] },
+      });
+    expect((await chat()).statusCode).toBe(200);
+    expect((await call("PATCH", `/admin/teams/${team.id}`, { rpm: 1 })).json()).toMatchObject({
+      rpm: 1,
+    });
+    expect((await chat()).statusCode).toBe(200);
+    expect((await chat()).statusCode).toBe(429);
+  });
+
+  it.each([
+    [{ rpm: 0 }, "rpm"],
+    [{ rpm: 1.5 }, "rpm"],
+    [{ tpm: "lots" }, "tpm"],
+    [{}, "rpm"],
+  ])("rejects invalid limit patch %j", async (payload, field) => {
+    const { call } = await setup();
+    const team = (await call("POST", "/admin/teams", { name: "t" })).json();
+    const res = await call("PATCH", `/admin/teams/${team.id}`, payload);
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.message).toContain(field);
+  });
+
+  it("returns 404 for unknown ids", async () => {
+    const { call } = await setup();
+    const id = "00000000-0000-4000-8000-000000000000";
+    expect((await call("PATCH", `/admin/keys/${id}`, { rpm: 5 })).statusCode).toBe(404);
+    expect((await call("PATCH", `/admin/teams/${id}`, { rpm: 5 })).statusCode).toBe(404);
+  });
+});

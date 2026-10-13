@@ -46,7 +46,7 @@ One commit per task, ending in `[spec-005]`. `pnpm verify` exit code checked aft
   - ACs: AC-11
   - Test: `authenticate.test.ts` › failures counted per IP, 429 without store lookups once exhausted, cached valid key still accepted, `trustProxy`.
 
-- [ ] **T11. Admin API: limits**
+- [x] **T11. Admin API: limits**
   - ACs: AC-2
   - Test: `admin.test.ts` › create key/team with limits, PATCH key/team, `null` clears, validation, cache invalidation (key and team).
 

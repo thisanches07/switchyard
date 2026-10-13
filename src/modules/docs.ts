@@ -8,6 +8,9 @@ import type { SwaggerOptions } from "@fastify/swagger";
 const bearer = [{ bearerAuth: [] }];
 const adminAuth = [{ adminToken: [] }];
 
+/** Per-minute limit (spec 005): positive integer, or null to clear. */
+const limitSchema = { type: ["integer", "null"], minimum: 1 };
+
 const errorResponse = {
   description: "OpenAI-shaped error",
   type: "object",
@@ -89,12 +92,16 @@ export const docs = {
   },
   createTeam: {
     tags: ["Admin"],
-    summary: "Create a team",
+    summary: "Create a team (optional per-minute caps across all its keys)",
     security: adminAuth,
     body: {
       type: "object",
       required: ["name"],
-      properties: { name: { type: "string", minLength: 1, maxLength: 100 } },
+      properties: {
+        name: { type: "string", minLength: 1, maxLength: 100 },
+        rpm: limitSchema,
+        tpm: limitSchema,
+      },
     },
   },
   listTeams: { tags: ["Admin"], summary: "List teams", security: adminAuth },
@@ -114,8 +121,24 @@ export const docs = {
           description: "Aliases, provider/model or provider/*; empty or null allows all",
         },
         expiresAt: { type: "string", format: "date-time" },
+        rpm: limitSchema,
+        tpm: limitSchema,
       },
     },
+  },
+  patchKeyLimits: {
+    tags: ["Admin"],
+    summary: "Set or clear (null) the per-minute limits of a key",
+    security: adminAuth,
+    params: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
+    body: { type: "object", properties: { rpm: limitSchema, tpm: limitSchema } },
+  },
+  patchTeamLimits: {
+    tags: ["Admin"],
+    summary: "Set or clear (null) the per-minute caps of a team",
+    security: adminAuth,
+    params: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
+    body: { type: "object", properties: { rpm: limitSchema, tpm: limitSchema } },
   },
   listKeys: {
     tags: ["Admin"],

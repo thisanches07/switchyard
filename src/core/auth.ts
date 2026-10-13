@@ -4,6 +4,9 @@ export interface Limits {
   tpm: number | null;
 }
 
+/** Limits to change: omitted (or undefined) fields stay as they are; null clears. */
+export type LimitsPatch = { [K in keyof Limits]?: Limits[K] | undefined };
+
 /** A tenant: keys, limits and budgets belong to a team (spec 004). */
 export interface Team extends Limits {
   id: string;
@@ -64,6 +67,6 @@ export interface KeyStore {
   /** Idempotent; undefined when the id does not exist. */
   revokeKey(id: string): Promise<ApiKeyRecord | undefined>;
   /** Sets or clears (null) limits; omitted fields are unchanged. undefined when not found. */
-  updateKeyLimits(id: string, patch: Partial<Limits>): Promise<ApiKeyRecord | undefined>;
-  updateTeamLimits(id: string, patch: Partial<Limits>): Promise<Team | undefined>;
+  updateKeyLimits(id: string, patch: LimitsPatch): Promise<ApiKeyRecord | undefined>;
+  updateTeamLimits(id: string, patch: LimitsPatch): Promise<Team | undefined>;
 }
