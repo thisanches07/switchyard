@@ -3,9 +3,12 @@ import type { ChatChunk } from "../../../src/core/chat.js";
 import {
   createChunkRestorer,
   createTextRestorer,
+  type HoldClock,
   type HoldEvent,
   type HoldLimits,
   indexPlaceholders,
+  restoreSteps,
+  type StreamStep,
 } from "../../../src/modules/pii/stream-restore.js";
 
 const CPF = "529.982.247-25";
@@ -307,5 +310,146 @@ describe("stream chunk restorer (spec 015)", () => {
       chunk([{ delta: { tool_calls: ["x", { function: { arguments: 1 } }, { id: "t" }] } }]),
     ];
     for (const c of odd) expect(restorer.chunk(c, 0).at(-1)).toEqual(c);
+  });
+});
+
+/** A clock that only moves when the test says so. */
+function manualClock() {
+  let now = 0;
+  const sleepers: { at: number; resolve: () => void }[] = [];
+  const clock: HoldClock = {
+    now: () => now,
+    sleep(ms, signal) {
+      return new Promise<void>((resolve, reject) => {
+        const sleeper = { at: now + ms, resolve };
+        sleepers.push(sleeper);
+        signal.addEventListener("abort", () => {
+          sleepers.splice(sleepers.indexOf(sleeper), 1);
+          reject(signal.reason);
+        });
+      });
+    },
+  };
+  return {
+    clock,
+    sleepers,
+    async advanceTo(at: number) {
+      now = at;
+      for (const s of sleepers.filter((x) => x.at <= now)) s.resolve();
+      await settle();
+    },
+  };
+}
+
+const settle = async () => {
+  for (let i = 0; i < 20; i++) await Promise.resolve();
+};
+
+/** An upstream whose chunks the test releases one by one; counts `next()` calls. */
+function controlledUpstream() {
+  const waiting: PromiseWithResolvers<IteratorResult<ChatChunk>>[] = [];
+  let calls = 0;
+  const iterator: AsyncIterator<ChatChunk> = {
+    next() {
+      calls += 1;
+      const deferred = Promise.withResolvers<IteratorResult<ChatChunk>>();
+      waiting.push(deferred);
+      return deferred.promise;
+    },
+  };
+  return {
+    iterator,
+    calls: () => calls,
+    send: async (c: ChatChunk) => {
+      waiting.shift()?.resolve({ done: false, value: c });
+      await settle();
+    },
+    end: async () => {
+      waiting.shift()?.resolve({ done: true, value: undefined });
+      await settle();
+    },
+    fail: async (error: Error) => {
+      waiting.shift()?.reject(error);
+      await settle();
+    },
+  };
+}
+
+describe("restoreSteps: pacing with hold deadlines (spec 015)", () => {
+  async function setup() {
+    const time = manualClock();
+    const upstream = controlledUpstream();
+    const { restorer, events } = chunkRestorer();
+    const first: IteratorResult<ChatChunk> = { done: false, value: chunk([content("CPF <CP")]) };
+    const steps = restoreSteps(first, upstream.iterator, restorer, time.clock);
+    const seen: { at: number; step: StreamStep }[] = [];
+    let finished = false;
+    let failure: unknown;
+    /** Pulls steps in the background, recording the clock time each one is observed. */
+    const pump = (async () => {
+      try {
+        for await (const step of steps) seen.push({ at: time.clock.now(), step });
+        finished = true;
+      } catch (error) {
+        failure = error;
+      }
+    })();
+    await settle();
+    return { time, upstream, events, seen, pump, done: () => finished, failure: () => failure };
+  }
+
+  it("releases a held fragment of a stalled upstream exactly at maxHoldMs (AC-4)", async () => {
+    const { time, upstream, seen, events } = await setup();
+    await settle();
+    expect(seen).toHaveLength(1);
+    expect(textOf(seen[0]?.step.out ?? []).text).toBe("CPF ");
+    expect(seen[0]?.step.upstream).toBeDefined();
+
+    await time.advanceTo(249);
+    expect(seen).toHaveLength(1);
+    await time.advanceTo(250);
+    expect(seen).toHaveLength(2);
+    expect(seen[1]?.at).toBe(250);
+    expect(seen[1]?.step.upstream).toBeUndefined();
+    expect(seen[1]?.step.out).toEqual([
+      { ...ID, choices: [{ index: 0, delta: { content: "<CP" }, finish_reason: null }] },
+    ]);
+    expect(events).toEqual([{ heldMs: 250, outcome: "hold_limit" }]);
+    // Nothing is held any more: no timer is left waiting.
+    expect(time.sleepers).toHaveLength(0);
+
+    await upstream.send(chunk([content("F_1>.")]));
+    expect(textOf(seen.slice(2).flatMap((s) => s.step.out)).text).toBe("F_1>.");
+    // One `next()` per upstream chunk, however many deadlines were raced.
+    expect(upstream.calls()).toBe(2);
+  });
+
+  it("restores without delay when the rest of the placeholder arrives in time", async () => {
+    const { time, upstream, seen, done } = await setup();
+    await time.advanceTo(100);
+    await upstream.send(chunk([content("F_1> ok")]));
+    expect(time.sleepers).toHaveLength(0);
+    await upstream.end();
+    expect(done()).toBe(true);
+    const out = seen.flatMap((s) => s.step.out);
+    expect(textOf(out).text).toBe(`CPF ${CPF} ok`);
+    expect(seen.map((s) => s.at)).toEqual([0, 100]);
+  });
+
+  it("flushes what is held when the upstream ends without a finish chunk (AC-6)", async () => {
+    const { upstream, seen, done } = await setup();
+    await upstream.end();
+    expect(done()).toBe(true);
+    expect(seen.at(-1)?.step.out).toEqual([
+      { ...ID, choices: [{ index: 0, delta: { content: "<CP" }, finish_reason: null }] },
+    ]);
+  });
+
+  it("propagates an upstream failure, keeping the held text for the caller (AC-7)", async () => {
+    const { upstream, failure, pump } = await setup();
+    const boom = new Error("midstream");
+    await upstream.fail(boom);
+    await pump;
+    expect(failure()).toBe(boom);
   });
 });

@@ -20,7 +20,7 @@ One commit per task, ending in `[spec-015]`. Lint, typecheck and the task's test
   - Do: `createChunkRestorer` in `stream-restore.ts`.
   - Test: `stream-restore.test.ts` › content and tool-call arguments restored per choice and tool index; synthesised chunks copy `id`/`object`/`created`/`model` and keep indexes; held text released before the finish chunk (or in its own field); usage chunk flushes first; malformed chunks pass through.
 
-- [ ] **T4. Pacing with hold deadlines**
+- [x] **T4. Pacing with hold deadlines**
   - ACs: AC-4 (stalled upstream), AC-6
   - Do: `HoldClock`, `restoreSteps` in `stream-restore.ts`.
   - Test: `stream-restore.test.ts` › with a manual clock, a stalled upstream yields the held fragment in a synthesised chunk exactly at `maxHoldMs`; `next()` called once per upstream chunk; final flush at upstream end; upstream errors propagate.

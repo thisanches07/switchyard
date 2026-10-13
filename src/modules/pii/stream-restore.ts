@@ -6,6 +6,7 @@
  * returned at once; a fragment that still could (`<`, `<CP`, `<CPF_`) is held until it completes,
  * is ruled out, or a hold limit is reached, and is then released as-is (ADR-0015: best effort).
  */
+import { setTimeout as sleep } from "node:timers/promises";
 import type { ChatChunk } from "../../core/chat.js";
 import type { RestoreMap } from "./placeholder.js";
 
@@ -275,4 +276,70 @@ export function createChunkRestorer({
       return earliest;
     },
   };
+}
+
+/** Time source for hold deadlines (the shape of spec 008's `Timers`), injected in tests. */
+export interface HoldClock {
+  /** Epoch milliseconds. */
+  now(): number;
+  /** Waits `ms`; rejects if `signal` aborts first. */
+  sleep(ms: number, signal: AbortSignal): Promise<void>;
+}
+
+export const systemHoldClock: HoldClock = {
+  now: () => Date.now(),
+  sleep: (ms, signal) => sleep(ms, undefined, { signal }),
+};
+
+/** What the stream loop does next: account for `upstream` (if any) and send `out`. */
+export interface StreamStep {
+  /** The upstream chunk, for usage and token counting (never the restored text, AC-6). */
+  upstream?: ChatChunk;
+  out: ChatChunk[];
+}
+
+const EXPIRED: unique symbol = Symbol("hold expired");
+
+/**
+ * Upstream chunks interleaved with hold expiries (AC-4): after each chunk, `next()` is called once
+ * and, while text is held, raced against the earliest hold deadline; when the deadline wins, the
+ * held fragments go out in synthesised chunks and the same `next()` is awaited again. Upstream
+ * errors propagate unchanged (the caller flushes before its error event, AC-7).
+ */
+export async function* restoreSteps(
+  first: IteratorResult<ChatChunk>,
+  iterator: AsyncIterator<ChatChunk>,
+  restorer: ChunkRestorer,
+  clock: HoldClock = systemHoldClock,
+): AsyncGenerator<StreamStep> {
+  let result = first;
+  while (!result.done) {
+    const chunk = result.value;
+    yield { upstream: chunk, out: restorer.chunk(chunk, clock.now()) };
+    const pending = iterator.next();
+    for (;;) {
+      const deadline = restorer.deadline();
+      if (deadline === undefined) {
+        result = await pending;
+        break;
+      }
+      const wait = new AbortController();
+      const expired: Promise<typeof EXPIRED | undefined> = clock
+        .sleep(Math.max(0, deadline - clock.now()), wait.signal)
+        .then(
+          () => EXPIRED,
+          () => undefined,
+        );
+      const winner = await Promise.race([pending, expired]);
+      wait.abort();
+      if (typeof winner === "object") {
+        result = winner;
+        break;
+      }
+      const out = restorer.expire(clock.now());
+      if (out.length > 0) yield { out };
+    }
+  }
+  const rest = restorer.flush(clock.now());
+  if (rest.length > 0) yield { out: rest };
 }
