@@ -146,7 +146,7 @@ CREATE INDEX semantic_cache_entries_expires_at_idx ON semantic_cache_entries (ex
 CREATE INDEX semantic_cache_entries_scope_idx ON semantic_cache_entries (team_id, params_hash);
 ```
 
-No foreign key on `team_id` (like `usage_events`): entries expire on their own. Search runs in a transaction with `SET LOCAL hnsw.iterative_scan = relaxed_order`, filters `team_id`, `model = ANY(...)`, `params_hash`, `expires_at > $now` and orders by `embedding <=> $q` (similarity `1 - distance`), `LIMIT 1`. `$now` comes from the injected clock, never SQL `now()`.
+No foreign key on `team_id` (like `usage_events`): entries expire on their own. Search runs in a transaction with `SET LOCAL hnsw.iterative_scan = strict_order` (exact distance order, so `LIMIT 1` is the true nearest), filters `team_id`, `model = ANY(...)`, `params_hash`, `expires_at > $now` and orders by `embedding <=> $q` (similarity `1 - distance`), `LIMIT 1`. `$now` comes from the injected clock, never SQL `now()`.
 
 ## 6. Sequence (streamed request, exact miss then hit)
 

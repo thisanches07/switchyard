@@ -4,23 +4,27 @@
  * `remember` (non-streaming) and a stream `tap` that store the finished response without delaying
  * it. A failing layer is skipped: caching may fail, requests may not (AC-12).
  */
+import { SpanKind, SpanStatusCode, trace } from "@opentelemetry/api";
 import type { FastifyBaseLogger } from "fastify";
+import { z } from "zod";
 import type { AppConfig } from "../../config/schema.js";
 import type { Principal } from "../../core/auth.js";
 import {
   type CachedResponse,
   cachedResponseSchema,
+  EMBEDDING_DIMENSIONS,
   type ExactCacheStore,
   type SemanticCacheStore,
+  type SemanticScope,
 } from "../../core/cache.js";
 import type { ChatChunk, ChatRequest, Usage } from "../../core/chat.js";
 import type { ChatProvider } from "../../core/provider.js";
 import type { CacheStatus } from "../../core/usage.js";
-import type { Candidate } from "../routing/resolve.js";
+import { type Candidate, splitModelRef } from "../routing/resolve.js";
 import type { Timers } from "../routing/timers.js";
 import { assembleCompletion, cacheableBody } from "./chunks.js";
-import { type CacheMode, exactEligible } from "./eligibility.js";
-import { exactKey } from "./key.js";
+import { type CacheMode, exactEligible, lastUserText, semanticEligible } from "./eligibility.js";
+import { exactKey, paramsHash } from "./key.js";
 import {
   type CacheLayer,
   countCacheError,
@@ -76,6 +80,31 @@ export interface CacheLookup {
 
 const NOTHING: Pick<CacheLookup, "remember"> = { remember: () => {} };
 
+/** OpenAI embeddings body: the first vector is the one used (AC-5). */
+const embeddingBody = z.looseObject({
+  data: z.array(z.looseObject({ embedding: z.array(z.number()) })).min(1),
+});
+
+/** Settles with `work`, or rejects once `signal` aborts (the lookup budget ran out, AC-12). */
+function untilAborted<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
+  work.catch(() => {});
+  if (signal.aborted) return Promise.reject(new Error("semantic cache lookup timed out"));
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(new Error("semantic cache lookup timed out"));
+    signal.addEventListener("abort", onAbort, { once: true });
+    work.then(
+      (value) => {
+        signal.removeEventListener("abort", onAbort);
+        resolve(value);
+      },
+      (error: unknown) => {
+        signal.removeEventListener("abort", onAbort);
+        reject(error);
+      },
+    );
+  });
+}
+
 export function createCacheStage(deps: CacheStageDeps) {
   const warn = createWarnLimiter(() => deps.timers.now());
   /** In-flight writes, so tests (and shutdown) can wait for them. */
@@ -119,6 +148,42 @@ export function createCacheStage(deps: CacheStageDeps) {
     return undefined;
   }
 
+  /**
+   * Embeds the final user message with `cache.semantic.embeddingModel` (AC-5): one call through
+   * the configured provider, no retries, no admission, no budget; a `switchyard.cache.embed` span.
+   */
+  async function embed(args: LookupArgs, signal: AbortSignal): Promise<number[]> {
+    const { embeddingModel } = args.config.semantic;
+    const ref = splitModelRef(embeddingModel);
+    const provider = ref && args.providers.get(ref.provider);
+    if (!ref || !provider) throw new Error(`embedding provider of ${embeddingModel} not found`);
+    const text = lastUserText(args.request) ?? "";
+    const span = trace.getTracer("switchyard").startSpan("switchyard.cache.embed", {
+      kind: SpanKind.INTERNAL,
+      attributes: {
+        "gen_ai.operation.name": "embeddings",
+        "gen_ai.system": ref.provider,
+        "gen_ai.request.model": ref.model,
+      },
+    });
+    const started = deps.timers.now();
+    try {
+      const result = await provider.embeddings({ model: ref.model, input: text }, { signal });
+      const parsed = embeddingBody.safeParse(result.body);
+      const vector = parsed.success ? parsed.data.data[0]?.embedding : undefined;
+      if (!vector || vector.length !== EMBEDDING_DIMENSIONS) {
+        throw new Error(`embedding is not ${EMBEDDING_DIMENSIONS}-dimensional`);
+      }
+      return vector;
+    } catch (error) {
+      span.setStatus({ code: SpanStatusCode.ERROR, message: "embedding_failed" });
+      throw error;
+    } finally {
+      span.setAttribute("switchyard.cache.embedding_ms", Math.round(deps.timers.now() - started));
+      span.end();
+    }
+  }
+
   async function lookup(args: LookupArgs): Promise<CacheLookup> {
     const { principal, config, logger } = args;
     if (!principal || args.mode === "bypass") return { status: "bypass", ...NOTHING };
@@ -136,6 +201,58 @@ export function createCacheStage(deps: CacheStageDeps) {
       } catch (error) {
         countLookup("exact", "error");
         failed(logger, "exact", "lookup", error);
+      }
+    }
+
+    const semanticStore = config.semantic.enabled ? deps.semantic : undefined;
+    const useSemantic =
+      semanticStore !== undefined &&
+      principal.semanticCacheEnabled === true &&
+      semanticEligible(args.request, config.semantic.maxTemperature, args.mode);
+    /** The scope and embedding of this request, kept for the write after a miss (AC-6). */
+    let semanticScope: SemanticScope | undefined;
+    let embedding: number[] | undefined;
+
+    if (useSemantic) {
+      looked = true;
+      semanticScope = {
+        teamId: principal.teamId,
+        models: args.candidates().map((c) => c.ref),
+        paramsHash: paramsHash(args.request),
+      };
+      const scope = semanticScope;
+      const deadline = deps.timers.deadline(config.semantic.lookupTimeoutMs);
+      try {
+        const match = await untilAborted(
+          (async () => {
+            embedding = await embed(args, deadline.signal);
+            return semanticStore.nearest(scope, embedding, new Date(deps.clock()));
+          })(),
+          deadline.signal,
+        );
+        const hit = match && match.similarity >= config.semantic.similarityThreshold && match;
+        if (hit) {
+          const parsed = cachedResponseSchema.safeParse(hit.response);
+          if (!parsed.success) throw new Error("stored semantic cache entry is not valid");
+          countLookup("semantic", "hit");
+          background(logger, "semantic", () => semanticStore.recordHit(hit.id));
+          return {
+            status: "semantic_hit",
+            hit: {
+              status: "semantic_hit",
+              layer: "semantic",
+              response: parsed.data,
+              similarity: hit.similarity,
+            },
+            ...NOTHING,
+          };
+        }
+        countLookup("semantic", "miss");
+      } catch (error) {
+        countLookup("semantic", "error");
+        failed(logger, "semantic", "lookup", error);
+      } finally {
+        deadline.clear();
       }
     }
 
@@ -161,6 +278,20 @@ export function createCacheStage(deps: CacheStageDeps) {
         background(logger, "exact", () =>
           exactStore.set(key, JSON.stringify(entry), config.exact.ttlSeconds),
         );
+      }
+      // Only with the embedding computed during this request's lookup (AC-6).
+      if (semanticStore && semanticScope && embedding) {
+        const now = deps.clock();
+        const insert = {
+          teamId: semanticScope.teamId,
+          model: candidate.ref,
+          paramsHash: semanticScope.paramsHash,
+          embedding,
+          response: entry,
+          createdAt: new Date(now),
+          expiresAt: new Date(now + config.semantic.ttlSeconds * 1_000),
+        };
+        background(logger, "semantic", () => semanticStore.insert(insert));
       }
     };
 

@@ -47,7 +47,7 @@ One commit per task, ending in `[spec-009]`. Lint, typecheck and the task's test
   - Test: `test/unit/proxy/cache-stream.test.ts` › streamed miss stored and served as JSON, JSON miss served as stream, include_usage, midstream failure and client close not stored.
   - Files: `src/modules/proxy/{stream,routes,cached}.ts`
 
-- [ ] **T9. Semantic cache in the stage, Postgres store and cleanup**
+- [x] **T9. Semantic cache in the stage, Postgres store and cleanup**
   - ACs: AC-5, AC-6, AC-12
   - Test: `test/unit/proxy/semantic-cache.test.ts` › opt-in, hit above threshold, below threshold miss, params hash scope, force does not relax, write with embedding, hits incremented, timeout on manual clock, wrong dimensions, embedding error; `test/unit/cache/cleanup.test.ts`; `test/integration/semantic-cache.int.test.ts` › nearest, scope, expiry, iterative scan with many teams, deleteExpired.
   - Files: `src/modules/cache/{stage,cleanup}.ts`, `src/infra/db/semantic-cache.ts`, `src/server.ts`
