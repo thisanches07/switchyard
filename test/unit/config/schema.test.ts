@@ -148,3 +148,44 @@ describe("usage config (spec 006)", () => {
     expect(result.error?.issues.map((i) => formatPath(i.path))).toContain(path);
   });
 });
+
+describe("pii config (spec 010)", () => {
+  const minimal = () => ({ providers: { mock: { type: "mock" } } });
+
+  it("defaults to off, every detector and an empty deny-list", () => {
+    const config = configSchema.parse(minimal());
+    expect(config.pii).toEqual({
+      defaultMode: "off",
+      detectors: ["card", "cnpj", "cpf", "email", "ip", "phone", "term"],
+      denyList: [],
+    });
+  });
+
+  it("accepts a mode, a subset of detectors and trimmed deny-list terms", () => {
+    const config = configSchema.parse({
+      ...minimal(),
+      pii: { defaultMode: "mask", detectors: ["cpf", "email"], denyList: ["  Project Falcon "] },
+    });
+    expect(config.pii).toEqual({
+      defaultMode: "mask",
+      detectors: ["cpf", "email"],
+      denyList: ["Project Falcon"],
+    });
+  });
+
+  it("example config documents the pii section with mode off", () => {
+    expect(configSchema.parse(example()).pii.defaultMode).toBe("off");
+  });
+
+  it.each([
+    [{ defaultMode: "redact" }, "pii.defaultMode"],
+    [{ detectors: ["passport"] }, "pii.detectors[0]"],
+    [{ denyList: ["  "] }, "pii.denyList[0]"],
+    [{ denyList: "acme" }, "pii.denyList"],
+    [{ names: true }, "pii"],
+  ])("rejects invalid pii config %j", (pii, path) => {
+    const result = configSchema.safeParse({ ...minimal(), pii });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues.map((i) => formatPath(i.path))).toContain(path);
+  });
+});

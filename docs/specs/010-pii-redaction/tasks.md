@@ -5,7 +5,7 @@
 
 One commit per task, ending in `[spec-010]`. `pnpm verify` green after each (exit code checked, not grepped).
 
-- [ ] **T1. Core PII types and the `pii` config key**
+- [x] **T1. Core PII types and the `pii` config key**
   - ACs: AC-1
   - Do: `src/core/pii.ts`; `pii` in `src/config/schema.ts`; example config.
   - Test: `test/unit/config/schema.test.ts` › `pii` defaults (`off`, all detectors, empty deny-list), unknown mode/detector and empty term rejected.
