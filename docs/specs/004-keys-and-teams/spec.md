@@ -1,6 +1,6 @@
 # Spec 004: Virtual API keys, teams and the admin API
 
-- **Status:** Approved (2026-10-13)
+- **Status:** Done (2026-10-13)
 - **Owner:** @thisanches07
 - **Release:** v0.1
 - **Depends on:** 002, 003

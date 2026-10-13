@@ -51,6 +51,30 @@ One commit per task, ending in `[spec-004]`. `pnpm verify` green after each (exi
   - ACs: AC-11
   - Test: Node and Python suites create team + key via the admin API; bad key → `AuthenticationError`.
 
-- [ ] **T12. Smoke, docs and verification**
+- [x] **T12. Smoke, docs and verification**
   - ACs: AC-12
   - Do: smoke steps (401, admin create, authenticated chat); README (quickstart with key creation, security note, admin API, `/docs`); backlog; verification table.
+
+## Verification (2026-10-13)
+
+| AC | Proven by | Result |
+|---|---|---|
+| AC-1 | `test/integration/db.int.test.ts` › migrations create tables, second run no-op; CI smoke › stack starts with `MIGRATE_ON_BOOT=true` | ✅ |
+| AC-2 | `test/unit/auth/keys.test.ts`; `admin.test.ts` › key returned once, never listed; Postgres holds only prefix + 64-char hash (manual check) | ✅ |
+| AC-3 | `authenticate.test.ts` › valid key; `telemetry.test.ts` › `team` label, `switchyard.team_id`/`key_id` on request and upstream spans | ✅ |
+| AC-4 | `authenticate.test.ts` › missing, wrong scheme, non-Switchyard, unknown, revoked, expired (also when cached) → 401, provider never called; health open | ✅ |
+| AC-5 | `test/unit/auth/models.test.ts`; `authenticate.test.ts` › 403, aliases/refs/wildcards, embeddings, filtered `/v1/models` | ✅ |
+| AC-6 | `test/unit/auth/cache.test.ts`; `authenticate.test.ts` › one store lookup for three requests; `admin.test.ts` › revoked key rejected immediately although cached | ✅ |
+| AC-7 | `test/unit/admin/admin.test.ts` (all routes, 400/404/409, no secrets in listings); `db.int.test.ts` › Drizzle store incl. duplicate team → 409 | ✅ |
+| AC-8 | `admin.test.ts` › 401 for missing/wrong token, 404 when `ADMIN_TOKEN` is unset; `boot.test.ts` › warning at boot | ✅ |
+| AC-9 | `env.test.ts` › missing or short `KEY_PEPPER` refused | ✅ |
+| AC-10 | `test/unit/app/openapi.test.ts` › `/docs/json` paths and security schemes, `/docs/` HTML, passthrough intact | ✅ |
+| AC-11 | Node SDK contract 12/12 and Python SDK contract 9/9 with keys issued through the admin API; bad key → `AuthenticationError` | ✅ |
+| AC-12 | CI `compose-smoke` on PR #5: 401 without key, admin creates team + key, chat/stream/embeddings with that key (12/12 steps) | ✅ (CI) |
+
+Also run: an end-to-end check with the gateway running natively against the Compose Postgres (migrations at boot, admin flow, 401/200/403/401-after-revoke, `/docs`).
+
+Deviations and notes recorded here:
+- The Compose smoke test could not run on the dev machine: Docker Desktop (Hyper-V backend, 2 GB VM, another project's containers running) stopped starting containers. AC-12 is proven by the CI run instead.
+- The demo SVG in the README was re-recorded with an authenticated request (real values, 2026-10-13).
+- ADR-0014 stays **Proposed** until reviewed.
