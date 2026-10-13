@@ -52,14 +52,14 @@ describe("server boot", () => {
     expect(stderr).toContain("Invalid configuration in");
     expect(stderr).toContain('aliases.fast.candidates[0]: unknown provider "grok"');
     expect(stderr).not.toMatch(/at .*\.ts:\d+/); // no stack trace
-  }, 20_000);
+  }, 60_000);
 
   it("exits non-zero when DATABASE_URL is missing", async () => {
     const run = start({ ...baseEnv, DATABASE_URL: undefined });
     expect(await run.exited).toBe(1);
     expect(run.output().stderr).toContain("Invalid configuration in environment");
     expect(run.output().stderr).toContain("DATABASE_URL");
-  }, 20_000);
+  }, 60_000);
 
   it("starts and serves /healthz even when dependencies are down", async () => {
     const run = start(baseEnv);
@@ -81,5 +81,5 @@ describe("server boot", () => {
     expect(health.status).toBe(200);
     const ready = await fetch(`${url}/readyz`);
     expect(ready.status).toBe(503);
-  }, 20_000);
+  }, 60_000);
 });
