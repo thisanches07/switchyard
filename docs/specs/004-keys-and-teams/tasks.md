@@ -42,7 +42,7 @@ One commit per task, ending in `[spec-004]`. `pnpm verify` green after each (exi
   - ACs: AC-10
   - Test: `test/unit/app/openapi.test.ts`; ADR-0014 compilers keep passthrough intact (existing proxy tests).
 
-- [ ] **T10. Server wiring and migrations at boot**
+- [x] **T10. Server wiring and migrations at boot**
   - ACs: AC-1, AC-8
   - Do: `DrizzleKeyStore` in `server.ts`, `MIGRATE_ON_BOOT`, dev-only secret warning; Dockerfile copies `drizzle/`; Compose env defaults.
   - Test: `boot.test.ts` › starts with pepper; warning for dev-only secrets.

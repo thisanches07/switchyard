@@ -4,6 +4,7 @@ import { ConfigError, formatConfigError } from "./config/errors.js";
 import { loadConfig } from "./config/load.js";
 import { createDatabase } from "./infra/db/client.js";
 import { DrizzleKeyStore } from "./infra/db/key-store.js";
+import { migrateDatabase } from "./infra/db/migrate.js";
 import { createPostgresPool, postgresCheck } from "./infra/db/postgres.js";
 import { createUndiciClient } from "./infra/http/undici-client.js";
 import { createLogger } from "./infra/logger.js";
@@ -34,6 +35,32 @@ async function main(): Promise<void> {
   // and /readyz reports it (spec 001, AC-5).
   const pool = createPostgresPool(env.DATABASE_URL);
   pool.on("error", (error) => logger.warn({ err: error.message }, "postgres pool error"));
+  const db = createDatabase(pool);
+
+  if (env.MIGRATE_ON_BOOT) {
+    try {
+      await migrateDatabase(db);
+      logger.info("database migrations applied");
+    } catch (error) {
+      logger.fatal({ err: error }, "database migrations failed");
+      process.exit(1);
+    }
+  }
+
+  // Spec 004: make insecure setups visible in the logs.
+  if (!env.ADMIN_TOKEN) {
+    logger.warn("ADMIN_TOKEN is not set: admin API disabled");
+  }
+  const devSecrets = [
+    env.KEY_PEPPER.startsWith("dev-only") && "KEY_PEPPER",
+    env.ADMIN_TOKEN?.startsWith("dev-only") && "ADMIN_TOKEN",
+  ].filter(Boolean);
+  if (devSecrets.length > 0) {
+    logger.warn(
+      { settings: devSecrets },
+      "dev-only secrets in use: set real values before exposing the gateway",
+    );
+  }
 
   const redis = createRedisClient(env.REDIS_URL);
   let redisDown = false;
@@ -54,7 +81,7 @@ async function main(): Promise<void> {
     checks: [postgresCheck(pool), redisCheck(redis)],
     config,
     providers,
-    keyStore: new DrizzleKeyStore(createDatabase(pool)),
+    keyStore: new DrizzleKeyStore(db),
     keyPepper: env.KEY_PEPPER,
     adminToken: env.ADMIN_TOKEN,
   });
