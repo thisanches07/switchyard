@@ -75,7 +75,7 @@ One commit per task, ending in `[spec-014]`. `pnpm verify` green after each.
   - Test: `test/integration/anthropic.int.test.ts` › real HTTP: request headers/body (AC-1 to AC-3), streaming, 429/529/500 mapping, same-family byte-for-byte; `test/contract/anthropic-live.contract.test.ts` › skipped with a message unless `ANTHROPIC_API_KEY` and `SWITCHYARD_LIVE_ANTHROPIC=1`.
   - Files: `test/helpers/fake-anthropic.ts`
 
-- [ ] **T15. Node SDK contracts**
+- [x] **T15. Node SDK contracts**
   - ACs: AC-16
   - Test: `test/contract/anthropic-sdk.contract.test.ts` › create, stream + `finalMessage()`, tool round trip, RateLimitError/AuthenticationError/NotFoundError/InternalServerError on mock; same-family on the fake server; `openai-sdk.contract.test.ts` › plain, streamed and tool calls routed to the fake Anthropic server.
 
