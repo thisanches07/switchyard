@@ -30,14 +30,14 @@ One commit per task, ending in `[spec-015]`. Lint, typecheck and the task's test
   - Do: `src/modules/pii/telemetry.ts` › `recordStreamHold` (histogram, failure counter, span counts).
   - Test: `test/unit/pii/stream-telemetry.test.ts` › hold seconds recorded for every hold, `switchyard_pii_stream_restore_failures_total{reason="hold_limit"}` only for limit releases, span attributes, no text in points.
 
-- [ ] **T6. Wire into the stage and `streamChat`**
+- [x] **T6. Wire into the stage and `streamChat`**
   - ACs: AC-1, AC-6, AC-7
   - Do: `StreamRestore` handle in `stage.ts` (header `masked`, `open(first)`), `restore` arg and step loop in `stream.ts`, flush before the SSE error event, `routes.ts` passes `masked.stream`.
   - Test: `test/unit/proxy/pii-routes.test.ts` › streamed placeholder split across chunks restored + `masked`; finish → usage → `[DONE]` order and usage from upstream text; tool-call arguments restored; mid-stream failure releases held text before the error event, provider called once, TTFB header present.
 
-- [ ] **T7. `/v1/messages` streams**
+- [x] **T7. `/v1/messages` streams**
   - ACs: AC-1 (spec 014 part, non-goal boundary)
-  - Do: `messages.ts` passes `masked.stream`; native first chunk → `masked-unrestored`.
+  - Do: `messages.ts` passes `masked.stream`; native first chunk → `masked-unrestored`. (Committed with T6: the stage sends `masked` for every masked stream, so the route had to restore in the same commit.)
   - Test: `test/unit/proxy/messages-usage.test.ts` › cross-family stream restored in `text_delta` + `masked`; same-family native stream stays `masked-unrestored`.
 
 - [ ] **T8. Privacy proof for streams**

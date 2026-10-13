@@ -138,16 +138,16 @@ describe("PII redaction on /v1 routes (spec 010)", () => {
       expect(seen[0]).toEqual({ mode: "mask", action: "masked", detections: { cpf: 2, email: 1 } });
     });
 
-    it("forwards streamed chunks with placeholders and says so (AC-9)", async () => {
+    it("masks streamed requests and restores the streamed answer (AC-9, spec 015 AC-1)", async () => {
       const { spy, chat } = await setup({ keyMode: "mask" });
       const res = await chat(`CPF ${CPF}`, { stream: true });
 
       expect(res.statusCode).toBe(200);
       expect(res.headers["content-type"]).toMatch(/^text\/event-stream/);
-      expect(res.headers["x-switchyard-pii"]).toBe("masked-unrestored");
+      expect(res.headers["x-switchyard-pii"]).toBe("masked");
       expect(spy.requests[0]?.messages[0]?.content).toBe("CPF <CPF_1>");
-      expect(res.body).toContain("CPF <CPF_1>");
-      expect(res.body).not.toContain(CPF);
+      expect(res.body).toContain(`CPF ${CPF}`);
+      expect(res.body).not.toContain("<CPF_1>");
       expect(res.body.trimEnd().endsWith("data: [DONE]")).toBe(true);
     });
 

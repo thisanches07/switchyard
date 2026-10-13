@@ -279,11 +279,39 @@ describe("/v1/messages usage events and PII (spec 014 with specs 006 and 010)", 
       expect(only(events)).toMatchObject({ provider: "claude", piiDetections: { email: 4 } });
     });
 
-    it("marks masked streams as unrestored", async () => {
+    it("restores cross-family streams (spec 015)", async () => {
       const { send } = await setup({ mode: "mask" });
-      const res = await send({ ...hi, messages: [{ role: "user", content: EMAIL }], stream: true });
+      const res = await send({
+        ...hi,
+        model: "mock/echo",
+        messages: [{ role: "user", content: `Write to ${EMAIL}` }],
+        stream: true,
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.headers["x-switchyard-pii"]).toBe("masked");
+      const text = res.body
+        .split("\n\n")
+        .filter((e) => e.includes("text_delta"))
+        .map((e) => JSON.parse(e.slice(e.indexOf("data: ") + 6)).delta.text)
+        .join("");
+      expect(text).toBe(`Write to ${EMAIL}`);
+      expect(res.body).not.toContain("<EMAIL");
+    });
+
+    it("leaves same-family (native) streams unrestored and says so (spec 015 non-goal)", async () => {
+      const upstream = fixtureText("stream-text.sse").replace('"Hello"', '"Hi <EMAIL_1>"');
+      expect(upstream).toContain("<EMAIL_1>");
+      const { send } = await setup({ mode: "mask", stream: upstream });
+      const res = await send({
+        ...hi,
+        model: "claude/claude-sonnet-5-5",
+        messages: [{ role: "user", content: EMAIL }],
+        stream: true,
+      });
       expect(res.statusCode).toBe(200);
       expect(res.headers["x-switchyard-pii"]).toBe("masked-unrestored");
+      expect(res.body).toContain("<EMAIL_1>");
+      expect(res.body).not.toContain(EMAIL);
     });
 
     it("block mode → Anthropic-shaped 400 pii_detected and one rejected event", async () => {

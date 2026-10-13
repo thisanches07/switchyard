@@ -115,6 +115,8 @@ export function registerMessagesRoute(app: FastifyInstance, deps: MessagesRouteD
             stopSequences: body.stop_sequences,
             inputTokens: estimateTokens(messageChars(canonical)),
           }),
+          // Spec 015: cross-family chunks are restored; native same-family events are not.
+          restore: masked.stream,
         });
       }
 
