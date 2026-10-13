@@ -76,7 +76,7 @@ Teams shipping LLM features hit the same walls:
 | 🤖 | **Anthropic (Claude)** adapter: `claude/...` models behind `/v1/chat/completions`, streaming and tools included | ✅ |
 | 🪞 | Anthropic-compatible `POST /v1/messages` for the official Anthropic SDKs, routed to Claude natively or to any other provider | ✅ |
 | 💰 | **Cost per request** from a versioned price table (unknown prices stay unknown, never `$0`) and **monthly budgets** per key and team: soft-limit warning, hard `429`, enforced across instances in Redis, reconciled with Postgres | ✅ |
-| 🛟 | Fallback, retries with jitter, circuit breakers | 🔜 008 |
+| 🛟 | **Fallback, retries with full jitter and circuit breakers** before the first byte; `priority`, `lowest-cost` and `lowest-latency` aliases; config **hot reload** | ✅ |
 | ⚡ | Exact cache and tenant-scoped semantic cache (pgvector) | 🔜 009 |
 | 🛡️ | **PII redaction** per key: `mask` (placeholders such as `<CPF_1>`, restored in the answer) or `block`; e-mail, phone, card, CPF, CNPJ, IP and a deny-list | ✅ |
 
@@ -275,16 +275,21 @@ sequenceDiagram
   alt unknown model
     G-->>C: 404 model_not_found (no provider called)
   end
-  G->>P: POST {baseUrl}/chat/completions (model rewritten)
-  Note over G,P: span switchyard.upstream<br/>connect · TTFB · total timeouts
+  loop each attempt (candidate in strategy order, skipping open breakers)
+    G->>P: POST {baseUrl}/chat/completions (model rewritten)
+    Note over G,P: span switchyard.upstream per attempt<br/>connect · TTFB timeouts · whole-request budget
+    alt 5xx · 408 · 429 · network error · timeout
+      P-->>G: retryable failure → next candidate (backoff when it repeats)
+    end
+  end
   alt 2xx
     P-->>G: chat.completion + usage
-    G-->>C: 200 body + x-switchyard-provider / -model / -upstream-ms
-  else 4xx
+    G-->>C: 200 body + x-switchyard-provider / -model / -attempts
+  else non-retryable 4xx
     P-->>G: provider error
-    G-->>C: same status, OpenAI error shape
-  else 5xx · network error · timeout
-    G-->>C: 502 upstream_error / 504 upstream_timeout
+    G-->>C: same status at once, OpenAI error shape
+  else every attempt failed
+    G-->>C: last error: 502 upstream_error / 504 upstream_timeout / 429
   end
   G->>G: record one usage event (buffered, published to Kafka in the background)
 ```
@@ -294,11 +299,11 @@ sequenceDiagram
 ```mermaid
 flowchart TD
   M["model in the request"] --> A{"Is it an alias?<br/>(local, fast, smart…)"}
-  A -- yes --> F["First candidate of the alias<br/>e.g. ollama/llama3.2"]
+  A -- yes --> F["Every candidate the key may use,<br/>ordered by the alias strategy"]
   A -- no --> S{"provider/model with a<br/>configured provider?"}
   S -- yes --> D["That provider, model kept as-is<br/>openrouter/meta-llama/llama-3.3-70b"]
   S -- no --> N["404 model_not_found"]
-  F --> CALL["Call the provider adapter"]
+  F --> CALL["Attempt loop: retries, fallback,<br/>circuit breakers (spec 008)"]
   D --> CALL
 ```
 
@@ -319,7 +324,8 @@ Every error, from validation to provider failures, comes back in the OpenAI shap
 | Body too large / not JSON | 413 / 415 | `request_too_large` / `unsupported_media_type` |
 | Provider 4xx (e.g. 429) | same | passed through |
 | Provider 5xx, connection refused, invalid response | 502 | `upstream_error` (provider body never forwarded) |
-| Provider timeout | 504 | `upstream_timeout` |
+| Provider timeout, or `server.timeouts.totalMs` spent across attempts | 504 | `upstream_timeout` |
+| Every candidate's circuit breaker is open | 503 + `retry-after` | `no_healthy_upstream` |
 | Provider configured without its API key | 503 | `provider_not_configured` |
 | Anthropic rate limit / overloaded (`529`) / rejected operator key | 429 / 503 / 502 | `upstream_rate_limited` / `upstream_overloaded` / `upstream_auth_error` |
 | Parameter the provider cannot honour (e.g. `n > 1` on Claude) | 400 | `unsupported_parameter` |
@@ -395,10 +401,41 @@ Every `/v1` request needs a Switchyard key (`Authorization: Bearer sk-sy-…`), 
 | `POST` | `/admin/keys/:id/revoke` | Revoke a key; rejected immediately on this instance, everywhere within 30 s |
 | `GET` | `/admin/usage?from=&to=&groupBy=&teamId=&keyId=` | Requests, tokens and cost per team, key, model, provider or day ([usage](#-usage-events)) |
 | `GET` | `/admin/keys/:id/budget`, `/admin/teams/:id/budget` | Limit, spend this month, remaining, soft/hard flags ([budgets](#-costs-and-budgets)) |
+| `GET` | `/admin/providers/health` | Breaker state, EWMA latency and error rate of every candidate, on this instance ([routing](#-routing-and-resilience)) |
+| `POST` | `/admin/config/reload` | Validate and apply the config file now; `400 invalid_config` keeps the old one |
 
 `allowedModels` accepts aliases (`fast`), exact refs (`ollama/llama3.2`) and provider wildcards (`ollama/*`); `/v1/models` then lists only what the key may use. Admin routes take `Authorization: Bearer <ADMIN_TOKEN>` and do not exist at all when `ADMIN_TOKEN` is unset.
 
 📖 The full API, including request bodies, is documented in OpenAPI at **<http://localhost:8080/docs>**.
+
+## 🛟 Routing and resilience
+
+An alias lists several candidates; Switchyard tries them so that one provider hiccup does not reach your users ([spec 008](docs/specs/008-routing-resilience/spec.md)).
+
+```yaml
+aliases:
+  fast:  { strategy: priority,       candidates: [groq/llama-3.1-8b-instant, gemini/gemini-2.5-flash, ollama/llama3.2] }
+  smart: { strategy: lowest-latency, candidates: [claude/claude-sonnet-5-5, gemini/gemini-2.5-pro] }
+retry:          { maxAttempts: 3, baseDelayMs: 200, maxDelayMs: 2000 }
+circuitBreaker: { failureThreshold: 5, openMs: 30000 }
+routing:        { ewmaAlpha: 0.3, hotReload: true }
+```
+
+- **Strategies:** `priority` (config order), `lowest-cost` (estimated request cost from the pricing file; unknown prices last), `lowest-latency` (unmeasured candidates first, then by EWMA latency). Candidates the key may not use are skipped (`403` only when none is left).
+- **Retries and fallback:** a connection error, a timeout before the first byte, or an upstream `408`/`429`/`5xx` moves on to the next candidate, wrapping around, up to `retry.maxAttempts` attempts **in total**. Retrying a candidate already tried waits a full-jitter backoff (at least its `Retry-After`, capped at `maxDelayMs`). Any other `4xx` is returned at once.
+- **Never after the first byte:** a stream that fails after its first chunk ends with an error event and is not retried ([ADR-0008](docs/adr/0008-no-retry-after-first-byte.md)); it still counts against the candidate's breaker.
+- **Timeouts:** `connectMs` and `ttfbMs` per attempt; `totalMs` bounds the whole request across attempts and backoff waits (up to the first chunk for streams).
+- **Circuit breakers** per `provider/model`: open after `failureThreshold` consecutive failures, skipped for `openMs`, then one probe. When every candidate is open the answer is `503 no_healthy_upstream` with `retry-after`. State lives in memory on each instance; `GET /admin/providers/health` shows it.
+- **Headers:** `x-switchyard-provider` / `x-switchyard-model` name the candidate that served (or the last one tried), `x-switchyard-attempts` the attempts made; the usage event has the same `attempts`.
+- **Hot reload** ([ADR-0018](docs/adr/0018-config-hot-reload.md)): edit the config file and new requests use it within ~2.5 s (polling), or call `POST /admin/config/reload`, or send `SIGHUP` (Linux). In-flight requests finish with their config; an invalid file is rejected and logged, and the old config keeps serving. Breaker and latency state survive for candidates whose provider definition is unchanged. `server.bodyLimitBytes`, `server.trustProxy`, `server.timeouts.connectMs`, `limits.authFailuresPerMinutePerIp`, `usage` and `pricingFile` need a restart (a reload logs them). Environment variables are not reloaded.
+
+```bash
+curl -si localhost:8080/v1/chat/completions -H "authorization: Bearer $KEY" \
+  -H 'content-type: application/json' \
+  -d '{"model":"resilient","messages":[{"role":"user","content":"hi"}]}' | grep x-switchyard
+# x-switchyard-model: smoke         (mock/error-503 failed first)
+# x-switchyard-attempts: 2
+```
 
 ## 🚥 Rate limits
 
@@ -573,13 +610,17 @@ HTTP/1.1 200 OK
 x-switchyard-request-id: req_5b9e1fd5-2c46-4adf-b99a-dbf336c523aa
 x-switchyard-provider: ollama
 x-switchyard-model: llama3.2
+x-switchyard-attempts: 1
 x-switchyard-upstream-ms: 986
 ```
 
 | Signal | Name | Details |
 |---|---|---|
-| Span | `switchyard.upstream` | `gen_ai.system`, `gen_ai.request.model`, `gen_ai.response.model`, `gen_ai.usage.input_tokens` / `output_tokens` |
-| Counter | `switchyard_requests_total` | by `provider`, `model`, `status`, `team` |
+| Span | `switchyard.upstream` | one per attempt: `gen_ai.system`, `gen_ai.request.model`, `gen_ai.response.model`, `gen_ai.usage.input_tokens` / `output_tokens`, `switchyard.candidate`, `switchyard.attempt`, `switchyard.attempt.outcome`, `switchyard.backoff_ms` |
+| Counter | `switchyard_requests_total` | by `provider`, `model`, `status`, `team`; one per client request (the attempt that served or failed last) |
+| Counter | `switchyard_upstream_attempts_total` | every attempt, by `candidate` and `outcome` (`success`, `retryable_error`, `non_retryable_error`, `timeout`, `midstream_error`) |
+| Gauge | `switchyard_circuit_state` | per `candidate`: `0` closed, `1` half-open, `2` open; transitions are logged |
+| Counter | `switchyard_config_reloads_total` | config reloads by `result` (`success`, `failure`) |
 | Histogram | `switchyard_upstream_duration_seconds` | by `provider`, `model`, `outcome` |
 | Histogram | `switchyard_ttfb_seconds` | time to first streamed token, by `provider`, `model` |
 | Counter | `switchyard_ratelimit_rejections_total` | by `scope` (`key`, `team`, `ip`) and `kind` (`requests`, `tokens`) |
@@ -685,7 +726,7 @@ Each spec ends with a verification table, for example [spec 002](docs/specs/002-
 - [x] [005](docs/specs/005-rate-limiting/spec.md) Rate limiting: RPM / TPM per key and team, Redis Lua token buckets, token reservation and reconciliation
 - [x] [006](docs/specs/006-usage-pipeline/spec.md) Usage events pipeline: one event per request, Kafka (Redpanda), idempotent worker, daily aggregates, DLQ, `GET /admin/usage`
 - [x] [007](docs/specs/007-budgets/spec.md) Budgets and cost accounting: price table, cost per request, monthly budgets per key and team, Redis counters reconciled with Postgres
-- [ ] 008 Fallback, retries and circuit breakers
+- [x] [008](docs/specs/008-routing-resilience/spec.md) Routing strategies, retries, fallback, circuit breakers, timeouts and config hot reload
 - [x] [014](docs/specs/014-anthropic/spec.md) Anthropic adapter and `/v1/messages`: Claude behind the OpenAI API, the Anthropic SDKs in front of any provider
 
 **v0.2: savings and safety:** exact and semantic cache, PII redaction

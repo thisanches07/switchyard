@@ -1,6 +1,6 @@
 # Tasks 008: Routing strategies, retries, circuit breakers and config hot reload
 
-- **Status:** In progress
+- **Status:** Done (2026-10-13)
 - **Spec:** [spec.md](spec.md) · **Design:** [design.md](design.md)
 
 One commit per task, ending in `[spec-008]`. `pnpm verify` green after each. T7–T9 landed in one commit: the shared `route()`/`streamChat` contract changed for all three routes at once, so no smaller step compiled.
@@ -81,6 +81,31 @@ One commit per task, ending in `[spec-008]`. `pnpm verify` green after each. T7�
   - Test: `scripts/compose-smoke.ts` › `resilient` alias answers 200 with `x-switchyard-attempts: 2` and the second candidate (CI).
   - Files: `config/switchyard.example.yaml`, `scripts/compose-smoke.ts`
 
-- [ ] **T16. Docs and verification**
+- [x] **T16. Docs and verification**
   - ACs: all (DoD)
   - Do: README (features, request flow, model resolution, routing and resilience section, error table, roadmap), `docs/architecture.md`, `docs/threat-model.md`, verification table, spec status.
+
+## Verification (2026-10-13)
+
+`pnpm verify` green (1026 unit tests, lines 85.7 %); `pnpm test:int` green (11 files, 66 tests, chaos test included); `pnpm test:contract` green (Node SDK suites; live Anthropic suite skipped without a key). The Compose smoke step (AC-16) runs in CI.
+
+| AC | Test(s) |
+|---|---|
+| AC-1 | `test/unit/routing/plan.test.ts`; `test/unit/proxy/routing.test.ts` › allowed models per candidate (skip, alias name, 403, `/v1/models`); `test/unit/config/routing-config.test.ts` › routing section |
+| AC-2 | `test/unit/routing/select.test.ts`; `test/unit/proxy/attempts.test.ts` › lowest-latency, lowest-cost; `routing.test.ts` › lowest-cost with a fake estimator / without one |
+| AC-3 | `attempts.test.ts` › fallback, wrap-around, maxAttempts, non-retryable at once, explicit retryable flag; `test/unit/routing/classify.test.ts`; `routing.test.ts` › fallback, non-retryable 4xx |
+| AC-4 | `test/unit/routing/backoff.test.ts`; `attempts.test.ts` › backoff only on repeats, Retry-After floor and cap; `test/unit/providers/openai-compatible.test.ts` › retry-after kept |
+| AC-5 | `attempts.test.ts` › last error, client disconnect; `routing.test.ts` › 502, 429, 504 |
+| AC-6 | `test/unit/proxy/routing-stream.test.ts`; `test/unit/proxy/messages-routing.test.ts` › stream fallback |
+| AC-7 | `attempts.test.ts` › budget runs out during an attempt (504), backoff longer than the budget; `test/integration/upstream-http.int.test.ts` › timeouts read per request |
+| AC-8 | `test/unit/routing/breaker.test.ts`; `attempts.test.ts` › single half-open probe, open candidate skipped; `routing-stream.test.ts` › mid-stream failure opens the breaker |
+| AC-9 | `attempts.test.ts` › no_healthy_upstream + retry-after; `routing.test.ts` › 503 with attempts 0 and usage event; `messages-routing.test.ts` › Anthropic shape |
+| AC-10 | `routing.test.ts`, `routing-stream.test.ts`, `messages-routing.test.ts` › headers and usage event `attempts` |
+| AC-11 | `test/unit/routing/health.test.ts`; `test/unit/admin/admin-routing.test.ts` › GET /admin/providers/health |
+| AC-12 | `test/unit/config/runtime.test.ts`; `test/unit/config/watch.test.ts`; `test/unit/proxy/reload-routes.test.ts` › new config for new requests, in-flight keeps its config; `admin-routing.test.ts` › POST /admin/config/reload |
+| AC-13 | `runtime.test.ts` › invalid YAML / schema keep the old config, failure counted, no values logged; `admin-routing.test.ts` › 400 invalid_config |
+| AC-14 | `test/unit/proxy/attempts-telemetry.test.ts`; `health.test.ts` › gauge and transition logs; `runtime.test.ts` › reload counter |
+| AC-15 | `test/integration/routing-chaos.int.test.ts` |
+| AC-16 | `scripts/compose-smoke.ts` › "an alias falls back when its first candidate fails" (CI) |
+
+Notes: the chaos test sets `circuitBreaker.failureThreshold: 10, openMs: 1000` and spaces requests 50 ms on its manual clock; with the default threshold (5) random 30 % noise eventually opens all three candidates and requests get `no_healthy_upstream`, which AC-15 does not intend to test.
