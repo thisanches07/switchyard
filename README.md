@@ -541,11 +541,13 @@ With `block`, the request gets `400 pii_detected` naming only the types found (`
 
 | `x-switchyard-pii` | Meaning |
 |---|---|
-| `masked` | Values were replaced and restored in the answer (chat and embeddings) |
-| `masked-unrestored` | **Streamed** answers keep the placeholders for now; restoring inside a stream is [spec 015](docs/specs/015-pii-streaming-restore/spec.md) |
+| `masked` | Values were replaced and restored in the answer (chat, embeddings and **streamed** answers) |
+| `masked-unrestored` | Only for **Claude-native `/v1/messages` streams**, which are forwarded byte for byte and keep the placeholders |
 | `none` | The key scans but nothing was found |
 | `blocked` | On the `400 pii_detected` response of a `block` key |
 | (absent) | Mode `off`: nothing is scanned |
+
+In **streams** a placeholder can arrive split (`<CP` + `F_1>`), so the gateway holds back only text that could still become a known placeholder and sends everything else at once. A held fragment is released as soon as the next character rules it out, or **unrestored** after `pii.streamRestore.maxHoldMs` (250 ms by default) if the stream stalls ([spec 015](docs/specs/015-pii-streaming-restore/spec.md)).
 
 Detectors use check digits (CPF, CNPJ including the 2026 alphanumeric format), Luhn (cards) and real address parsers (IP), so a random 11-digit number is not a CPF. **Names, addresses and other free text are not detected**, and restoring is best-effort: a model that rewrites `<CPF_1>` as `CPF 1` gets it back unrestored. Original values and the placeholder map live only in the memory of the request: never in logs, spans, metrics, Redis or Postgres. Details: [PII redaction guide](docs/pii.md).
 
@@ -599,7 +601,7 @@ message = client.messages.create(model="smart", max_tokens=1024,
 | Not provided | `count_tokens`, Message Batches, Files, Models and beta endpoints; Bedrock / Vertex / Foundry. |
 | Embeddings on `anthropic` providers | `400 embeddings_not_supported` |
 
-Upstream `429`, `5xx`, `529` and timeouts are classified as retryable (and `401` from Anthropic as the operator's problem, `502 upstream_auth_error`), ready for fallback in spec 008. `/v1/messages` produces one usage event per admitted request (`operation: "messages"`, with Anthropic `cache_read_input_tokens` as `cachedInputTokens`) and goes through PII redaction like chat: masked text reaches Claude inside the client's own blocks, thinking blocks and documents are forwarded unscanned, and non-streaming answers are restored.
+Upstream `429`, `5xx`, `529` and timeouts are classified as retryable (and `401` from Anthropic as the operator's problem, `502 upstream_auth_error`), ready for fallback in spec 008. `/v1/messages` produces one usage event per admitted request (`operation: "messages"`, with Anthropic `cache_read_input_tokens` as `cachedInputTokens`) and goes through PII redaction like chat: masked text reaches Claude inside the client's own blocks, thinking blocks and documents are forwarded unscanned, and answers are restored (streams too, except Claude-native streams, which keep placeholders and say `masked-unrestored`).
 
 ## 🔭 Observability
 
@@ -634,6 +636,7 @@ x-switchyard-upstream-ms: 986
 | Gauge | `switchyard_budget_used_ratio` | spend ÷ monthly budget, by `scope`, `id` |
 | Span | `switchyard.budget` | budget check: `switchyard.budget.scope`, `switchyard.budget.decision` |
 | Counter | `switchyard_pii_detections_total` | PII occurrences found, by `type`; request spans carry `switchyard.pii.mode` / `.action` / `.detections` |
+| Histogram, counter | `switchyard_pii_stream_hold_seconds`, `switchyard_pii_stream_restore_failures_total` | time streamed text was held while it could be a placeholder; fragments released unrestored, by `reason` (`hold_limit`) |
 | Logs | JSON (pino) | every line carries `trace_id` / `span_id`, plus `teamId` / `keyId` once authenticated; secrets redacted |
 
 > [!IMPORTANT]

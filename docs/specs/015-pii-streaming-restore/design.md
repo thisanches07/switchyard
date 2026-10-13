@@ -24,7 +24,7 @@ Zod: `streamRestore` strict object, `prefault({})`; `maxHoldMs` positive int (de
 | Path | Responsibility |
 |---|---|
 | `src/modules/pii/stream-restore.ts` (new) | Pure, clock-free state machines (`now` is a parameter): `createTextRestorer` (one per text slot) and `createChunkRestorer` (slots per choice and tool call, synthesised chunks). `restoreSteps`: async generator that interleaves upstream chunks with hold expiries, given an injected `HoldClock` |
-| `src/modules/pii/telemetry.ts` | `switchyard_pii_stream_hold_seconds`, `switchyard_pii_stream_restore_failures_total{reason}`, request-span counters |
+| `src/modules/pii/telemetry.ts` | `switchyard_pii_stream_hold_seconds`, `switchyard_pii_stream_restore_failures_total{reason}`, hold counts on the serving attempt's upstream span |
 | `src/modules/pii/stage.ts` | Masked streams now get `x-switchyard-pii: masked` and a `stream` handle (`StreamRestore`) in the stage result; `open(first)` returns a restore session, or switches the header to `masked-unrestored` when the stream cannot be restored (native same-family `/v1/messages` events) |
 | `src/config/schema.ts` | `pii.streamRestore` |
 | `src/modules/proxy/stream.ts` | Optional `restore` arg; the chunk loop consumes steps (upstream chunk + chunks to send); held text flushed before the SSE error event |
@@ -134,20 +134,20 @@ Cross-family streams (OpenAI-compatible or mock candidates) are canonical chunks
 
 - `switchyard_pii_stream_hold_seconds` (histogram, `s`, no labels): duration of every hold, whatever its outcome.
 - `switchyard_pii_stream_restore_failures_total{reason}` (counter): `reason="hold_limit"` for fragments released unrestored because a limit was reached. Text is never a label.
-- Request span: `switchyard.pii.stream_holds` and `switchyard.pii.stream_restore_failures` (counts, set as they change).
+- Upstream span of the serving attempt (via spec 008's `UpstreamSpan.annotate`): `switchyard.pii.stream_holds` and `switchyard.pii.stream_restore_failures` (counts, set as they change). Not the request span: `@fastify/otel` ends it in `onSend`, before a stream body flows.
 - No log line carries text; the restore map stays a local of the request (ADR-0010).
 
 ## 8. AC → component → test
 
 | AC | Component | Test |
 |---|---|---|
-| AC-1 | chunk restorer, stage, routes | `test/unit/pii/stream-restore.test.ts` › per-choice and per-tool-call slots, JSON escaping; `test/unit/proxy/pii-routes.test.ts` › stream restored + `masked` |
+| AC-1 | chunk restorer, stage, routes | `test/unit/pii/stream-restore.test.ts` › per-choice and per-tool-call slots, JSON escaping; `test/unit/proxy/pii-stream-routes.test.ts` › one char per chunk restored in content and arguments + `masked`; `pii-routes.test.ts` › echo stream restored |
 | AC-2 | text restorer | `stream-restore.test.ts` › every two-chunk split (table), one char per chunk, three chunks, no partial placeholder emitted |
 | AC-3 | text restorer | `stream-restore.test.ts` › `<CPF_9>`, `<cpf_1>`, `< CPF_1 >`, lone `<` forwarded, released at the ruling-out character |
 | AC-4 | text restorer, `restoreSteps` | `stream-restore.test.ts` › no-`<` chunk boundaries unchanged, char limit, ms limit; stalled upstream observed exactly at `maxHoldMs` with a manual clock |
 | AC-5 | telemetry | `test/unit/pii/stream-telemetry.test.ts` › histogram and `hold_limit` counter, span counts |
-| AC-6 | chunk restorer, `streamChat` | `stream-restore.test.ts` › flush before finish chunk, usage chunk; `pii-routes.test.ts` › order finish → usage → `[DONE]`, usage from upstream text |
-| AC-7 | `streamChat` | `pii-routes.test.ts` › mid-stream failure: held text then error event, provider called once, TTFB header |
+| AC-6 | chunk restorer, `streamChat` | `stream-restore.test.ts` › flush before finish chunk, usage chunk; `pii-stream-routes.test.ts` › order finish → usage → `[DONE]`, usage from upstream text |
+| AC-7 | `streamChat` | `pii-stream-routes.test.ts` › mid-stream failure: held text then error event, provider called once, TTFB header |
 | AC-8 | everything | `test/unit/pii/stream-privacy.test.ts` › trace logs, spans and metric points of a split streamed `mask` request contain no original; the body does |
 | §4 | stage, messages route | `test/unit/proxy/messages-usage.test.ts` › cross-family stream restored + `masked`; same-family stays `masked-unrestored` |
 
