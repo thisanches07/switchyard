@@ -31,7 +31,7 @@ One commit per task, ending in `[spec-008]`. `pnpm verify` green after each.
   - Test: `test/unit/providers/openai-compatible.test.ts` › retry-after kept on 429 and 503; `test/integration/upstream-http.int.test.ts` › timeouts read from a getter per request.
   - Files: `src/modules/providers/openai-compatible.ts`, `src/infra/http/undici-client.ts`
 
-- [ ] **T6. Attempt loop**
+- [x] **T6. Attempt loop**
   - ACs: AC-3, AC-4, AC-5, AC-7, AC-8, AC-9, AC-14
   - Test: `test/unit/proxy/attempts.test.ts` › fallback, wrap-around, maxAttempts total, non-retryable at once, backoff only on repeats with Retry-After floor, last error, client abort stops, total budget (504, backoff longer than budget), single half-open probe, no_healthy_upstream with retry-after; `test/unit/proxy/attempts-telemetry.test.ts` › attempt spans and counters, requests_total once per request.
   - Files: `src/modules/proxy/{attempts,telemetry}.ts`, `test/helpers/routing.ts` (manual clock, seeded RNG)
