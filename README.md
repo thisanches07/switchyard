@@ -37,7 +37,7 @@
 <br>
 
 > [!NOTE]
-> **Status: v0.1 in progress.** Chat completions (including **SSE streaming**), embeddings, model listing, provider adapters, error mapping, tracing and metrics are **working and tested today**, plus **virtual API keys with teams**, an admin API, **per-minute rate limits** shared across instances and a **usage event pipeline** (Kafka → idempotent worker → Postgres), contract-tested with the official OpenAI Node and Python SDKs. Budgets, fallback and caching are specified and on the [roadmap](#%EF%B8%8F-roadmap).
+> **Status: v0.1 in progress.** Chat completions (including **SSE streaming**), embeddings, model listing, provider adapters, error mapping, tracing and metrics are **working and tested today**, plus **virtual API keys with teams**, an admin API, **per-minute rate limits** shared across instances and a **usage event pipeline** (Kafka → idempotent worker → Postgres), **cost per request and monthly budgets**, contract-tested with the official OpenAI Node and Python SDKs. Fallback and caching are specified and on the [roadmap](#%EF%B8%8F-roadmap).
 
 > [!WARNING]
 > Docker Compose ships `dev-only` defaults for `ADMIN_TOKEN` and `KEY_PEPPER` so it works out of the box, and publishes every port on `127.0.0.1` only. Set real secrets in `.env` before exposing the gateway; it logs a warning while dev-only values are in use.
@@ -75,7 +75,7 @@ Teams shipping LLM features hit the same walls:
 | 📨 | **Usage events** through Kafka (Redpanda): never blocks a request, idempotent worker, daily aggregates, DLQ, `GET /admin/usage` | ✅ |
 | 🤖 | **Anthropic (Claude)** adapter: `claude/...` models behind `/v1/chat/completions`, streaming and tools included | ✅ |
 | 🪞 | Anthropic-compatible `POST /v1/messages` for the official Anthropic SDKs, routed to Claude natively or to any other provider | ✅ |
-| 💰 | Monthly budgets with soft and hard limits | 🔜 007 |
+| 💰 | **Cost per request** from a versioned price table (unknown prices stay unknown, never `$0`) and **monthly budgets** per key and team: soft-limit warning, hard `429`, enforced across instances in Redis, reconciled with Postgres | ✅ |
 | 🛟 | Fallback, retries with jitter, circuit breakers | 🔜 008 |
 | ⚡ | Exact cache and tenant-scoped semantic cache (pgvector) | 🔜 009 |
 | 🛡️ | **PII redaction** per key: `mask` (placeholders such as `<CPF_1>`, restored in the answer) or `block`; e-mail, phone, card, CPF, CNPJ, IP and a deny-list | ✅ |
@@ -225,7 +225,7 @@ flowchart LR
     RES --> LIM --> PII --> AD["Provider adapter<br/>timeouts · error mapping"]
     LIM["Rate limits<br/>Redis token buckets"]
     PII["PII mask / block"]
-    BUD["Budgets"]:::planned
+    BUD["Budgets<br/>Redis spend counters"]
     CACHE["Cache"]:::planned
     FB["Fallback · circuit breaker"]:::planned
   end
@@ -357,7 +357,7 @@ aliases:                             # model ids are examples; check each provid
 | `KEY_PEPPER` | required, ≥ 32 chars | Secret mixed into API key hashes. **Back it up**: losing it invalidates every key |
 | `ADMIN_TOKEN` | unset | Enables the admin API (≥ 16 chars) |
 | `MIGRATE_ON_BOOT` | `false` | Apply database migrations at startup (Compose sets `true`; otherwise run `pnpm db:migrate`) |
-| `REDIS_URL` | required | Redis (`redis://…`) |
+| `REDIS_URL` | required (gateway and worker) | Redis (`redis://…`): rate limits and budget counters; the worker reconciles budgets |
 | `KAFKA_BROKERS` | required when `usage.enabled` (gateway) and for the worker | Comma-separated `host:port` list, e.g. `localhost:19092` |
 | `LOG_LEVEL` | `info` | pino log level |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | unset | OTLP collector, e.g. `http://localhost:4318` |
@@ -386,14 +386,15 @@ Every `/v1` request needs a Switchyard key (`Authorization: Bearer sk-sy-…`), 
 
 | Method | Path | What it does |
 |---|---|---|
-| `POST` | `/admin/teams` | Create a team `{ name, rpm?, tpm? }` |
+| `POST` | `/admin/teams` | Create a team `{ name, rpm?, tpm?, monthlyBudgetUsd?, softLimitPct? }` |
 | `GET` | `/admin/teams` | List teams |
-| `POST` | `/admin/keys` | Create a key `{ teamId, name, allowedModels?, expiresAt?, rpm?, tpm? }`; the plaintext key is returned **only here** |
+| `POST` | `/admin/keys` | Create a key `{ teamId, name, allowedModels?, expiresAt?, rpm?, tpm?, piiMode?, monthlyBudgetUsd? }`; the plaintext key is returned **only here** |
 | `GET` | `/admin/keys?teamId=` | List keys (prefix, status, limits; never the key or its hash) |
-| `PATCH` | `/admin/keys/:id` | Set or clear (`null`) the key's `rpm` / `tpm` and `piiMode` |
-| `PATCH` | `/admin/teams/:id` | Set or clear the team's `rpm` / `tpm` caps |
+| `PATCH` | `/admin/keys/:id` | Set or clear (`null`) the key's `rpm` / `tpm`, `piiMode` and `monthlyBudgetUsd` |
+| `PATCH` | `/admin/teams/:id` | Set or clear the team's `rpm` / `tpm` caps, `monthlyBudgetUsd` and `softLimitPct` |
 | `POST` | `/admin/keys/:id/revoke` | Revoke a key; rejected immediately on this instance, everywhere within 30 s |
 | `GET` | `/admin/usage?from=&to=&groupBy=&teamId=&keyId=` | Requests, tokens and cost per team, key, model, provider or day ([usage](#-usage-events)) |
+| `GET` | `/admin/keys/:id/budget`, `/admin/teams/:id/budget` | Limit, spend this month, remaining, soft/hard flags ([budgets](#-costs-and-budgets)) |
 
 `allowedModels` accepts aliases (`fast`), exact refs (`ollama/llama3.2`) and provider wildcards (`ollama/*`); `/v1/models` then lists only what the key may use. Admin routes take `Authorization: Bearer <ADMIN_TOKEN>` and do not exist at all when `ADMIN_TOKEN` is unset.
 
@@ -449,13 +450,35 @@ curl -s "localhost:8080/admin/usage?groupBy=model&from=2026-10-01" -H "$ADMIN" |
   "from": "2026-10-01", "to": "2026-10-13", "groupBy": "model",
   "data": [
     { "group": "ollama/llama3.2", "requests": 42, "inputTokens": 5120, "outputTokens": 9310,
-      "costUsd": "0", "unknownCostRequests": 42 }
+      "costUsd": "0", "unknownCostRequests": 0 }
   ],
-  "totals": { "requests": 42, "inputTokens": 5120, "outputTokens": 9310, "costUsd": "0", "unknownCostRequests": 42 }
+  "totals": { "requests": 42, "inputTokens": 5120, "outputTokens": 9310, "costUsd": "0", "unknownCostRequests": 0 }
 }
 ```
 
-`groupBy` is `team`, `key`, `model`, `provider` or `day` (default; `from`/`to` default to the last 30 days, at most 366). Costs stay `null` (counted in `unknownCostRequests`) until budgets land in spec 007. Results are eventually consistent: a request shows up within seconds. Set `usage.enabled: false` to run without Kafka.
+`groupBy` is `team`, `key`, `model`, `provider` or `day` (default; `from`/`to` default to the last 30 days, at most 366). `costUsd` sums known costs only; requests whose price is unknown are counted in `unknownCostRequests` ([costs](#-costs-and-budgets)). Results are eventually consistent: a request shows up within seconds. Set `usage.enabled: false` to run without Kafka.
+
+## 💰 Costs and budgets
+
+Every request gets a cost in USD from [`config/pricing.yaml`](config/pricing.yaml) (USD per 1M tokens per `provider/model`, `*` patterns allowed). Prices nobody has verified stay `TODO`: those requests have an **unknown** cost (`null`), never `$0`, and the gateway lists such models in a warning at boot. Non-streaming responses carry the cost:
+
+```http
+x-switchyard-cost-usd: 0.0000140000
+```
+
+Give a key or a team a **monthly budget** (calendar month, UTC):
+
+```bash
+curl -s -X PATCH localhost:8080/admin/teams/$TEAM -H "$ADMIN" -H 'content-type: application/json' \
+  -d '{"monthlyBudgetUsd": 200, "softLimitPct": 90}'
+```
+
+- At `softLimitPct` % (default 80) requests carry `x-switchyard-budget-warning: soft_limit_reached`.
+- At 100 % they get `429` with `type: insufficient_quota`, `code: budget_exceeded` and `x-should-retry: false`, before any provider is called (the OpenAI SDKs raise `RateLimitError` and don't retry).
+- Responses report the tightest budget in `x-switchyard-budget-limit-usd`, `x-switchyard-budget-remaining-usd` and `x-switchyard-budget-reset`; `GET /admin/keys/:id/budget` shows the details.
+- Spend lives in Redis counters shared by every instance, and the usage worker raises them to the Postgres totals every minute, so a Redis restart is repaired within one interval. With Redis down, budgeted requests get `503 budget_unavailable` (`budgets.onRedisError: closed`, the default) or are admitted (`open`).
+
+There is no cost reservation: requests already in flight when a budget runs out still finish, so a month can overshoot by at most their cost. Details: [budgets guide](docs/budgets.md).
 
 ## 🛡️ PII redaction
 
@@ -565,6 +588,10 @@ x-switchyard-upstream-ms: 986
 | Gauge | `switchyard_usage_buffer_events` | usage events waiting in the gateway's buffer |
 | Counter | `switchyard_usage_worker_events_total` | worker results: `inserted`, `duplicate`, `dlq` |
 | Span | `switchyard.usage.consume` | one per worker batch, with message and result counts |
+| Counters | `switchyard_cost_usd_total`, `switchyard_cost_unknown_requests_total` | known cost in USD and unknown-cost requests, by `provider`, `model` |
+| Counters | `switchyard_budget_rejections_total`, `switchyard_budget_soft_limit_requests_total` | by `scope` (`key`, `team`); plus `switchyard_budget_fail_open_total`, `switchyard_budget_charge_failures_total` |
+| Gauge | `switchyard_budget_used_ratio` | spend ÷ monthly budget, by `scope`, `id` |
+| Span | `switchyard.budget` | budget check: `switchyard.budget.scope`, `switchyard.budget.decision` |
 | Counter | `switchyard_pii_detections_total` | PII occurrences found, by `type`; request spans carry `switchyard.pii.mode` / `.action` / `.detections` |
 | Logs | JSON (pino) | every line carries `trace_id` / `span_id`, plus `teamId` / `keyId` once authenticated; secrets redacted |
 
@@ -598,7 +625,7 @@ pnpm dev:worker      # usage worker in watch mode (needs KAFKA_BROKERS, e.g. loc
 | `pnpm test:contract` | The **official OpenAI and Anthropic Node SDKs** against the gateway: chat, streaming, embeddings, tools, `/v1/messages` (mock and an in-process fake Anthropic server always; Ollama when running) |
 | `pnpm db:migrate` | Applies database migrations to `DATABASE_URL` (`pnpm db:generate` creates new ones from the Drizzle schema) |
 | `pnpm test:contract:py` | The same with the **official OpenAI and Anthropic Python SDKs** (needs `pip install -r test/contract/python/requirements.txt`; on Windows, enable long paths or use a short venv path) |
-| `pnpm test:smoke` | Boots the Compose stack: health, readiness, a chat request, rate limits, a request counted in `GET /admin/usage`, bad config, memory budget, graceful SIGTERM |
+| `pnpm test:smoke` | Boots the Compose stack: health, readiness, a chat request, rate limits, a request counted in `GET /admin/usage`, a cost header then `budget_exceeded`, bad config, memory budget, graceful SIGTERM |
 
 ```mermaid
 flowchart LR
@@ -657,7 +684,7 @@ Each spec ends with a verification table, for example [spec 002](docs/specs/002-
 - [x] [004](docs/specs/004-keys-and-teams/spec.md) Virtual API keys, teams, admin API, Postgres migrations, OpenAPI docs
 - [x] [005](docs/specs/005-rate-limiting/spec.md) Rate limiting: RPM / TPM per key and team, Redis Lua token buckets, token reservation and reconciliation
 - [x] [006](docs/specs/006-usage-pipeline/spec.md) Usage events pipeline: one event per request, Kafka (Redpanda), idempotent worker, daily aggregates, DLQ, `GET /admin/usage`
-- [ ] 007 Budgets and cost accounting
+- [x] [007](docs/specs/007-budgets/spec.md) Budgets and cost accounting: price table, cost per request, monthly budgets per key and team, Redis counters reconciled with Postgres
 - [ ] 008 Fallback, retries and circuit breakers
 - [x] [014](docs/specs/014-anthropic/spec.md) Anthropic adapter and `/v1/messages`: Claude behind the OpenAI API, the Anthropic SDKs in front of any provider
 
@@ -675,6 +702,7 @@ Full scope and dependencies: [spec backlog](docs/specs/README.md).
 | 🧾 [Architecture Decision Records](docs/adr/README.md) | Why Fastify, why Kafka, why no retries after the first streamed byte, … |
 | 📐 [Specs](docs/specs/README.md) | Every feature with EARS acceptance criteria, design and tasks |
 | 🛡️ [Threat model](docs/threat-model.md) | STRIDE analysis and mitigations |
+| 💰 [Budgets guide](docs/budgets.md) | Prices, cost per request, budgets, headers, overshoot bound, Redis failure policy |
 | 🔐 [PII redaction guide](docs/pii.md) | Modes, detectors, placeholders, headers and limits of `mask` / `block` |
 | 📈 [Benchmarks](docs/benchmarks.md) | Method for the k6 benchmarks; numbers are published only once measured |
 

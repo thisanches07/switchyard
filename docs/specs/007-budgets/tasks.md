@@ -1,6 +1,6 @@
 # Tasks 007: Cost accounting and monthly budgets
 
-- **Status:** Approved (2026-10-13)
+- **Status:** Done (2026-10-13)
 - **Spec:** [spec.md](spec.md) · **Design:** [design.md](design.md)
 
 One commit per task, ending in `[spec-007]`. `pnpm verify` green after each (exit code checked); `pnpm test:int` (only the touched files) for tasks that touch infra.
@@ -68,6 +68,27 @@ One commit per task, ending in `[spec-007]`. `pnpm verify` green after each (exi
   - Do: worker `REDIS_URL`; smoke steps.
   - Test: `scripts/compose-smoke.ts` › mock request has `x-switchyard-cost-usd`; key `monthlyBudgetUsd: 0` → `429 budget_exceeded`.
 
-- [ ] **T14. Docs and verification**
+- [x] **T14. Docs and verification**
   - ACs: AC-7 (guide), all
   - Do: README budgets section, `docs/budgets.md` (overshoot bound), threat model *denial of wallet* row, architecture, example config, verification table, spec status.
+
+## Verification (2026-10-13)
+
+`pnpm verify` green (994 unit tests, lines 84.8 %); `pnpm test:int` green (full suite, under the Docker lock); `pnpm test:contract` green (Node). The Python contract (`pnpm test:contract:py`) was not run locally: the scratchpad venv could not import `anthropic` (Windows path length); CI runs it. The Compose smoke (`pnpm test:smoke`) runs in CI only (shared Docker on the dev machine).
+
+| AC | Proven by | Result |
+|---|---|---|
+| AC-1 | `test/unit/pricing/load.test.ts` › repo table loads, unknown field / negative / non-`TODO` string rejected naming the entry, missing file; `table.test.ts` › exact > most specific pattern > file order, `*` spans `/`, `unknownPriceCandidates`; `boot.test.ts` › invalid pricing file exits 1 naming file and entry, one boot warning listing unknown-price candidates | ✅ |
+| AC-2 | `decimal.test.ts` (exact arithmetic, half-up, no exponent); `table.test.ts` › formula with cached input (with/without `cachedInput`), zero-count prices not needed, `TODO`/missing → `null`; `outcome.test.ts` › cost of the final event (estimated tokens), `"0"` without upstream call, contribution wins, pricing error → `null`; `cost.test.ts` › upstream error costs `0.0000000000` | ✅ |
+| AC-3 | `test/unit/proxy/cost.test.ts` › `x-switchyard-cost-usd` on chat, embeddings and `/v1/messages` equal to the event, absent on streams and unknown prices, `switchyard_cost_usd_total` and `switchyard_cost_unknown_requests_total` | ✅ |
+| AC-4 | `db.int.test.ts` › migration `0004_budgets` columns, defaults, checks, round trip; `admin-budgets.test.ts` › number/string normalized, `null` clears, 400 on invalid values, bounds, PATCH one field, team `softLimitPct`, cache invalidated; `budget-routes.test.ts` › PATCH to `0` applies to the next request; `memory-store.test.ts`, `authenticate.test.ts` | ✅ |
+| AC-5 | `period.test.ts` › UTC months, `00:00:00Z` boundary, December, leap years; `charge.test.ts` › charged to the period of `occurredAt` | ✅ |
+| AC-6 | `check.test.ts` › reject at equality, budget `0`, message names scope and reset only, `x-should-retry: false`, rejection metric; `budget-routes.test.ts` › 429 shape and headers, no provider call, no rate-limit debit, no usage event, Anthropic shape on `/v1/messages`; `budgets.int.test.ts` › hard limit on Redis + Postgres | ✅ |
+| AC-7 | `budgets.int.test.ts` › concurrent waves: once spend ≥ budget every request is rejected, and `0 < final − budget ≤ concurrency × cost`; bound documented in `docs/budgets.md` | ✅ |
+| AC-8 | `check.test.ts` › lowest remaining scope, key wins ties; `budget-routes.test.ts` › headers on 200, on the stream, on an upstream error, none without budgets | ✅ |
+| AC-9 | `check.test.ts` › soft thresholds, warning header, `switchyard_budget_soft_limit_requests_total{scope}`, one log per scope/id/period, new period warns again; `budget-routes.test.ts` › soft limit served with the header | ✅ |
+| AC-10 | `charge.test.ts` › key and team charged for known costs only; `budget-counters.int.test.ts` › Redis charge/read/raise-never-lowers/expiry, parity with memory; `reconcile.test.ts` › raise only, current period, gauge replaced, runner; `budget-store.int.test.ts` › period sums; `budgets.int.test.ts` › Redis flush → enforcement restored by one reconciliation | ✅ |
+| AC-11 | `check.test.ts` and `budget-routes.test.ts` › closed → 503 `budget_unavailable`, open → admitted without headers + metric + one warning per minute, unbudgeted requests never read Redis; `charge.test.ts` › charge failure counted, never throws; `budgets.int.test.ts` › dead Redis, both policies | ✅ |
+| AC-12 | `admin-budget-status.test.ts` › key and team shapes, nulls without budget, flags, `source: postgres` fallback, 404, 401, 503 without store; `openapi.test.ts` › routes documented | ✅ |
+| AC-13 | `check.test.ts` › `switchyard.budget` span (scope, decision, no ids); `charge.test.ts` › charge failures metric, `switchyard_budget_used_ratio` set/cleared/new-period reset/replaced, ratio > 1 | ✅ |
+| AC-14 | all of the above; `openai-sdk.contract.test.ts` › `RateLimitError` 429 `budget_exceeded`, one HTTP call with default retries; `test_openai_sdk.py` › same for Python (CI); `scripts/compose-smoke.ts` › cost header, then `429 budget_exceeded` after `monthlyBudgetUsd: 0` (CI) | ✅ |
