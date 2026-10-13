@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { GatewayError } from "../../../src/core/errors.js";
 import { UpstreamNetworkError, UpstreamTimeoutError } from "../../../src/core/provider.js";
 import { createOpenAiCompatibleProvider } from "../../../src/modules/providers/openai-compatible.js";
-import { fakeHttp, jsonResponse } from "../../helpers/http.js";
+import { fakeHttp, jsonResponse, sse, streamResponse } from "../../helpers/http.js";
 
 const completion = {
   id: "chatcmpl-1",
@@ -147,5 +147,165 @@ describe("openai-compatible provider", () => {
       http.client,
     );
     expect((await gatewayError(provider.chat(request, ctx()))).code).toBe("upstream_error");
+  });
+});
+
+describe("openai-compatible streaming", () => {
+  const chunk = (content: string) => ({
+    object: "chat.completion.chunk",
+    model: "llama3.2",
+    choices: [{ index: 0, delta: { content }, finish_reason: null }],
+  });
+
+  async function drain(stream: AsyncIterable<Record<string, unknown>>) {
+    const out: Record<string, unknown>[] = [];
+    for await (const c of stream) out.push(c);
+    return out;
+  }
+
+  it("requests a stream with usage and yields parsed chunks", async () => {
+    const http = fakeHttp(
+      () => jsonResponse(500, {}),
+      () => streamResponse(200, [sse([chunk("Hel"), chunk("lo")])]),
+    );
+    const provider = createOpenAiCompatibleProvider(
+      { name: "ollama", baseUrl: "http://o.test/v1", apiKey: "k" },
+      http.client,
+    );
+    const chunks = await drain(
+      await provider.chatStream(
+        { ...request, stream: true, stream_options: { include_usage: false, extra: 1 } },
+        ctx(),
+      ),
+    );
+
+    expect(http.calls[0]?.url).toBe("http://o.test/v1/chat/completions");
+    expect(http.calls[0]?.headers.authorization).toBe("Bearer k");
+    expect(http.calls[0]?.body).toMatchObject({
+      stream: true,
+      stream_options: { include_usage: true, extra: 1 },
+      temperature: 0.2,
+    });
+    expect(chunks).toEqual([chunk("Hel"), chunk("lo")]);
+  });
+
+  it("maps non-2xx before the stream opens like the non-streaming path", async () => {
+    const http = fakeHttp(
+      () => jsonResponse(500, {}),
+      () =>
+        streamResponse(429, [], {
+          text: JSON.stringify({ error: { message: "slow", type: "rate_limit_error" } }),
+        }),
+    );
+    const provider = createOpenAiCompatibleProvider(
+      { name: "groq", baseUrl: "http://g.test/v1" },
+      http.client,
+    );
+    const error = await gatewayError(provider.chatStream(request, ctx()));
+    expect(error.status).toBe(429);
+    expect(error.type).toBe("rate_limit_error");
+  });
+
+  it("maps 5xx and connection errors before the stream opens", async () => {
+    const failing = createOpenAiCompatibleProvider(
+      { name: "g", baseUrl: "http://g.test/v1" },
+      fakeHttp(
+        () => jsonResponse(500, {}),
+        () => streamResponse(503, [], { text: "internal trace" }),
+      ).client,
+    );
+    expect((await gatewayError(failing.chatStream(request, ctx()))).status).toBe(502);
+
+    const refused = createOpenAiCompatibleProvider(
+      { name: "g", baseUrl: "http://g.test/v1" },
+      fakeHttp(
+        () => jsonResponse(500, {}),
+        () => {
+          throw new UpstreamNetworkError("ECONNREFUSED");
+        },
+      ).client,
+    );
+    expect((await gatewayError(refused.chatStream(request, ctx()))).status).toBe(502);
+  });
+
+  it.each([
+    [new UpstreamTimeoutError("UND_ERR_BODY_TIMEOUT"), "upstream_timeout"],
+    [new UpstreamNetworkError("ECONNRESET"), "upstream_error"],
+  ])("mid-stream %s → gateway error %s", async (failure, code) => {
+    const http = fakeHttp(
+      () => jsonResponse(500, {}),
+      () => streamResponse(200, [sse([chunk("a")], false), failure]),
+    );
+    const provider = createOpenAiCompatibleProvider(
+      { name: "ollama", baseUrl: "http://o.test/v1" },
+      http.client,
+    );
+    const stream = await provider.chatStream(request, ctx());
+    const received: unknown[] = [];
+    const error = await (async () => {
+      try {
+        for await (const c of stream) received.push(c);
+      } catch (e) {
+        return e;
+      }
+    })();
+    expect(received).toHaveLength(1);
+    expect(error).toBeInstanceOf(GatewayError);
+    expect((error as GatewayError).code).toBe(code);
+  });
+
+  it("an invalid JSON chunk fails the stream with upstream_error", async () => {
+    const http = fakeHttp(
+      () => jsonResponse(500, {}),
+      () => streamResponse(200, ["data: {not json\n\n"]),
+    );
+    const provider = createOpenAiCompatibleProvider(
+      { name: "ollama", baseUrl: "http://o.test/v1" },
+      http.client,
+    );
+    await expect(drain(await provider.chatStream(request, ctx()))).rejects.toMatchObject({
+      code: "upstream_error",
+    });
+  });
+});
+
+describe("openai-compatible embeddings", () => {
+  const body = {
+    object: "list",
+    data: [{ object: "embedding", index: 0, embedding: [0.1, 0.2] }],
+    model: "nomic-embed-text",
+    usage: { prompt_tokens: 3, total_tokens: 3 },
+  };
+
+  it("posts to {baseUrl}/embeddings and returns the body with usage", async () => {
+    const http = fakeHttp(() => jsonResponse(200, body));
+    const provider = createOpenAiCompatibleProvider(
+      { name: "ollama", baseUrl: "http://o.test/v1" },
+      http.client,
+    );
+    const embeddingsRequest = {
+      model: "nomic-embed-text",
+      input: ["a"],
+      encoding_format: "base64",
+    };
+    const result = await provider.embeddings(embeddingsRequest, ctx());
+    expect(http.calls[0]?.url).toBe("http://o.test/v1/embeddings");
+    expect(http.calls[0]?.body).toEqual(embeddingsRequest);
+    expect(result).toEqual({
+      body,
+      usage: { inputTokens: 3 },
+      responseModel: "nomic-embed-text",
+    });
+  });
+
+  it("maps embeddings errors like chat", async () => {
+    const http = fakeHttp(() => ({ status: 500, text: "oops" }));
+    const provider = createOpenAiCompatibleProvider(
+      { name: "ollama", baseUrl: "http://o.test/v1" },
+      http.client,
+    );
+    expect(
+      (await gatewayError(provider.embeddings({ model: "m", input: "x" }, ctx()))).status,
+    ).toBe(502);
   });
 });

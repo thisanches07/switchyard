@@ -29,7 +29,7 @@ One commit per task, ending in `[spec-003]`. `pnpm verify` green after each.
   - Test: `test/integration/upstream-http.int.test.ts` › `postStream` yields bytes as sent, non-2xx returns text, idle timeout mid-body → `UpstreamTimeoutError`, caller abort stops the body.
   - Files: `src/infra/http/undici-client.ts`
 
-- [ ] **T6. OpenAI-compatible streaming and embeddings**
+- [x] **T6. OpenAI-compatible streaming and embeddings**
   - ACs: AC-1, AC-4, AC-5, AC-7, AC-10
   - Test: `openai-compatible.test.ts` › stream body has `stream_options.include_usage`, chunks parsed, pre-stream 4xx/5xx mapped, mid-stream network/timeout → gateway errors with the right code, invalid JSON chunk → `upstream_error`; embeddings URL/body/usage/errors.
 
