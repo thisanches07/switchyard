@@ -6,7 +6,7 @@ import type { ChatProvider } from "../../../src/core/provider.js";
 import { MemoryRateLimiter } from "../../../src/infra/memory/rate-limiter.js";
 import { testApp } from "../../helpers/app.js";
 import { testConfig } from "../../helpers/config.js";
-import { MemoryKeyStore } from "../../helpers/memory-key-store.js";
+import { MemoryKeyStore, TEST_ADMIN_TOKEN } from "../../helpers/memory-key-store.js";
 import { spyProvider } from "../../helpers/providers.js";
 
 const CPF = "529.982.247-25";
@@ -191,6 +191,36 @@ describe("PII redaction on /v1 routes (spec 010)", () => {
       const res = await chat(`CPF ${CPF}`);
       expect(res.statusCode).toBe(200);
       expect(spy.requests[0]?.messages[0]?.content).toBe(`CPF ${CPF}`);
+    });
+
+    it("applies an admin PATCH of the key's mode to the next request (AC-2)", async () => {
+      const store = new MemoryKeyStore();
+      const { app } = await testApp({
+        store,
+        providers: new Map([["mock", echoProvider]]),
+        authenticated: false,
+        adminToken: TEST_ADMIN_TOKEN,
+      });
+      apps.push(app);
+      const { key, record } = await store.issueKey();
+      const chat = () =>
+        app.inject({
+          method: "POST",
+          url: "/v1/chat/completions",
+          headers: { authorization: `Bearer ${key}` },
+          payload: { model: "mock/echo", messages: [{ role: "user", content: `CPF ${CPF}` }] },
+        });
+      expect((await chat()).statusCode).toBe(200); // config default off; key now cached
+      const patched = await app.inject({
+        method: "PATCH",
+        url: `/admin/keys/${record.id}`,
+        headers: { authorization: `Bearer ${TEST_ADMIN_TOKEN}` },
+        payload: { piiMode: "block" },
+      });
+      expect(patched.statusCode).toBe(200);
+      const blocked = await chat();
+      expect(blocked.statusCode).toBe(400);
+      expect(blocked.json().error.code).toBe("pii_detected");
     });
 
     it("uses the config default for keys without a mode", async () => {

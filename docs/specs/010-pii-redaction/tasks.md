@@ -63,7 +63,7 @@ One commit per task, ending in `[spec-010]`. `pnpm verify` green after each (exi
 | AC | Proven by | Result |
 |---|---|---|
 | AC-1 | `schema.test.ts` › `pii` defaults, mode/detector/term validation, example config; `db.int.test.ts` › `pii_mode` enum column, nullable | ✅ |
-| AC-2 | `admin.test.ts` › `piiMode` on create, list, PATCH alone (limits kept), `null` clears, invalid values 400, cached key dropped; `authenticate.test.ts` › principal carries the key's mode; `db.int.test.ts` › stored, updated, cleared, enum enforced | ✅ |
+| AC-2 | `pii-routes.test.ts` › admin PATCH to `block` applies to the next request; `admin.test.ts` › `piiMode` on create, list, PATCH alone (limits kept), `null` clears, invalid values 400, cached key dropped; `authenticate.test.ts` › principal carries the key's mode; `db.int.test.ts` › stored, updated, cleared, enum enforced | ✅ |
 | AC-3 | `scan.test.ts` › every vector found with its type, alone and inside sentences; `validators.test.ts` | ✅ |
 | AC-4 | `scan.test.ts` › every false-positive vector (and a few more) not reported | ✅ |
 | AC-5 | `scan.test.ts` › CPF vs phone, CPF-shaped phone tie-break, CNPJ vs card, longest match, no double replacement | ✅ |
