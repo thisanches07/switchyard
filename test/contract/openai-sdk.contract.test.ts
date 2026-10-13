@@ -11,16 +11,24 @@ import { createProviderRegistry } from "../../src/modules/providers/registry.js"
 
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL ?? "http://localhost:11434/v1";
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? "llama3.2";
+const OLLAMA_EMBED_MODEL = process.env.OLLAMA_EMBED_MODEL ?? "nomic-embed-text";
 
-async function ollamaAvailable(): Promise<boolean> {
+/** Model ids served by Ollama, or undefined when Ollama is not reachable. */
+async function ollamaModels(): Promise<string[] | undefined> {
   try {
     const res = await fetch(`${OLLAMA_BASE_URL}/models`, { signal: AbortSignal.timeout(1_000) });
-    return res.ok;
+    if (!res.ok) return undefined;
+    const body = (await res.json()) as { data?: { id: string }[] };
+    return (body.data ?? []).map((m) => m.id);
   } catch {
-    return false;
+    return undefined;
   }
 }
-const ollamaUp = await ollamaAvailable();
+const models = await ollamaModels();
+const hasModel = (name: string) =>
+  models?.some((id) => id === name || id.startsWith(`${name}:`)) ?? false;
+const ollamaChat = hasModel(OLLAMA_MODEL);
+const ollamaEmbed = hasModel(OLLAMA_EMBED_MODEL);
 
 const config = configSchema.parse({
   server: { timeouts: { connectMs: 2_000, ttfbMs: 120_000, totalMs: 180_000 } },
@@ -31,6 +39,7 @@ const config = configSchema.parse({
   aliases: {
     fast: { strategy: "priority", candidates: ["mock/fast-model"] },
     local: { strategy: "priority", candidates: [`ollama/${OLLAMA_MODEL}`] },
+    embed: { strategy: "priority", candidates: [`ollama/${OLLAMA_EMBED_MODEL}`] },
   },
 }) as LoadedConfig;
 
@@ -74,7 +83,7 @@ describe("official OpenAI Node SDK against Switchyard", () => {
   it("lists models", async () => {
     const ids: string[] = [];
     for await (const model of client.models.list()) ids.push(model.id);
-    expect(ids).toEqual(expect.arrayContaining(["fast", "local", "mock/fast-model"]));
+    expect(ids).toEqual(expect.arrayContaining(["fast", "local", "embed", "mock/fast-model"]));
   });
 
   it("surfaces unknown models as NotFoundError", async () => {
@@ -92,7 +101,59 @@ describe("official OpenAI Node SDK against Switchyard", () => {
     expect(error).toBeInstanceOf(OpenAI.RateLimitError);
   });
 
-  it.skipIf(!ollamaUp)(
+  it("streams a chat completion through an alias (mock provider)", async () => {
+    const stream = await client.chat.completions.create({
+      model: "fast",
+      messages: [{ role: "user", content: "Say hi" }],
+      stream: true,
+      stream_options: { include_usage: true },
+    });
+    let text = "";
+    let usage: OpenAI.CompletionUsage | null | undefined;
+    for await (const chunk of stream) {
+      text += chunk.choices[0]?.delta?.content ?? "";
+      if (chunk.usage) usage = chunk.usage;
+    }
+    expect(text).toBe("This is a mock response.");
+    expect(usage?.completion_tokens).toBe(6);
+  });
+
+  it("surfaces a mid-stream failure as an error while iterating", async () => {
+    const stream = await client.chat.completions.create({
+      model: "mock/error-midstream",
+      messages: [{ role: "user", content: "x" }],
+      stream: true,
+    });
+    const error = await (async () => {
+      try {
+        for await (const _chunk of stream) {
+          // consume until the error event
+        }
+      } catch (e) {
+        return e;
+      }
+    })();
+    expect(error).toBeInstanceOf(OpenAI.APIError);
+  });
+
+  it("creates embeddings with the SDK default (base64) encoding", async () => {
+    const res = await client.embeddings.create({ model: "mock/embed", input: ["a", "b"] });
+    expect(res.data).toHaveLength(2);
+    expect(res.data[0]?.embedding).toHaveLength(768);
+    expect(typeof res.data[0]?.embedding[0]).toBe("number");
+  });
+
+  it("creates embeddings with explicit float encoding", async () => {
+    const res = await client.embeddings.create({
+      model: "mock/embed",
+      input: "a",
+      encoding_format: "float",
+    });
+    expect(res.data[0]?.embedding).toHaveLength(768);
+    expect(res.usage.prompt_tokens).toBeGreaterThan(0);
+  });
+
+  it.skipIf(!ollamaChat)(
     `completes a chat on Ollama (${OLLAMA_MODEL})`,
     async () => {
       const data = await client.chat.completions.create({
@@ -105,11 +166,43 @@ describe("official OpenAI Node SDK against Switchyard", () => {
     },
     180_000,
   );
+
+  it.skipIf(!ollamaChat)(
+    `streams a chat on Ollama (${OLLAMA_MODEL})`,
+    async () => {
+      const stream = await client.chat.completions.create({
+        model: "local",
+        messages: [{ role: "user", content: "Count from 1 to 5." }],
+        stream: true,
+        stream_options: { include_usage: true },
+      });
+      let chunks = 0;
+      let usage: OpenAI.CompletionUsage | null | undefined;
+      for await (const chunk of stream) {
+        chunks += 1;
+        if (chunk.usage) usage = chunk.usage;
+      }
+      expect(chunks).toBeGreaterThan(2);
+      expect(usage?.completion_tokens ?? 0).toBeGreaterThan(0);
+    },
+    180_000,
+  );
+
+  it.skipIf(!ollamaEmbed)(
+    `creates embeddings on Ollama (${OLLAMA_EMBED_MODEL})`,
+    async () => {
+      const res = await client.embeddings.create({ model: "embed", input: ["hello", "world"] });
+      expect(res.data).toHaveLength(2);
+      expect(res.data[0]?.embedding.length).toBe(768);
+    },
+    180_000,
+  );
 });
 
-if (!ollamaUp) {
+if (!ollamaChat || !ollamaEmbed) {
+  const reason = models ? "model(s) not pulled" : `Ollama not reachable at ${OLLAMA_BASE_URL}`;
   console.warn(
-    `[contract] Ollama not reachable at ${OLLAMA_BASE_URL}; skipping the Ollama case. ` +
-      `Start Ollama and run "ollama pull ${OLLAMA_MODEL}" to include it.`,
+    `[contract] Some Ollama cases skipped (${reason}). ` +
+      `Run "ollama pull ${OLLAMA_MODEL}" and "ollama pull ${OLLAMA_EMBED_MODEL}" to include them.`,
   );
 }
