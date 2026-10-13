@@ -21,7 +21,7 @@ One commit per task, ending in `[spec-004]`. `pnpm verify` green after each (exi
   - ACs: AC-4, AC-5, AC-7
   - Test: `core/errors.test.ts` › new errors; `test/unit/auth/models.test.ts` › null/empty list allows all, exact match on alias or ref, `provider/*`; memory store behaviour (duplicate team → 409).
 
-- [ ] **T5. Drizzle schema, migrations and `DrizzleKeyStore`**
+- [x] **T5. Drizzle schema, migrations and `DrizzleKeyStore`**
   - ACs: AC-1, AC-7
   - Test: `test/integration/db.int.test.ts` (Testcontainers) › migrate twice, team/key CRUD, duplicate team 409, find by hash, revoke.
   - Files: `src/infra/db/*`, `drizzle/`, `drizzle.config.ts`, `scripts/db-migrate.ts`.
