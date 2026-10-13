@@ -22,7 +22,7 @@ One commit per task, ending in `[spec-011]`. T13 and T14 are blocked on things o
   - Test: `test/unit/proxy/no-content-telemetry.test.ts` › sentinel absent from every span attribute, span event and log line (chat, stream, embeddings, messages), with `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true`.
   - Files: test only (fix code if it fails)
 
-- [ ] **T4. Request duration and gateway overhead**
+- [x] **T4. Request duration and gateway overhead**
   - ACs: AC-1, AC-2
   - Do: `RequestTiming` + `gatewayOverheadMs`; attempt and backoff times in `runAttempts`; first byte in `streamChat`; tracker `onEnd`; histograms with bucket advice (also upstream duration and TTFB); high-resolution `systemTimers.now()`.
   - Test: `test/unit/proxy/timing.test.ts` › formula, streams use first byte, clamp at 0, records once after both end and outcome; `test/unit/proxy/request-metrics.test.ts` › non-streaming, streaming, one retry with backoff (manual clock, exact), labels only operation/stream/status, not recorded before admission.

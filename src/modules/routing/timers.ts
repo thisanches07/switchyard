@@ -19,7 +19,8 @@ export interface Timers {
 }
 
 export const systemTimers: Timers = {
-  now: () => Date.now(),
+  // Epoch milliseconds with sub-millisecond resolution: gateway overhead is often under 1 ms.
+  now: () => performance.timeOrigin + performance.now(),
   async sleep(ms, signal) {
     if (signal.aborted) throw signal.reason;
     if (ms <= 0) return;

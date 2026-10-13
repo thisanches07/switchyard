@@ -55,6 +55,8 @@ export interface OutcomeInit {
   servedModel: string | null;
   /** Milliseconds since the request arrived (e.g. `() => reply.elapsedTime`). */
   elapsedMs: () => number;
+  /** Called once with the recorded event (spec 011 request timing). Must not throw. */
+  onEnd?: ((event: UsageEvent) => void) | undefined;
 }
 
 export interface SuccessResult {
@@ -228,6 +230,7 @@ export function createOutcomeHook(deps: OutcomeHookDeps): OutcomeHook {
             "usage recorder failed",
           );
         }
+        init.onEnd?.(event);
       };
 
       const tracker: OutcomeTracker = {

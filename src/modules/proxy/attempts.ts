@@ -29,6 +29,7 @@ import {
   type UpstreamOutcome,
   type UpstreamSpan,
 } from "./telemetry.js";
+import type { RequestTiming } from "./timing.js";
 
 /** Long-lived routing state and sources of time and randomness (injected for tests). */
 export interface RoutingDeps {
@@ -73,6 +74,8 @@ export interface RunAttemptsArgs<T> {
   call(provider: ChatProvider, candidate: Candidate, ctx: { signal: AbortSignal }): Promise<T>;
   /** Non-streaming: what the attempt span records on success. */
   describe?: ((value: T) => UpstreamOutcome) | undefined;
+  /** Receives each attempt duration and backoff wait, on `deps.timers` (spec 011 overhead). */
+  timing?: Pick<RequestTiming, "attempt" | "backoff"> | undefined;
   /** Before the loop with `(undefined, 0)`, then before every attempt (headers, usage event). */
   report(candidate: Candidate | undefined, attempts: number): void;
 }
@@ -174,9 +177,12 @@ export async function runAttempts<T>(args: RunAttemptsArgs<T>): Promise<Served<T
           permit.release();
           return giveUp();
         }
+        const waitStarted = timers.now();
         try {
           await timers.sleep(backoffMs, signal);
+          args.timing?.backoff(timers.now() - waitStarted);
         } catch {
+          args.timing?.backoff(timers.now() - waitStarted);
           permit.release();
           if (args.signal.aborted) throw lastError;
           lastError = upstreamTimeout(candidate.provider);
@@ -208,6 +214,7 @@ export async function runAttempts<T>(args: RunAttemptsArgs<T>): Promise<Served<T
 
       try {
         const value = await upstream.run(() => args.call(provider, candidate, { signal }));
+        args.timing?.attempt(timers.now() - started);
         permit.succeed();
         entry.recordLatency(timers.now() - started);
         upstream.annotate({ "switchyard.attempt.outcome": "success" });
@@ -218,6 +225,7 @@ export async function runAttempts<T>(args: RunAttemptsArgs<T>): Promise<Served<T
         }
         return served(value, candidate, provider, attempts, upstream, entry, deps);
       } catch (error) {
+        args.timing?.attempt(timers.now() - started);
         lastError = error;
         if (args.signal.aborted) {
           // The client left: neither a success nor a failure of the candidate (AC-5, AC-8).
