@@ -38,7 +38,7 @@ One commit per task, ending in `[spec-005]`. `pnpm verify` exit code checked aft
   - ACs: AC-3, AC-5, AC-6, AC-7
   - Test: `test/unit/proxy/ratelimit-routes.test.ts` › 429 before any provider call, headers on 200/429, 400 for oversized requests, refund on upstream failure, reconcile with usage.
 
-- [ ] **T9. Streaming reconciliation**
+- [x] **T9. Streaming reconciliation**
   - ACs: AC-6
   - Test: `stream.test.ts` › reconcile on completion, on mid-stream failure, on client disconnect (socket test).
 

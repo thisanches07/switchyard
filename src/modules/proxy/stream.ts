@@ -27,7 +27,14 @@ const sseEvent = (payload: unknown) => `data: ${JSON.stringify(payload)}\n\n`;
  * chunk is in hand, headers are sent and the rest is piped with backpressure; a failure from then
  * on becomes an SSE error event and is never retried (ADR-0008).
  */
-export async function streamChat({ reply, provider, request, logger, principal }: StreamChatArgs) {
+export async function streamChat({
+  reply,
+  provider,
+  request,
+  logger,
+  principal,
+  admission,
+}: StreamChatArgs) {
   const controller = new AbortController();
   let clientClosed = false;
   reply.raw.once("close", () => {
@@ -55,6 +62,8 @@ export async function streamChat({ reply, provider, request, logger, principal }
   } catch (error) {
     if (clientClosed) upstream.clientGone();
     else upstream.fail(error, "before_first_byte");
+    // Nothing was generated: the whole token reservation goes back (spec 005, AC-6).
+    await admission?.reconcile(undefined);
     throw error;
   }
 
@@ -72,6 +81,9 @@ export async function streamChat({ reply, provider, request, logger, principal }
     let usage: Usage | undefined;
     let outputChars = 0;
     let settled = false;
+    const inputTokens = estimateTokens(messageChars(request));
+    /** Tokens generated so far, for reconciling streams that did not finish. */
+    const partialTokens = () => inputTokens + estimateTokens(outputChars);
     try {
       let result = first;
       while (!result.done) {
@@ -83,17 +95,13 @@ export async function streamChat({ reply, provider, request, logger, principal }
         result = await iterator.next();
       }
       settled = true;
-      upstream.succeed({
-        usage: usage ?? {
-          inputTokens: estimateTokens(messageChars(request)),
-          outputTokens: estimateTokens(outputChars),
-        },
-        estimated: usage === undefined,
-        responseModel,
-      });
+      const finalUsage = usage ?? { inputTokens, outputTokens: estimateTokens(outputChars) };
+      upstream.succeed({ usage: finalUsage, estimated: usage === undefined, responseModel });
+      await admission?.reconcile(finalUsage.inputTokens + finalUsage.outputTokens);
       yield "data: [DONE]\n\n";
     } catch (error) {
       settled = true;
+      await admission?.reconcile(partialTokens());
       if (clientClosed) {
         upstream.clientGone();
         return;
@@ -106,6 +114,7 @@ export async function streamChat({ reply, provider, request, logger, principal }
         // The response stream was destroyed (client went away) while we were between chunks.
         controller.abort();
         upstream.clientGone();
+        await admission?.reconcile(partialTokens());
         await iterator.return?.();
       }
     }
