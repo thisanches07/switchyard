@@ -24,7 +24,7 @@ One commit per task, ending in `[spec-003]`. `pnpm verify` green after each.
   - ACs: AC-9, AC-11
   - Test: `mock.test.ts` › chunk sequence, delay honoured, usage chunk when requested, `error-midstream` fails after a chunk, `error-500` rejects before streaming; embeddings deterministic 768-dim, normalised, base64 round-trip.
 
-- [ ] **T5. undici streaming client**
+- [x] **T5. undici streaming client**
   - ACs: AC-2, AC-5, AC-6 (transport)
   - Test: `test/integration/upstream-http.int.test.ts` › `postStream` yields bytes as sent, non-2xx returns text, idle timeout mid-body → `UpstreamTimeoutError`, caller abort stops the body.
   - Files: `src/infra/http/undici-client.ts`
