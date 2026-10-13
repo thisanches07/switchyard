@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="474" viewBox="0 0 1040 474" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="496" viewBox="0 0 1040 496" role="img" aria-labelledby="title desc">
   <title id="title">Switchyard demo</title>
-  <desc id="desc">Starting the stack with Docker Compose and sending a chat request to a local llama3.2 model through Switchyard. Real output (content truncated) recorded on a GTX 1060 on 2026-10-13.</desc>
+  <desc id="desc">Starting the stack with Docker Compose and sending an authenticated chat request to a local llama3.2 model through Switchyard. Real output (content truncated) recorded on a GTX 1060 on 2026-10-13.</desc>
   <style>
     .t { white-space: pre; font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, Menlo, monospace; font-size: 14px; }
     .p { fill: #7C9CFF; } .c { fill: #E6EAF5; } .m { fill: #8B95B5; } .ok { fill: #36D6B5; }
@@ -13,7 +13,7 @@
     .d10 { animation-delay: 5.0s } .d11 { animation-delay: 5.4s } .d12 { animation-delay: 5.8s }
     .d13 { animation-delay: 6.2s }
   </style>
-  <rect width="1040" height="474" rx="14" fill="#0B1020"/>
+  <rect width="1040" height="496" rx="14" fill="#0B1020"/>
   <rect width="1040" height="40" rx="14" fill="#151D36"/>
   <rect y="26" width="1040" height="14" fill="#151D36"/>
   <circle cx="24" cy="20" r="6" fill="#FF5F57"/><circle cx="44" cy="20" r="6" fill="#FEBC2E"/><circle cx="64" cy="20" r="6" fill="#28C840"/>
@@ -24,18 +24,19 @@
   <text x="24" y="120" class="t l d3"><tspan class="ok"> ✔ </tspan><tspan class="m">Container switchyard-gateway-1   Healthy</tspan></text>
 
   <text x="24" y="156" class="t l d4"><tspan class="p">❯ </tspan><tspan class="c">curl -i localhost:8080/v1/chat/completions \</tspan></text>
-  <text x="24" y="178" class="t l d5"><tspan class="c">    -H "content-type: application/json" \</tspan></text>
-  <text x="24" y="200" class="t l d5"><tspan class="c">    -d '{"model":"local","messages":[{"role":"user","content":"What is a circuit breaker in microservices? One sentence."}]}'</tspan></text>
+  <text x="24" y="178" class="t l d5"><tspan class="c">    -H "Authorization: Bearer $SWITCHYARD_KEY" \</tspan></text>
+  <text x="24" y="200" class="t l d5"><tspan class="c">    -H "content-type: application/json" \</tspan></text>
+  <text x="24" y="222" class="t l d5"><tspan class="c">    -d '{"model":"local","messages":[{"role":"user","content":"What is a circuit breaker in microservices? One sentence."}]}'</tspan></text>
 
-  <text x="24" y="236" class="t l d6"><tspan class="ok">HTTP/1.1 200 OK</tspan></text>
-  <text x="24" y="258" class="t l d7"><tspan class="h">x-switchyard-provider: </tspan><tspan class="c">ollama</tspan></text>
-  <text x="24" y="280" class="t l d8"><tspan class="h">x-switchyard-model: </tspan><tspan class="c">llama3.2</tspan></text>
-  <text x="24" y="302" class="t l d9"><tspan class="h">x-switchyard-upstream-ms: </tspan><tspan class="c">1436</tspan></text>
-  <text x="24" y="324" class="t l d10"><tspan class="h">x-switchyard-request-id: </tspan><tspan class="c">req_643a3539-4f0b-4c09-8bd0-a894bfd6c314</tspan></text>
+  <text x="24" y="258" class="t l d6"><tspan class="ok">HTTP/1.1 200 OK</tspan></text>
+  <text x="24" y="280" class="t l d7"><tspan class="h">x-switchyard-provider: </tspan><tspan class="c">ollama</tspan></text>
+  <text x="24" y="302" class="t l d8"><tspan class="h">x-switchyard-model: </tspan><tspan class="c">llama3.2</tspan></text>
+  <text x="24" y="324" class="t l d9"><tspan class="h">x-switchyard-upstream-ms: </tspan><tspan class="c">986</tspan></text>
+  <text x="24" y="346" class="t l d10"><tspan class="h">x-switchyard-request-id: </tspan><tspan class="c">req_5b9e1fd5-2c46-4adf-b99a-dbf336c523aa</tspan></text>
 
-  <text x="24" y="360" class="t l d11"><tspan class="m">{ "object": "chat.completion", "model": "llama3.2",</tspan></text>
-  <text x="24" y="382" class="t l d12"><tspan class="m">  "choices": [{ "message": { "content": </tspan><tspan class="s">"In microservices, a circuit breaker is a</tspan></text>
-  <text x="24" y="404" class="t l d12"><tspan class="s">      design pattern that temporarily breaks the connection…"</tspan><tspan class="m"> } }],</tspan></text>
-  <text x="24" y="426" class="t l d13"><tspan class="m">  "usage": { "prompt_tokens": 37, "completion_tokens": 47, "total_tokens": 84 } }</tspan></text>
-  <text x="24" y="456" class="t l d13"><tspan class="p">❯ </tspan><tspan class="c">▌</tspan></text>
+  <text x="24" y="382" class="t l d11"><tspan class="m">{ "object": "chat.completion", "model": "llama3.2",</tspan></text>
+  <text x="24" y="404" class="t l d12"><tspan class="m">  "choices": [{ "message": { "content": </tspan><tspan class="s">"A circuit breaker in microservices is a design</tspan></text>
+  <text x="24" y="426" class="t l d12"><tspan class="s">      pattern that allows a system to temporarily halt…"</tspan><tspan class="m"> } }],</tspan></text>
+  <text x="24" y="448" class="t l d13"><tspan class="m">  "usage": { "prompt_tokens": 37, "completion_tokens": 40, "total_tokens": 77 } }</tspan></text>
+  <text x="24" y="478" class="t l d13"><tspan class="p">❯ </tspan><tspan class="c">▌</tspan></text>
 </svg>
