@@ -50,7 +50,7 @@ One commit per task, ending in `[spec-014]`. `pnpm verify` green after each.
   - Test: `test/unit/anthropic/native.test.ts` › byte-for-byte fixture (thinking, redacted_thinking, document, cache_control, system blocks, top_k, metadata, tools, tool_choice) with only `model` changed; masked canonical text written back; edited arguments written back as input.
   - Files: `src/modules/anthropic/native.ts`; adapter uses it.
 
-- [ ] **T10. Inbound response, error body and rate-limit headers**
+- [x] **T10. Inbound response, error body and rate-limit headers**
   - ACs: AC-8, AC-9, AC-14
   - Test: `test/unit/anthropic/inbound-response.test.ts` › finish_reason table, stop_sequence match, tool calls, usage, `msg_` id; `inbound-errors.test.ts` › status → type table, details.error_code, request_id, anthropic-ratelimit-* from x-ratelimit-* (RFC 3339 reset).
   - Files: `src/modules/anthropic/{inbound-response,inbound-errors}.ts`
