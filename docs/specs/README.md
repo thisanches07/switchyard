@@ -38,5 +38,5 @@ Status: `planned` → `draft` → `approved` → `in progress` → `done`.
 
 | # | Spec | Scope | Status |
 |---|---|---|---|
-| 014 | anthropic | Outbound `anthropic` provider adapter (so `claude/*` candidates work through `/v1/chat/completions`) and inbound Anthropic-compatible `POST /v1/messages`, with tool-use translation both ways | in progress |
+| 014 | anthropic | Outbound `anthropic` provider adapter (so `claude/*` candidates work through `/v1/chat/completions`) and inbound Anthropic-compatible `POST /v1/messages`, with tool-use translation both ways | done |
 | 015 | pii-streaming-restore | Restore masked values in streaming responses (placeholder split across chunks, boundary buffering) | approved |

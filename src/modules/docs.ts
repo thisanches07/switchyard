@@ -52,6 +52,22 @@ function usageRow(withGroup: boolean) {
     },
   };
 }
+const anthropicErrorResponse = {
+  description: "Anthropic-shaped error (spec 014)",
+  type: "object",
+  properties: {
+    type: { type: "string", enum: ["error"] },
+    error: {
+      type: "object",
+      properties: {
+        type: { type: "string" },
+        message: { type: "string" },
+        details: { type: "object", properties: { error_code: { type: "string" } } },
+      },
+    },
+    request_id: { type: "string" },
+  },
+};
 
 export const openApiInfo: SwaggerOptions = {
   openapi: {
@@ -65,6 +81,10 @@ export const openApiInfo: SwaggerOptions = {
     },
     tags: [
       { name: "OpenAI-compatible", description: "Drop-in replacement for the OpenAI API" },
+      {
+        name: "Anthropic-compatible",
+        description: "Anthropic Messages API for the official Anthropic SDKs (spec 014)",
+      },
       { name: "Admin", description: "Teams and API keys" },
       { name: "Health" },
     ],
@@ -72,6 +92,12 @@ export const openApiInfo: SwaggerOptions = {
       securitySchemes: {
         bearerAuth: { type: "http", scheme: "bearer", description: "Switchyard API key" },
         adminToken: { type: "http", scheme: "bearer", description: "ADMIN_TOKEN" },
+        apiKeyHeader: {
+          type: "apiKey",
+          in: "header",
+          name: "x-api-key",
+          description: "Switchyard API key (accepted on every /v1 route)",
+        },
       },
     },
   },
@@ -110,6 +136,42 @@ export const docs = {
         },
         encoding_format: { type: "string", enum: ["float", "base64"] },
       },
+    },
+  },
+  messages: {
+    tags: ["Anthropic-compatible"],
+    summary: "Create a message (Anthropic Messages API; set stream: true for SSE)",
+    description:
+      "Routed like chat completions (alias or provider/model). Errors use the Anthropic shape. " +
+      "Claude models get the request natively; other providers get a translation (ADR-0016).",
+    security: [{ apiKeyHeader: [] }, { bearerAuth: [] }],
+    body: {
+      type: "object",
+      required: ["model", "max_tokens", "messages"],
+      additionalProperties: true,
+      properties: {
+        model: { type: "string", description: "Alias (e.g. `smart`) or `provider/model`" },
+        max_tokens: { type: "integer", minimum: 1 },
+        messages: { type: "array", items: { type: "object", additionalProperties: true } },
+        system: {
+          oneOf: [{ type: "string" }, { type: "array", items: { type: "object" } }],
+        },
+        stop_sequences: { type: "array", items: { type: "string" } },
+        temperature: { type: "number" },
+        top_p: { type: "number" },
+        top_k: { type: "integer" },
+        tools: { type: "array", items: { type: "object", additionalProperties: true } },
+        tool_choice: { type: "object", additionalProperties: true },
+        metadata: { type: "object", additionalProperties: true },
+        stream: { type: "boolean" },
+      },
+    },
+    response: {
+      400: anthropicErrorResponse,
+      401: anthropicErrorResponse,
+      403: anthropicErrorResponse,
+      404: anthropicErrorResponse,
+      429: anthropicErrorResponse,
     },
   },
   models: {

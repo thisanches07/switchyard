@@ -19,7 +19,7 @@ describe("undici HTTP client", () => {
       req.on("end", () => {
         received.push({ body: raw ? JSON.parse(raw) : undefined, headers: req.headers });
         if (req.url === "/ok") {
-          res.writeHead(200, { "content-type": "application/json" });
+          res.writeHead(200, { "content-type": "application/json", "request-id": "req_up_1" });
           res.end(JSON.stringify({ ok: true }));
         } else if (req.url === "/fail") {
           res.writeHead(500);
@@ -79,13 +79,15 @@ describe("undici HTTP client", () => {
 
   it("posts JSON and returns status and text", async () => {
     const res = await call("/ok");
-    expect(res).toEqual({ status: 200, text: '{"ok":true}' });
+    expect(res).toMatchObject({ status: 200, text: '{"ok":true}' });
+    // Spec 014: response headers are exposed (lower-cased) for request ids and retry-after.
+    expect(res.headers?.["request-id"]).toBe("req_up_1");
     expect(received.at(-1)?.body).toEqual({ hello: "world" });
     expect(received.at(-1)?.headers.authorization).toBe("Bearer k");
   });
 
   it("returns non-2xx statuses instead of throwing", async () => {
-    expect(await call("/fail")).toEqual({ status: 500, text: "boom" });
+    expect(await call("/fail")).toMatchObject({ status: 500, text: "boom" });
   });
 
   it("headers timeout → UpstreamTimeoutError", async () => {

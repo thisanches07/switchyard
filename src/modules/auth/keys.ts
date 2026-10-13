@@ -27,6 +27,32 @@ export function displayPrefix(key: string): string {
   return key.slice(0, 10);
 }
 
+export type ExtractedKey = { token: string } | { reason: "missing" | "malformed" };
+
+/**
+ * The gateway key from `Authorization: Bearer …` or `x-api-key` (spec 014: Anthropic SDKs send
+ * the latter). Both present and different, or a malformed header, is `malformed`.
+ */
+export function extractApiKey(headers: {
+  authorization?: string | undefined;
+  "x-api-key"?: string | string[] | undefined;
+}): ExtractedKey {
+  const { authorization } = headers;
+  const apiKeyHeader = headers["x-api-key"];
+  if (authorization === undefined && apiKeyHeader === undefined) return { reason: "missing" };
+
+  const bearer = authorization === undefined ? undefined : parseBearer(authorization);
+  if (authorization !== undefined && bearer === undefined) return { reason: "malformed" };
+  const apiKey = typeof apiKeyHeader === "string" ? apiKeyHeader.trim() : undefined;
+  if (apiKeyHeader !== undefined && !apiKey) return { reason: "malformed" };
+
+  if (bearer !== undefined && apiKey !== undefined && bearer !== apiKey) {
+    return { reason: "malformed" };
+  }
+  const token = bearer ?? apiKey;
+  return token ? { token } : { reason: "missing" };
+}
+
 /** Extracts the token from `Authorization: Bearer <token>`; undefined if absent or malformed. */
 export function parseBearer(header: string | undefined): string | undefined {
   const match = /^Bearer\s+(\S+)$/i.exec(header?.trim() ?? "");

@@ -86,6 +86,26 @@ describe("configSchema", () => {
     const parsed = configSchema.parse(config);
     expect(parsed.providers.mock).toMatchObject({ type: "mock", chunkDelayMs: 25 });
   });
+
+  it("anthropic providers default defaultMaxTokens to 4096 (spec 014)", () => {
+    const config = example();
+    config.providers = {
+      claude: { type: "anthropic", apiKeyEnv: "ANTHROPIC_API_KEY" },
+      other: { type: "anthropic", apiKeyEnv: "ANTHROPIC_API_KEY", defaultMaxTokens: 1024 },
+    };
+    config.aliases = {};
+    config.cache = { exact: { enabled: false, ttlSeconds: 1 } };
+    const parsed = configSchema.parse(config);
+    expect(parsed.providers.claude).toMatchObject({ defaultMaxTokens: 4096 });
+    expect(parsed.providers.other).toMatchObject({ defaultMaxTokens: 1024 });
+  });
+
+  it("example config sets defaultMaxTokens on the claude provider", () => {
+    expect(configSchema.parse(example()).providers.claude).toMatchObject({
+      type: "anthropic",
+      defaultMaxTokens: 4096,
+    });
+  });
 });
 
 describe("limits config (spec 005)", () => {

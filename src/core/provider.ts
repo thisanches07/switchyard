@@ -10,6 +10,11 @@ export interface ChatResult {
   body: unknown;
   usage?: Usage | undefined;
   responseModel?: string | undefined;
+  /**
+   * The provider's own response body, set only when the request asked for native pass-through
+   * (an Anthropic extension on the same-family path, ADR-0016). Never sent on OpenAI routes.
+   */
+  native?: unknown;
 }
 
 /**
@@ -35,13 +40,18 @@ export interface ChatProvider {
   embeddings(request: EmbeddingsRequest, ctx: CallContext): Promise<EmbeddingsResult>;
 }
 
+/** Response headers, lower-cased names, first value only. */
+export type HttpHeaders = Readonly<Record<string, string>>;
+
 export interface HttpResponse {
   status: number;
   text: string;
+  headers?: HttpHeaders | undefined;
 }
 
 export interface HttpStreamResponse {
   status: number;
+  headers?: HttpHeaders | undefined;
   /** Reads the whole body as text (used for non-2xx responses). */
   text(): Promise<string>;
   /** Raw body bytes; iteration throws `UpstreamTimeoutError` / `UpstreamNetworkError`. */

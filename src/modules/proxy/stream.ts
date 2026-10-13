@@ -19,9 +19,32 @@ export interface StreamChatArgs {
   admission?: Admission | undefined;
   /** Outcome tracker of the admitted request (spec 006). */
   outcome?: OutcomeTracker | undefined;
+  /** Wire format of the stream; defaults to OpenAI `chat.completion.chunk` SSE. */
+  encoder?: StreamEncoder | undefined;
+}
+
+/** Turns canonical chunks into the SSE format of the route the client called (spec 014). */
+export interface StreamEncoder {
+  chunk(chunk: ChatChunk): string[];
+  /** After the last chunk; `usage` is reported or estimated. */
+  end(usage: Usage): string[];
+  /** The single error event that ends a stream after the first byte (ADR-0008). */
+  error(error: GatewayError): string;
 }
 
 const sseEvent = (payload: unknown) => `data: ${JSON.stringify(payload)}\n\n`;
+
+/** OpenAI SSE: chunks as `data:` events (usage rules of spec 003 AC-7), then `[DONE]`. */
+export function openAiEncoder(clientWantsUsage: boolean): StreamEncoder {
+  return {
+    chunk(chunk) {
+      const forwarded = forwardChunk(chunk, clientWantsUsage);
+      return forwarded ? [sseEvent(forwarded)] : [];
+    },
+    end: () => ["data: [DONE]\n\n"],
+    error: (error) => sseEvent(error.toBody()),
+  };
+}
 
 /**
  * Proxies a streaming chat completion (spec 003).
@@ -38,6 +61,7 @@ export async function streamChat({
   principal,
   admission,
   outcome,
+  encoder: customEncoder,
 }: StreamChatArgs) {
   const controller = new AbortController();
   let clientClosed = false;
@@ -75,7 +99,7 @@ export async function streamChat({
 
   const ttfbMs = upstream.firstChunk();
   const responseModel = first.done ? undefined : modelOf(first.value);
-  const clientWantsUsage = includeUsage(request);
+  const encoder = customEncoder ?? openAiEncoder(includeUsage(request));
 
   reply
     .header("content-type", "text/event-stream; charset=utf-8")
@@ -105,8 +129,7 @@ export async function streamChat({
         const chunk = result.value;
         usage = usageFromChunk(chunk) ?? usage;
         outputChars += deltaText(chunk).length;
-        const forwarded = forwardChunk(chunk, clientWantsUsage);
-        if (forwarded) yield sseEvent(forwarded);
+        yield* encoder.chunk(chunk);
         result = await iterator.next();
       }
       settled = true;
@@ -114,7 +137,7 @@ export async function streamChat({
       upstream.succeed({ usage: final.usage, estimated: final.estimated, responseModel });
       await admission?.reconcile(final.usage.inputTokens + final.usage.outputTokens);
       outcome?.succeed(final);
-      yield "data: [DONE]\n\n";
+      yield* encoder.end(final.usage);
     } catch (error) {
       settled = true;
       await admission?.reconcile(partialTokens());
@@ -127,7 +150,7 @@ export async function streamChat({
       const gatewayError = error instanceof GatewayError ? error : upstreamError(provider.name);
       // Headers (200) are gone: the SSE error event is the error the client sees (ADR-0008).
       outcome?.failMidstream(gatewayError, sofar());
-      yield sseEvent(gatewayError.toBody());
+      yield encoder.error(gatewayError);
     } finally {
       if (!settled) {
         // The response stream was destroyed (client went away) while we were between chunks.

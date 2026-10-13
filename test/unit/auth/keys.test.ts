@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   displayPrefix,
+  extractApiKey,
   generateKey,
   hashKey,
   KEY_PREFIX,
@@ -49,5 +50,21 @@ describe("API key primitives", () => {
     [undefined, undefined],
   ])("parseBearer(%j) → %j", (header, expected) => {
     expect(parseBearer(header)).toBe(expected);
+  });
+});
+
+describe("extractApiKey (spec 014, AC-6)", () => {
+  it.each([
+    [{}, { reason: "missing" }],
+    [{ authorization: "Bearer sk-sy-a" }, { token: "sk-sy-a" }],
+    [{ "x-api-key": "sk-sy-a" }, { token: "sk-sy-a" }],
+    [{ authorization: "Bearer sk-sy-a", "x-api-key": "sk-sy-a" }, { token: "sk-sy-a" }],
+    [{ authorization: "Bearer sk-sy-a", "x-api-key": "sk-sy-b" }, { reason: "malformed" }],
+    [{ authorization: "Basic abc" }, { reason: "malformed" }],
+    [{ authorization: "Basic abc", "x-api-key": "sk-sy-a" }, { reason: "malformed" }],
+    [{ "x-api-key": "  " }, { reason: "malformed" }],
+    [{ "x-api-key": ["sk-sy-a", "sk-sy-b"] }, { reason: "malformed" }],
+  ])("%j → %j", (headers, expected) => {
+    expect(extractApiKey(headers)).toEqual(expected);
   });
 });

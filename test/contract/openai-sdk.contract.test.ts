@@ -10,6 +10,8 @@ import { createLogger } from "../../src/infra/logger.js";
 import { MemoryRateLimiter } from "../../src/infra/memory/rate-limiter.js";
 import { createProviderRegistry } from "../../src/modules/providers/registry.js";
 import { createKeyViaAdmin } from "../helpers/admin.js";
+import { type GatewayUnderTest, startAnthropicGateway } from "../helpers/anthropic-gateway.js";
+import { FAKE_TEXT, type FakeAnthropic, startFakeAnthropic } from "../helpers/fake-anthropic.js";
 import { MemoryKeyStore, TEST_ADMIN_TOKEN, TEST_PEPPER } from "../helpers/memory-key-store.js";
 
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL ?? "http://localhost:11434/v1";
@@ -266,6 +268,109 @@ describe("official OpenAI Node SDK against Switchyard", () => {
     },
     180_000,
   );
+});
+
+describe("official OpenAI Node SDK routed to an Anthropic provider (spec 014, AC-16)", () => {
+  let fake: FakeAnthropic;
+  let gateway: GatewayUnderTest;
+  let anthropicClient: OpenAI;
+
+  beforeAll(async () => {
+    fake = await startFakeAnthropic();
+    gateway = await startAnthropicGateway(fake.url);
+    const key = await createKeyViaAdmin(gateway.origin, TEST_ADMIN_TOKEN);
+    anthropicClient = new OpenAI({ baseURL: `${gateway.origin}/v1`, apiKey: key, maxRetries: 0 });
+  });
+  afterAll(async () => {
+    await gateway?.close();
+    await fake?.close();
+  });
+
+  it("completes a chat", async () => {
+    const res = await anthropicClient.chat.completions.create({
+      model: "smart",
+      messages: [{ role: "user", content: "Say hi" }],
+    });
+    expect(res.choices[0]?.message.content).toBe(FAKE_TEXT);
+    expect(res.choices[0]?.finish_reason).toBe("stop");
+    expect(res.usage?.prompt_tokens_details?.cached_tokens).toBe(3);
+    expect(fake.requests.at(-1)?.body).toMatchObject({ model: "claude-fake", max_tokens: 4096 });
+  });
+
+  it("streams a chat with usage", async () => {
+    const stream = await anthropicClient.chat.completions.create({
+      model: "smart",
+      messages: [{ role: "user", content: "Say hi" }],
+      stream: true,
+      stream_options: { include_usage: true },
+    });
+    let text = "";
+    let usage: OpenAI.CompletionUsage | null | undefined;
+    for await (const chunk of stream) {
+      text += chunk.choices[0]?.delta?.content ?? "";
+      if (chunk.usage) usage = chunk.usage;
+    }
+    expect(text).toBe(FAKE_TEXT);
+    expect(usage?.completion_tokens).toBe(5);
+  });
+
+  it("returns tool calls, streamed and not, and accepts the tool result", async () => {
+    const tools: OpenAI.ChatCompletionTool[] = [
+      {
+        type: "function",
+        function: {
+          name: "get_weather",
+          parameters: { type: "object", properties: { city: { type: "string" } } },
+        },
+      },
+    ];
+    const ask: OpenAI.ChatCompletionMessageParam = { role: "user", content: "Weather in Paris?" };
+    const first = await anthropicClient.chat.completions.create({
+      model: "smart",
+      messages: [ask],
+      tools,
+    });
+    const call = first.choices[0]?.message.tool_calls?.[0];
+    expect(first.choices[0]?.finish_reason).toBe("tool_calls");
+    expect(call?.type === "function" && JSON.parse(call.function.arguments)).toEqual({
+      city: "Paris",
+    });
+
+    const stream = await anthropicClient.chat.completions.create({
+      model: "smart",
+      messages: [ask],
+      tools,
+      stream: true,
+    });
+    let args = "";
+    for await (const chunk of stream) {
+      args += chunk.choices[0]?.delta?.tool_calls?.[0]?.function?.arguments ?? "";
+    }
+    expect(JSON.parse(args)).toEqual({ city: "Paris" });
+
+    if (!call) return;
+    const final = await anthropicClient.chat.completions.create({
+      model: "smart",
+      tools,
+      messages: [
+        ask,
+        first.choices[0]?.message as OpenAI.ChatCompletionMessageParam,
+        { role: "tool", tool_call_id: call.id, content: "18C" },
+      ],
+    });
+    expect(final.choices[0]?.message.content).toBe(FAKE_TEXT);
+    expect(fake.requests.at(-1)?.body.messages).toEqual([
+      { role: "user", content: "Weather in Paris?" },
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "Let me check." },
+          { type: "tool_use", id: call.id, name: "get_weather", input: { city: "Paris" } },
+        ],
+      },
+      { role: "user", content: [{ type: "tool_result", tool_use_id: call.id, content: "18C" }] },
+    ]);
+  });
 });
 
 if (!ollamaChat || !ollamaEmbed) {

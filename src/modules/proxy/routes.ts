@@ -18,6 +18,7 @@ import {
   registerOutcomeFallback,
   type TokenUsage,
 } from "../usage/outcome.js";
+import { registerMessagesRoute } from "./messages.js";
 import { parseChatRequest, parseEmbeddingsRequest } from "./schema.js";
 import { streamChat } from "./stream.js";
 import { tracedUpstreamCall } from "./telemetry.js";
@@ -176,6 +177,16 @@ export async function proxyRoutes(app: FastifyInstance, opts: ProxyRoutesOptions
     } finally {
       reply.header("x-switchyard-upstream-ms", Math.round(performance.now() - started));
     }
+  });
+
+  // Anthropic Messages API (spec 014): same routing, admission and streaming steps.
+  registerMessagesRoute(app, {
+    config: opts.config,
+    route,
+    admit,
+    settle,
+    abortOnClientDisconnect,
+    pii,
   });
 }
 

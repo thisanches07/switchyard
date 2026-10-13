@@ -41,7 +41,7 @@ jobs:
       - run: pnpm test:int
 
   contract-python:
-    name: Contract tests (OpenAI Python SDK)
+    name: Contract tests (OpenAI and Anthropic Python SDKs)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

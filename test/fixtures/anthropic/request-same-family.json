@@ -1,0 +1,73 @@
+{
+  "model": "smart",
+  "max_tokens": 2048,
+  "system": [
+    { "type": "text", "text": "You are a careful assistant." },
+    {
+      "type": "text",
+      "text": "Long reference material that is worth caching.",
+      "cache_control": { "type": "ephemeral" }
+    }
+  ],
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "document",
+          "source": { "type": "text", "media_type": "text/plain", "data": "Quarterly report." },
+          "title": "Q3",
+          "citations": { "enabled": true }
+        },
+        { "type": "text", "text": "What is the weather in Paris?" }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "thinking",
+          "thinking": "The user wants the weather; call the tool.",
+          "signature": "EqQBCgIYAhIM1gbcDa9GJwZA2b3hGgxBdjrkzLoky3dl1pkiMOYds"
+        },
+        { "type": "redacted_thinking", "data": "EmwKAhgBEgy3va3pzix/LafPsn4a" },
+        { "type": "text", "text": "Let me check." },
+        {
+          "type": "tool_use",
+          "id": "toolu_01A",
+          "name": "get_weather",
+          "input": { "city": "Paris", "unit": "celsius", "days": 1.5 }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "toolu_01A",
+          "content": [{ "type": "text", "text": "18C and sunny" }],
+          "cache_control": { "type": "ephemeral" }
+        }
+      ]
+    }
+  ],
+  "tools": [
+    {
+      "name": "get_weather",
+      "description": "Weather for a city",
+      "input_schema": {
+        "type": "object",
+        "properties": { "city": { "type": "string" }, "unit": { "type": "string" } },
+        "required": ["city"]
+      },
+      "cache_control": { "type": "ephemeral" }
+    },
+    { "type": "web_search_20250305", "name": "web_search", "max_uses": 3 }
+  ],
+  "tool_choice": { "type": "auto", "disable_parallel_tool_use": true },
+  "top_k": 40,
+  "temperature": 0.7,
+  "metadata": { "user_id": "user-123" },
+  "thinking": { "type": "adaptive" }
+}

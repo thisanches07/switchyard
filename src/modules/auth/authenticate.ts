@@ -5,7 +5,7 @@ import type { RateLimiter } from "../../core/ratelimit.js";
 import { retryAfterSeconds } from "../ratelimit/headers.js";
 import { bucketKey } from "../ratelimit/plan.js";
 import type { AuthCache } from "./cache.js";
-import { hashKey, KEY_PREFIX, parseBearer } from "./keys.js";
+import { extractApiKey, hashKey, KEY_PREFIX } from "./keys.js";
 import { tagRequestSpan } from "./telemetry.js";
 
 declare module "fastify" {
@@ -81,10 +81,10 @@ export function createAuthenticate(options: AuthenticateOptions) {
   };
 
   return async function authenticate(request: FastifyRequest): Promise<void> {
-    const header = request.headers.authorization;
-    if (!header) throw await reject(request, "missing");
-    const token = parseBearer(header);
-    if (!token?.startsWith(KEY_PREFIX)) throw await reject(request, "malformed");
+    const extracted = extractApiKey(request.headers);
+    if ("reason" in extracted) throw await reject(request, extracted.reason);
+    const { token } = extracted;
+    if (!token.startsWith(KEY_PREFIX)) throw await reject(request, "malformed");
 
     const hash = hashKey(options.pepper, token);
     let record = options.cache.get(hash);

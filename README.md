@@ -73,6 +73,8 @@ Teams shipping LLM features hit the same walls:
 | 🚥 | **Rate limits** in requests and tokens per minute, per key and per team, atomic in Redis (Lua), OpenAI-style `429` + `x-ratelimit-*` | ✅ |
 | 🛠️ | Admin API for teams and keys; OpenAPI document and interactive UI at `/docs` | ✅ |
 | 📨 | **Usage events** through Kafka (Redpanda): never blocks a request, idempotent worker, daily aggregates, DLQ, `GET /admin/usage` | ✅ |
+| 🤖 | **Anthropic (Claude)** adapter: `claude/...` models behind `/v1/chat/completions`, streaming and tools included | ✅ |
+| 🪞 | Anthropic-compatible `POST /v1/messages` for the official Anthropic SDKs, routed to Claude natively or to any other provider | ✅ |
 | 💰 | Monthly budgets with soft and hard limits | 🔜 007 |
 | 🛟 | Fallback, retries with jitter, circuit breakers | 🔜 008 |
 | ⚡ | Exact cache and tenant-scoped semantic cache (pgvector) | 🔜 009 |
@@ -302,7 +304,7 @@ flowchart TD
 
 ### Error contract
 
-Every error, from validation to provider failures, comes back in the OpenAI shape, so SDKs raise their usual typed exceptions (`NotFoundError`, `RateLimitError`, …).
+Every error, from validation to provider failures, comes back in the OpenAI shape, so SDKs raise their usual typed exceptions (`NotFoundError`, `RateLimitError`, …). The one exception is `/v1/messages`, which answers in the [Anthropic shape](#-anthropic-claude) with the same statuses and the `code` below in `error.details.error_code`.
 
 | Situation | Status | `code` |
 |---|:---:|---|
@@ -319,6 +321,9 @@ Every error, from validation to provider failures, comes back in the OpenAI shap
 | Provider 5xx, connection refused, invalid response | 502 | `upstream_error` (provider body never forwarded) |
 | Provider timeout | 504 | `upstream_timeout` |
 | Provider configured without its API key | 503 | `provider_not_configured` |
+| Anthropic rate limit / overloaded (`529`) / rejected operator key | 429 / 503 / 502 | `upstream_rate_limited` / `upstream_overloaded` / `upstream_auth_error` |
+| Parameter the provider cannot honour (e.g. `n > 1` on Claude) | 400 | `unsupported_parameter` |
+| Embeddings on a provider without them (Anthropic) | 400 | `embeddings_not_supported` |
 
 ## ⚙️ Configuration
 
@@ -484,6 +489,58 @@ With `block`, the request gets `400 pii_detected` naming only the types found (`
 
 Detectors use check digits (CPF, CNPJ including the 2026 alphanumeric format), Luhn (cards) and real address parsers (IP), so a random 11-digit number is not a CPF. **Names, addresses and other free text are not detected**, and restoring is best-effort: a model that rewrites `<CPF_1>` as `CPF 1` gets it back unrestored. Original values and the placeholder map live only in the memory of the request: never in logs, spans, metrics, Redis or Postgres. Details: [PII redaction guide](docs/pii.md).
 
+## 🤖 Anthropic (Claude)
+
+Switchyard speaks Anthropic in **both directions** ([spec 014](docs/specs/014-anthropic/spec.md), [ADR-0016](docs/adr/0016-anthropic-messages-compatibility.md)):
+
+```mermaid
+flowchart LR
+  O["OpenAI SDK<br/>/v1/chat/completions"] --> C["canonical request<br/>(keys · limits · telemetry)"]
+  A["Anthropic SDK<br/>/v1/messages"] --> C
+  C -->|claude/...| AN["Anthropic API<br/>POST /v1/messages"]
+  C -->|any other provider| OT["Ollama · Groq · Gemini · mock …"]
+```
+
+**Outbound: Claude behind the OpenAI API.** Add an `anthropic` provider and use `claude/<model>` or an alias:
+
+```yaml
+providers:
+  claude:
+    type: anthropic
+    apiKeyEnv: ANTHROPIC_API_KEY
+    defaultMaxTokens: 4096   # Anthropic requires max_tokens; used when the request sets none
+```
+
+System messages, tools and tool calls, images, `stop`, streaming (with usage) and errors are translated. Usage folds prompt-cache reads and writes into `prompt_tokens` and reports reads in `prompt_tokens_details.cached_tokens`. If answers stop early with `finish_reason: "length"`, raise `defaultMaxTokens` or send `max_tokens`.
+
+**Inbound: the Anthropic SDKs against Switchyard.** Point the SDK at the gateway origin and use your Switchyard key (`x-api-key` and `Authorization: Bearer` are both accepted, on every `/v1` route):
+
+```python
+import os
+import anthropic
+
+client = anthropic.Anthropic(base_url="http://localhost:8080", api_key=os.environ["SWITCHYARD_KEY"])
+message = client.messages.create(model="smart", max_tokens=1024,
+                                 messages=[{"role": "user", "content": "Hi!"}])
+```
+
+`model` resolves exactly like chat (alias or `provider/model`, allow-lists, `x-switchyard-*` headers), every request passes the rate limits with `max_tokens` as its allowance, and responses carry `anthropic-ratelimit-*` headers next to `x-ratelimit-*`. Errors use the Anthropic shape (`{"type":"error","error":{"type","message","details":{"error_code"}},"request_id"}`), so the SDK raises `RateLimitError`, `NotFoundError`, … as usual.
+
+- **Claude models (same family):** the request is sent upstream as the client wrote it (thinking blocks, `cache_control`, documents, citations, server tools, `top_k`, `anthropic-beta`), and the response or SSE stream comes back unchanged except `model`.
+- **Other providers (cross family):** the request is translated; the response is a regular Anthropic `message` (or SSE events) with an `msg_…` id.
+
+**Limitations**
+
+| | |
+|---|---|
+| Thinking through `/v1/chat/completions` | Thinking blocks are **dropped** from OpenAI responses and cannot be sent back. Models with mandatory thinking may reject multi-turn tool loops through the OpenAI API; use `/v1/messages` for those (opt-in live check: `SWITCHYARD_LIVE_ANTHROPIC=1 ANTHROPIC_API_KEY=… pnpm test:contract`). |
+| OpenAI parameters Claude cannot honour | `n > 1`, `logprobs`, `top_logprobs` and `response_format` other than `text` → `400 unsupported_parameter`; `presence_penalty`, `frequency_penalty`, `seed`, `logit_bias` and unknown fields are dropped (listed in the span attribute `switchyard.dropped_params`). |
+| `/v1/messages` on non-Anthropic models | `document` blocks, server tools and images inside `tool_result` → `400`; earlier thinking blocks and `cache_control` are dropped; prompt-cache usage is reported as `0`. |
+| Not provided | `count_tokens`, Message Batches, Files, Models and beta endpoints; Bedrock / Vertex / Foundry. |
+| Embeddings on `anthropic` providers | `400 embeddings_not_supported` |
+
+Upstream `429`, `5xx`, `529` and timeouts are classified as retryable (and `401` from Anthropic as the operator's problem, `502 upstream_auth_error`), ready for fallback in spec 008. `/v1/messages` produces one usage event per admitted request (`operation: "messages"`, with Anthropic `cache_read_input_tokens` as `cachedInputTokens`) and goes through PII redaction like chat: masked text reaches Claude inside the client's own blocks, thinking blocks and documents are forwarded unscanned, and non-streaming answers are restored.
+
 ## 🔭 Observability
 
 Every response tells you what happened:
@@ -538,9 +595,9 @@ pnpm dev:worker      # usage worker in watch mode (needs KAFKA_BROKERS, e.g. loc
 |---|---|
 | `pnpm verify` | Biome lint · strict typecheck · unit tests with **≥ 80% line coverage** on core and modules · build |
 | `pnpm test:int` | Real Postgres, Redis and Redpanda (Testcontainers), real HTTP timeouts and connection failures, the usage pipeline end to end |
-| `pnpm test:contract` | The **official OpenAI Node SDK** against the gateway: chat, streaming, embeddings (mock always; Ollama when running) |
+| `pnpm test:contract` | The **official OpenAI and Anthropic Node SDKs** against the gateway: chat, streaming, embeddings, tools, `/v1/messages` (mock and an in-process fake Anthropic server always; Ollama when running) |
 | `pnpm db:migrate` | Applies database migrations to `DATABASE_URL` (`pnpm db:generate` creates new ones from the Drizzle schema) |
-| `pnpm test:contract:py` | The same with the **official OpenAI Python SDK** (needs `pip install -r test/contract/python/requirements.txt`) |
+| `pnpm test:contract:py` | The same with the **official OpenAI and Anthropic Python SDKs** (needs `pip install -r test/contract/python/requirements.txt`; on Windows, enable long paths or use a short venv path) |
 | `pnpm test:smoke` | Boots the Compose stack: health, readiness, a chat request, rate limits, a request counted in `GET /admin/usage`, bad config, memory budget, graceful SIGTERM |
 
 ```mermaid
@@ -563,8 +620,9 @@ src/
 ├─ core/                canonical types, ports and errors (no infra imports)
 ├─ modules/
 │  ├─ health/           /healthz, /readyz
-│  ├─ proxy/            /v1/chat/completions, /v1/models, upstream telemetry
-│  ├─ providers/        openai-compatible, mock, registry
+│  ├─ proxy/            /v1/chat/completions, /v1/messages, /v1/models, upstream telemetry
+│  ├─ anthropic/        pure Anthropic ↔ canonical translation (requests, responses, SSE, errors)
+│  ├─ providers/        openai-compatible, anthropic, mock, registry
 │  ├─ routing/          alias and model resolution
 │  └─ usage/            request-outcome hook, usage publisher, worker batches, usage reports
 └─ infra/               undici HTTP client, Postgres, Redis, Kafka, logger, OpenTelemetry
@@ -601,6 +659,7 @@ Each spec ends with a verification table, for example [spec 002](docs/specs/002-
 - [x] [006](docs/specs/006-usage-pipeline/spec.md) Usage events pipeline: one event per request, Kafka (Redpanda), idempotent worker, daily aggregates, DLQ, `GET /admin/usage`
 - [ ] 007 Budgets and cost accounting
 - [ ] 008 Fallback, retries and circuit breakers
+- [x] [014](docs/specs/014-anthropic/spec.md) Anthropic adapter and `/v1/messages`: Claude behind the OpenAI API, the Anthropic SDKs in front of any provider
 
 **v0.2: savings and safety:** exact and semantic cache, PII redaction
 
