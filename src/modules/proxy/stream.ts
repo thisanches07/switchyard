@@ -1,21 +1,32 @@
 import { Readable } from "node:stream";
-import type { FastifyBaseLogger, FastifyReply } from "fastify";
-import type { Principal } from "../../core/auth.js";
+import type { FastifyReply } from "fastify";
 import type { ChatChunk, ChatRequest, Usage } from "../../core/chat.js";
 import { GatewayError, upstreamError } from "../../core/errors.js";
 import type { ChatProvider } from "../../core/provider.js";
 import type { Admission } from "../ratelimit/admission.js";
+import type { Candidate } from "../routing/resolve.js";
 import type { OutcomeTracker } from "../usage/outcome.js";
-import { startUpstreamSpan } from "./telemetry.js";
+import type { Served } from "./attempts.js";
 import { deltaText, estimateTokens, forwardChunk, messageChars, usageFromChunk } from "./usage.js";
+
+/** A candidate's stream, open and with its first chunk read (the retry boundary, ADR-0008). */
+export interface OpenedStream {
+  iterator: AsyncIterator<ChatChunk>;
+  first: IteratorResult<ChatChunk>;
+}
+
+export type OpenStream = (
+  provider: ChatProvider,
+  candidate: Candidate,
+  ctx: { signal: AbortSignal },
+) => Promise<OpenedStream>;
 
 export interface StreamChatArgs {
   reply: FastifyReply;
-  provider: ChatProvider;
-  /** Request already rewritten with the resolved model. */
+  /** Canonical request; each attempt sends it with its candidate's model. */
   request: ChatRequest;
-  logger: FastifyBaseLogger;
-  principal?: Principal | undefined;
+  /** Runs the attempt loop (spec 008) with `open` as the attempt, until the first chunk. */
+  attempt(open: OpenStream, signal: AbortSignal): Promise<Served<OpenedStream>>;
   admission?: Admission | undefined;
   /** Outcome tracker of the admitted request (spec 006). */
   outcome?: OutcomeTracker | undefined;
@@ -49,16 +60,15 @@ export function openAiEncoder(clientWantsUsage: boolean): StreamEncoder {
 /**
  * Proxies a streaming chat completion (spec 003).
  *
- * Failures before the first chunk throw (JSON error via the app error handler). Once the first
- * chunk is in hand, headers are sent and the rest is piped with backpressure; a failure from then
- * on becomes an SSE error event and is never retried (ADR-0008).
+ * Every attempt (spec 008) opens a candidate's stream and reads its first chunk; failures up to
+ * there are retried or fall back, and if all fail the error is thrown (JSON error via the app
+ * error handler). Once the first chunk is in hand, headers are sent and the rest is piped with
+ * backpressure; a failure from then on becomes an SSE error event and is never retried (ADR-0008).
  */
 export async function streamChat({
   reply,
-  provider,
   request,
-  logger,
-  principal,
+  attempt,
   admission,
   outcome,
   encoder: customEncoder,
@@ -71,25 +81,14 @@ export async function streamChat({
     controller.abort();
   });
 
-  const upstream = startUpstreamSpan({
-    provider,
-    model: request.model,
-    logger,
-    stream: true,
-    principal,
-  });
-
-  let iterator: AsyncIterator<ChatChunk>;
-  let first: IteratorResult<ChatChunk>;
+  let served: Served<OpenedStream>;
   try {
-    const stream = await upstream.run(() =>
-      provider.chatStream(request, { signal: controller.signal }),
-    );
-    iterator = stream[Symbol.asyncIterator]();
-    first = await upstream.run(() => iterator.next());
+    served = await attempt(async (provider, candidate, ctx) => {
+      const stream = await provider.chatStream({ ...request, model: candidate.model }, ctx);
+      const iterator = stream[Symbol.asyncIterator]();
+      return { iterator, first: await iterator.next() };
+    }, controller.signal);
   } catch (error) {
-    if (clientClosed) upstream.clientGone();
-    else upstream.fail(error, "before_first_byte");
     // Nothing was generated: the whole token reservation goes back (spec 005, AC-6).
     await admission?.reconcile(undefined);
     if (clientClosed) outcome?.clientClosed({ headersSent: false });
@@ -97,6 +96,8 @@ export async function streamChat({
     throw error;
   }
 
+  const { upstream, provider } = served;
+  const { iterator, first } = served.value;
   const ttfbMs = upstream.firstChunk();
   const responseModel = first.done ? undefined : modelOf(first.value);
   const encoder = customEncoder ?? openAiEncoder(includeUsage(request));
@@ -135,6 +136,7 @@ export async function streamChat({
       settled = true;
       const final = sofar();
       upstream.succeed({ usage: final.usage, estimated: final.estimated, responseModel });
+      served.completed();
       await admission?.reconcile(final.usage.inputTokens + final.usage.outputTokens);
       outcome?.succeed(final);
       yield* encoder.end(final.usage);
@@ -143,10 +145,13 @@ export async function streamChat({
       await admission?.reconcile(partialTokens());
       if (clientClosed) {
         upstream.clientGone();
+        served.completed();
         outcome?.clientClosed({ headersSent: true, ...sofar() });
         return;
       }
       upstream.fail(error, "midstream");
+      // Never retried, but counted against the candidate's breaker (AC-6, ADR-0008).
+      served.midstreamFailed();
       const gatewayError = error instanceof GatewayError ? error : upstreamError(provider.name);
       // Headers (200) are gone: the SSE error event is the error the client sees (ADR-0008).
       outcome?.failMidstream(gatewayError, sofar());
@@ -156,6 +161,7 @@ export async function streamChat({
         // The response stream was destroyed (client went away) while we were between chunks.
         controller.abort();
         upstream.clientGone();
+        served.completed();
         await admission?.reconcile(partialTokens());
         outcome?.clientClosed({ headersSent: true, ...sofar() });
         await iterator.return?.();

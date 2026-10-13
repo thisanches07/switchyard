@@ -55,8 +55,8 @@ export function splitModelRef(ref: string): { provider: string; model: string } 
 }
 
 /**
- * Resolves a client `model` to a provider. Aliases use their first candidate;
- * fallback across candidates arrives with spec 008.
+ * Resolves a client `model` to one provider: an alias's first candidate. Requests are routed with
+ * `planRoute` (every candidate, spec 008); this is kept for single-target lookups.
  */
 export function resolveModel(model: string, config: RoutingConfig): ResolvedModel | undefined {
   const alias = config.aliases[model];

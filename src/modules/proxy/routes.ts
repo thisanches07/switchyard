@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { LoadedConfig } from "../../config/load.js";
-import { internalError, modelNotAllowed, modelNotFound } from "../../core/errors.js";
+import { modelNotAllowed, modelNotFound } from "../../core/errors.js";
+import type { TokenCounts } from "../../core/pricing.js";
 import type { ChatProvider } from "../../core/provider.js";
 import type { UsageOperation } from "../../core/usage.js";
 import { type AuthenticateOptions, createAuthenticate } from "../auth/authenticate.js";
@@ -10,19 +11,24 @@ import { docs } from "../docs.js";
 import { restoreChatResponse } from "../pii/restore.js";
 import { createPiiStage } from "../pii/stage.js";
 import type { Admission, AdmissionService } from "../ratelimit/admission.js";
-import { estimateChatTokens, estimateEmbeddingTokens } from "../ratelimit/estimate.js";
+import {
+  estimateChatTokenCounts,
+  estimateChatTokens,
+  estimateEmbeddingTokens,
+} from "../ratelimit/estimate.js";
 import { listModels } from "../routing/models.js";
-import { type ResolvedModel, resolveModel } from "../routing/resolve.js";
+import { type Candidate, planRoute, type RoutePlan } from "../routing/resolve.js";
 import {
   type OutcomeHook,
   type OutcomeTracker,
   registerOutcomeFallback,
   type TokenUsage,
 } from "../usage/outcome.js";
+import { type RoutingDeps, runAttempts, type Served } from "./attempts.js";
 import { registerMessagesRoute } from "./messages.js";
 import { parseChatRequest, parseEmbeddingsRequest } from "./schema.js";
 import { streamChat } from "./stream.js";
-import { tracedUpstreamCall } from "./telemetry.js";
+import type { UpstreamOutcome } from "./telemetry.js";
 import { estimateChatUsage } from "./usage.js";
 
 export interface ProxyRoutesOptions {
@@ -34,9 +40,30 @@ export interface ProxyRoutesOptions {
   budgets: BudgetCheck;
   /** Request-outcome hook (spec 006): one usage event per admitted request. */
   outcomes: OutcomeHook;
+  /** Breakers, latency, clock and prices for routing (spec 008). */
+  routing: RoutingDeps;
   /** Gateway start time in seconds, reported as `created` in /v1/models. */
   startedAt: number;
 }
+
+/** One routed call: the attempt loop for a planned request (spec 008). */
+export interface AttemptOptions<T> {
+  stream: boolean;
+  operation?: "chat" | "embeddings";
+  /** Token estimate for `lowest-cost`. */
+  estimate?: TokenCounts | undefined;
+  /** Aborts when the client disconnects. */
+  signal: AbortSignal;
+  call(provider: ChatProvider, candidate: Candidate, ctx: { signal: AbortSignal }): Promise<T>;
+  describe?: ((value: T) => UpstreamOutcome) | undefined;
+}
+
+export type AttemptFn = <T>(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  plan: RoutePlan,
+  options: AttemptOptions<T>,
+) => Promise<Served<T>>;
 
 export async function proxyRoutes(app: FastifyInstance, opts: ProxyRoutesOptions): Promise<void> {
   // Every /v1 route requires a valid key (spec 004); health routes live outside this plugin.
@@ -46,32 +73,69 @@ export async function proxyRoutes(app: FastifyInstance, opts: ProxyRoutesOptions
   // PII mask/block (spec 010): after admission, before the cache and any provider.
   const pii = createPiiStage(opts.config.pii);
 
-  /** Resolves the model, checks the key may use it, picks the provider and sets headers. */
-  function route(
-    model: string,
-    request: FastifyRequest,
-    reply: FastifyReply,
-  ): [ResolvedModel, ChatProvider] {
-    const resolved = resolveModel(model, opts.config);
-    if (!resolved) throw modelNotFound(model);
-    const ref = `${resolved.provider}/${resolved.model}`;
-    if (!isModelAllowed(allowedModels(request), model, ref)) throw modelNotAllowed(model);
-    const provider = opts.providers.get(resolved.provider);
-    if (!provider) throw internalError();
-    reply.header("x-switchyard-provider", resolved.provider);
-    reply.header("x-switchyard-model", resolved.model);
-    return [resolved, provider];
+  /**
+   * Resolves the model to its candidates and keeps those the key may use (spec 008, AC-1: the
+   * spec 004 rule per candidate). 404 for unknown models, 403 when no candidate is allowed.
+   */
+  function route(model: string, request: FastifyRequest): RoutePlan {
+    const plan = planRoute(model, opts.config);
+    if (!plan) throw modelNotFound(model);
+    const allowed = allowedModels(request);
+    const candidates = plan.candidates.filter((c) => isModelAllowed(allowed, model, c.ref));
+    if (candidates.length === 0) throw modelNotAllowed(model);
+    return { ...plan, candidates };
   }
+
+  /**
+   * Runs the attempt loop (spec 008). Before every attempt the response headers and the usage
+   * event name the candidate and the attempt count (AC-10): the served one on success, the last
+   * one tried on error, none (attempts 0) when no attempt was made.
+   */
+  const attempt: AttemptFn = (request, reply, plan, options) =>
+    runAttempts({
+      plan,
+      providers: opts.providers,
+      settings: { retry: opts.config.retry, totalMs: opts.config.server.timeouts.totalMs },
+      deps: opts.routing,
+      signal: options.signal,
+      estimate: options.estimate,
+      telemetry: {
+        logger: request.log,
+        stream: options.stream,
+        principal: request.principal,
+        ...(options.operation && { operation: options.operation }),
+      },
+      call: options.call,
+      describe: options.describe,
+      report(candidate, attempts) {
+        reply.header("x-switchyard-attempts", attempts);
+        if (candidate) {
+          reply.header("x-switchyard-provider", candidate.provider);
+          reply.header("x-switchyard-model", candidate.model);
+        }
+        request.outcome?.set({
+          provider: candidate?.provider ?? null,
+          servedModel: candidate?.model ?? null,
+          attempts,
+        });
+      },
+    });
 
   /**
    * Rate-limit admission (spec 005); sets x-ratelimit-* headers or throws 429/400/503.
    * An admitted request starts its outcome tracker (spec 006): from here on it yields one event.
+   * `resolved` is the first candidate; the attempt loop reports the one actually used.
    */
   async function admit(
     request: FastifyRequest,
     reply: FastifyReply,
     estimate: number,
-    usage: { operation: UsageOperation; stream: boolean; model: string; resolved: ResolvedModel },
+    usage: {
+      operation: UsageOperation;
+      stream: boolean;
+      model: string;
+      resolved: { provider: string; model: string };
+    },
   ) {
     if (!request.principal) return undefined;
     // Spec 007: budgets first, so an exhausted budget debits no rate-limit unit (AC-6).
@@ -108,51 +172,55 @@ export async function proxyRoutes(app: FastifyInstance, opts: ProxyRoutesOptions
     const list = listModels(opts.config, opts.startedAt);
     const allowed = allowedModels(request);
     if (!allowed || allowed.length === 0) return list;
-    const data = list.data.filter((m) => {
-      const resolved = resolveModel(m.id, opts.config);
-      return resolved && isModelAllowed(allowed, m.id, `${resolved.provider}/${resolved.model}`);
-    });
+    // An alias is listed when any of its candidates is allowed (spec 008, AC-1).
+    const data = list.data.filter((m) =>
+      planRoute(m.id, opts.config)?.candidates.some((c) => isModelAllowed(allowed, m.id, c.ref)),
+    );
     return { ...list, data };
   });
 
   app.post("/v1/chat/completions", { schema: docs.chatCompletions }, async (request, reply) => {
     const body = parseChatRequest(request.body);
-    const [resolved, provider] = route(body.model, request, reply);
+    const plan = route(body.model, request);
     const stream = body.stream === true;
-    const admission = await admit(
-      request,
-      reply,
-      estimateChatTokens(body, opts.config.limits.completionReserveTokens),
-      { operation: "chat", stream, model: body.model, resolved },
-    );
+    const reserve = opts.config.limits.completionReserveTokens;
+    const admission = await admit(request, reply, estimateChatTokens(body, reserve), {
+      operation: "chat",
+      stream,
+      model: body.model,
+      resolved: plan.candidates[0] as Candidate,
+    });
     const masked = await pii.chat({ request, reply, admission, stream }, body);
-    const upstreamRequest = { ...masked.body, model: resolved.model };
+    const estimate = estimateChatTokenCounts(body, reserve);
 
     if (stream) {
       return streamChat({
         reply,
-        provider,
-        request: upstreamRequest,
-        logger: request.log,
-        principal: request.principal,
+        request: masked.body,
         admission,
         outcome: request.outcome,
+        attempt: (call, signal) =>
+          attempt(request, reply, plan, { stream: true, estimate, signal, call }),
       });
     }
 
     const signal = abortOnClientDisconnect(reply);
     const started = performance.now();
     try {
-      const result = await settle(
+      const served = await settle(
         { admission, outcome: request.outcome, signal },
-        tracedUpstreamCall(
-          { provider, model: resolved.model, logger: request.log, principal: request.principal },
-          () => provider.chat(upstreamRequest, { signal }),
-        ),
-        (r) => r.usage,
-        (r) => estimateChatUsage(upstreamRequest, r.body),
+        attempt(request, reply, plan, {
+          stream: false,
+          estimate,
+          signal,
+          call: (provider, candidate, ctx) =>
+            provider.chat({ ...masked.body, model: candidate.model }, ctx),
+          describe: (result) => result,
+        }),
+        (s) => s.value.usage,
+        (s) => estimateChatUsage(masked.body, s.value.body),
       );
-      return restoreChatResponse(result.body, masked.restore);
+      return restoreChatResponse(served.value.body, masked.restore);
     } finally {
       reply.header("x-switchyard-upstream-ms", Math.round(performance.now() - started));
     }
@@ -160,35 +228,34 @@ export async function proxyRoutes(app: FastifyInstance, opts: ProxyRoutesOptions
 
   app.post("/v1/embeddings", { schema: docs.embeddings }, async (request, reply) => {
     const body = parseEmbeddingsRequest(request.body);
-    const [resolved, provider] = route(body.model, request, reply);
+    const plan = route(body.model, request);
     const inputEstimate = estimateEmbeddingTokens(body.input);
     const admission = await admit(request, reply, inputEstimate, {
       operation: "embeddings",
       stream: false,
       model: body.model,
-      resolved,
+      resolved: plan.candidates[0] as Candidate,
     });
     const masked = await pii.embeddings({ request, reply, admission }, body);
 
     const signal = abortOnClientDisconnect(reply);
     const started = performance.now();
     try {
-      const result = await settle(
+      const served = await settle(
         { admission, outcome: request.outcome, signal },
-        tracedUpstreamCall(
-          {
-            provider,
-            model: resolved.model,
-            logger: request.log,
-            operation: "embeddings",
-            principal: request.principal,
-          },
-          () => provider.embeddings({ ...masked.body, model: resolved.model }, { signal }),
-        ),
-        (r) => r.usage && { inputTokens: r.usage.inputTokens, outputTokens: 0 },
+        attempt(request, reply, plan, {
+          stream: false,
+          operation: "embeddings",
+          estimate: { inputTokens: inputEstimate, outputTokens: 0 },
+          signal,
+          call: (provider, candidate, ctx) =>
+            provider.embeddings({ ...masked.body, model: candidate.model }, ctx),
+          describe: (result) => result,
+        }),
+        (s) => s.value.usage && { inputTokens: s.value.usage.inputTokens, outputTokens: 0 },
         () => ({ inputTokens: inputEstimate, outputTokens: 0 }),
       );
-      return result.body;
+      return served.value.body;
     } finally {
       reply.header("x-switchyard-upstream-ms", Math.round(performance.now() - started));
     }
@@ -197,7 +264,9 @@ export async function proxyRoutes(app: FastifyInstance, opts: ProxyRoutesOptions
   // Anthropic Messages API (spec 014): same routing, admission and streaming steps.
   registerMessagesRoute(app, {
     config: opts.config,
+    providers: opts.providers,
     route,
+    attempt,
     admit,
     settle,
     abortOnClientDisconnect,

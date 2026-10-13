@@ -15,6 +15,15 @@ export function estimateChatTokens(request: ChatRequest, completionReserve: numb
   return estimateTokens(messageChars(request)) + completion;
 }
 
+/** The same estimate split into input and output, for `lowest-cost` routing (spec 008, AC-2). */
+export function estimateChatTokenCounts(request: ChatRequest, completionReserve: number) {
+  const inputTokens = estimateTokens(messageChars(request));
+  return {
+    inputTokens,
+    outputTokens: estimateChatTokens(request, completionReserve) - inputTokens,
+  };
+}
+
 /** Tokens reserved for an embeddings request: input only (no completion). */
 export function estimateEmbeddingTokens(input: unknown): number {
   if (typeof input === "string") return estimateTokens(input.length);

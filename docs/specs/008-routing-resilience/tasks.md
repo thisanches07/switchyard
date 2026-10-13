@@ -3,7 +3,7 @@
 - **Status:** In progress
 - **Spec:** [spec.md](spec.md) · **Design:** [design.md](design.md)
 
-One commit per task, ending in `[spec-008]`. `pnpm verify` green after each.
+One commit per task, ending in `[spec-008]`. `pnpm verify` green after each. T7–T9 landed in one commit: the shared `route()`/`streamChat` contract changed for all three routes at once, so no smaller step compiled.
 
 - [x] **T1. Config and core groundwork**
   - ACs: AC-1 (config keys), AC-2 (cost port), AC-9 (error)
@@ -36,17 +36,17 @@ One commit per task, ending in `[spec-008]`. `pnpm verify` green after each.
   - Test: `test/unit/proxy/attempts.test.ts` › fallback, wrap-around, maxAttempts total, non-retryable at once, backoff only on repeats with Retry-After floor, last error, client abort stops, total budget (504, backoff longer than budget), single half-open probe, no_healthy_upstream with retry-after; `test/unit/proxy/attempts-telemetry.test.ts` › attempt spans and counters, requests_total once per request.
   - Files: `src/modules/proxy/{attempts,telemetry}.ts`, `test/helpers/routing.ts` (manual clock, seeded RNG)
 
-- [ ] **T7. Chat and embeddings through the attempt loop**
+- [x] **T7. Chat and embeddings through the attempt loop**
   - ACs: AC-1, AC-2, AC-3, AC-5, AC-9, AC-10
   - Test: `test/unit/proxy/routing.test.ts` › allowed-models per candidate (403, filtered candidates), fallback headers and usage event attempts, 502/504/429 after all attempts, 503 no_healthy_upstream with attempts 0, lowest-cost with a fake estimator, embeddings fallback.
   - Files: `src/modules/proxy/routes.ts`, `src/modules/routing/models.ts`, `src/app.ts`, `test/helpers/app.ts`
 
-- [ ] **T8. Streaming through the attempt loop**
+- [x] **T8. Streaming through the attempt loop**
   - ACs: AC-6, AC-8, AC-10
   - Test: `test/unit/proxy/routing-stream.test.ts` › fallback before the first chunk gives one clean stream, mid-stream failure not retried and counted against the breaker, headers and usage event.
   - Files: `src/modules/proxy/{stream,routes}.ts`
 
-- [ ] **T9. `/v1/messages` through the attempt loop**
+- [x] **T9. `/v1/messages` through the attempt loop**
   - ACs: AC-1, AC-3, AC-6, AC-10
   - Test: `test/unit/proxy/messages-routing.test.ts` › fallback (stream and not), mixed-family alias with blockers drops non-anthropic candidates, Anthropic-shaped 503.
   - Files: `src/modules/proxy/messages.ts`

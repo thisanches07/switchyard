@@ -39,6 +39,8 @@ import { healthRoutes } from "./modules/health/routes.js";
 import { PriceTable, priceEvent } from "./modules/pricing/table.js";
 import { proxyRoutes } from "./modules/proxy/routes.js";
 import { countRejection, createAdmission } from "./modules/ratelimit/admission.js";
+import { CandidateHealthRegistry } from "./modules/routing/health.js";
+import { systemTimers, type Timers } from "./modules/routing/timers.js";
 import { createOutcomeHook } from "./modules/usage/outcome.js";
 import { fanOut, noopRecorder } from "./modules/usage/recorders.js";
 
@@ -70,6 +72,8 @@ export interface AppDeps {
   clock?: () => number;
   bodyLimitBytes?: number;
   readinessTimeoutMs?: number;
+  /** Clock and randomness for retries and breakers (spec 008); tests inject deterministic ones. */
+  routing?: { timers?: Timers; random?: () => number } | undefined;
 }
 
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
@@ -163,12 +167,21 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     ...(deps.clock ? { now: deps.clock } : {}),
   });
 
+  // Breaker and latency state per candidate, in memory per instance (spec 008).
+  const health = new CandidateHealthRegistry({ settings: () => deps.config, logger: deps.logger });
+
   await app.register(proxyRoutes, {
     config: deps.config,
     providers: deps.providers,
     admission,
     budgets: budgets.check,
     outcomes,
+    routing: {
+      health,
+      timers: deps.routing?.timers ?? systemTimers,
+      random: deps.routing?.random ?? Math.random,
+      costEstimator: deps.costEstimator,
+    },
     auth: {
       store: deps.keyStore,
       pepper: deps.keyPepper,
