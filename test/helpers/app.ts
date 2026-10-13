@@ -3,7 +3,9 @@ import { buildApp } from "../../src/app.js";
 import type { LoadedConfig } from "../../src/config/load.js";
 import type { DependencyCheck } from "../../src/core/health.js";
 import type { ChatProvider } from "../../src/core/provider.js";
+import type { RateLimiter } from "../../src/core/ratelimit.js";
 import { createLogger } from "../../src/infra/logger.js";
+import { MemoryRateLimiter } from "../../src/infra/memory/rate-limiter.js";
 import { createProviderRegistry } from "../../src/modules/providers/registry.js";
 import { testConfig } from "./config.js";
 import { fakeHttp, jsonResponse } from "./http.js";
@@ -17,6 +19,7 @@ export interface TestAppOptions {
   providers?: ReadonlyMap<string, ChatProvider>;
   bodyLimitBytes?: number;
   store?: MemoryKeyStore;
+  limiter?: RateLimiter;
   adminToken?: string;
   /**
    * Default true: `app.inject` adds `Authorization: Bearer <test key>` unless the request sets
@@ -38,6 +41,7 @@ export async function testApp(options: TestAppOptions = {}) {
     config,
     providers,
     keyStore: store,
+    rateLimiter: options.limiter ?? new MemoryRateLimiter(),
     keyPepper: TEST_PEPPER,
     ...(options.adminToken === undefined ? {} : { adminToken: options.adminToken }),
     ...(options.bodyLimitBytes === undefined ? {} : { bodyLimitBytes: options.bodyLimitBytes }),

@@ -12,13 +12,22 @@ export class GatewayError extends Error {
   readonly status: number;
   readonly type: string;
   readonly code: string;
+  /** Extra response headers (e.g. retry-after and x-ratelimit-* on 429). */
+  readonly headers: Readonly<Record<string, string>>;
 
-  constructor(status: number, type: string, code: string, message: string) {
+  constructor(
+    status: number,
+    type: string,
+    code: string,
+    message: string,
+    headers: Record<string, string> = {},
+  ) {
     super(message);
     this.name = "GatewayError";
     this.status = status;
     this.type = type;
     this.code = code;
+    this.headers = headers;
   }
 
   toBody(): OpenAiErrorBody {
@@ -107,3 +116,34 @@ export const notFound = (entity: string, id: string) =>
   new GatewayError(404, INVALID, "not_found", `${entity} "${id}" not found`);
 
 export const conflict = (message: string) => new GatewayError(409, INVALID, "conflict", message);
+
+/** 429 in the OpenAI shape: `type` is the limited dimension, as OpenAI reports it (spec 005). */
+export const rateLimited = (
+  kind: "requests" | "tokens",
+  scope: string,
+  limit: number,
+  headers: Record<string, string>,
+) =>
+  new GatewayError(
+    429,
+    kind,
+    "rate_limit_exceeded",
+    `Rate limit reached for ${kind} (${scope} limit: ${limit} per minute). Retry after the time in retry-after.`,
+    headers,
+  );
+
+export const requestTooLargeForLimit = (scope: string, capacity: number) =>
+  new GatewayError(
+    400,
+    INVALID,
+    "request_too_large_for_limit",
+    `This request needs more tokens than the ${scope} limit allows per minute (${capacity}). Lower max_tokens or the input size.`,
+  );
+
+export const rateLimiterUnavailable = () =>
+  new GatewayError(
+    503,
+    SERVER,
+    "rate_limiter_unavailable",
+    "Rate limiter unavailable; try again later",
+  );

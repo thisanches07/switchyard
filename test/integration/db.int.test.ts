@@ -70,7 +70,7 @@ describe("Postgres: migrations and DrizzleKeyStore", () => {
       revokedAt: null,
     });
     expect(created).not.toHaveProperty("hash");
-    expect(await store.findKeyByHash(hash)).toEqual(created);
+    expect(await store.findKeyByHash(hash)).toEqual({ key: created, team });
     expect(await store.findKeyByHash("b".repeat(64))).toBeUndefined();
     expect((await store.listKeys(team.id)).map((k) => k.id)).toEqual([created.id]);
   });
@@ -92,5 +92,57 @@ describe("Postgres: migrations and DrizzleKeyStore", () => {
     expect(second?.revokedAt).toEqual(first?.revokedAt);
     expect(await store.revokeKey("00000000-0000-0000-0000-000000000000")).toBeUndefined();
     expect(await store.revokeKey("nope")).toBeUndefined();
+  });
+
+  it("stores per-minute limits on teams and keys and joins them for auth (spec 005)", async () => {
+    const team = await store.createTeam("limited", { rpm: 600, tpm: null });
+    expect(team).toMatchObject({ rpm: 600, tpm: null });
+    const key = await store.createKey({
+      teamId: team.id,
+      name: "app",
+      hash: "d".repeat(64),
+      prefix: "sk-sy-dddd",
+      allowedModels: null,
+      expiresAt: null,
+      rpm: 60,
+      tpm: 10_000,
+    });
+    expect(key).toMatchObject({ rpm: 60, tpm: 10_000 });
+    expect(await store.findKeyByHash("d".repeat(64))).toMatchObject({
+      key: { id: key.id, rpm: 60, tpm: 10_000 },
+      team: { id: team.id, rpm: 600, tpm: null },
+    });
+  });
+
+  it("updates and clears limits; omitted fields stay unchanged", async () => {
+    const team = await store.createTeam("patchable");
+    const key = await store.createKey({
+      teamId: team.id,
+      name: "app",
+      hash: "e".repeat(64),
+      prefix: "sk-sy-eeee",
+      allowedModels: null,
+      expiresAt: null,
+      rpm: 10,
+      tpm: 100,
+    });
+    expect(await store.updateKeyLimits(key.id, { rpm: 20 })).toMatchObject({ rpm: 20, tpm: 100 });
+    expect(await store.updateKeyLimits(key.id, { tpm: null })).toMatchObject({
+      rpm: 20,
+      tpm: null,
+    });
+    expect(await store.updateTeamLimits(team.id, { tpm: 5_000 })).toMatchObject({
+      rpm: null,
+      tpm: 5_000,
+    });
+    expect(
+      await store.updateKeyLimits("00000000-0000-0000-0000-000000000000", { rpm: 1 }),
+    ).toBeUndefined();
+    expect(await store.updateTeamLimits("nope", { rpm: 1 })).toBeUndefined();
+  });
+
+  it("rejects non-positive limits at the database level", async () => {
+    const team = await store.createTeam("checked");
+    await expect(store.updateTeamLimits(team.id, { rpm: 0 })).rejects.toThrow();
   });
 });

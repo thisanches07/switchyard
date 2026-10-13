@@ -4,6 +4,7 @@
 
 server:
   bodyLimitBytes: 1048576
+  trustProxy: false            # true only behind a trusted reverse proxy (X-Forwarded-For)
   timeouts:
     connectMs: 5000
     ttfbMs: 30000
@@ -42,6 +43,14 @@ aliases:
   embed:
     strategy: priority
     candidates: [ollama/nomic-embed-text]   # 768 dims (ADR-0005)
+
+limits:                        # spec 005: per-minute limits enforced in Redis
+  defaults:                    # for keys without their own rpm/tpm; remove for unlimited
+    rpm: 60
+    tpm: 100000
+  completionReserveTokens: 512 # reserved per request when max_tokens is not set
+  onRedisError: open           # open: keep serving if Redis is down; closed: return 503
+  authFailuresPerMinutePerIp: 30
 
 retry:
   maxAttempts: 3

@@ -10,6 +10,7 @@ import type { LoadedConfig } from "../src/config/load.js";
 import { configSchema } from "../src/config/schema.js";
 import { createUndiciClient } from "../src/infra/http/undici-client.js";
 import { createLogger } from "../src/infra/logger.js";
+import { MemoryRateLimiter } from "../src/infra/memory/rate-limiter.js";
 import { createProviderRegistry } from "../src/modules/providers/registry.js";
 import { createKeyViaAdmin } from "../test/helpers/admin.js";
 import { MemoryKeyStore, TEST_ADMIN_TOKEN, TEST_PEPPER } from "../test/helpers/memory-key-store.js";
@@ -53,6 +54,7 @@ const app = await buildApp({
   checks: [],
   config,
   providers: createProviderRegistry(config, {}, { http }),
+  rateLimiter: new MemoryRateLimiter(),
   keyStore: store,
   keyPepper: TEST_PEPPER,
   adminToken: TEST_ADMIN_TOKEN,
@@ -61,6 +63,11 @@ await app.listen({ port: 0, host: "127.0.0.1" });
 const { port } = app.server.address() as AddressInfo;
 // Spec 004, AC-11: the SDK authenticates with a key issued through the admin API.
 const key = await createKeyViaAdmin(`http://127.0.0.1:${port}`, TEST_ADMIN_TOKEN);
+// Spec 005: a key limited to one request per minute.
+const limitedKey = await createKeyViaAdmin(`http://127.0.0.1:${port}`, TEST_ADMIN_TOKEN, {
+  team: "limited",
+  rpm: 1,
+});
 
 const root = resolve(import.meta.dirname, "..");
 const code = await new Promise<number>((done) => {
@@ -71,6 +78,7 @@ const code = await new Promise<number>((done) => {
       ...process.env,
       SWITCHYARD_BASE_URL: `http://127.0.0.1:${port}/v1`,
       SWITCHYARD_API_KEY: key,
+      SWITCHYARD_LIMITED_KEY: limitedKey,
       OLLAMA_CHAT: has(OLLAMA_MODEL) ? "1" : "0",
       OLLAMA_EMBED: has(OLLAMA_EMBED_MODEL) ? "1" : "0",
     },

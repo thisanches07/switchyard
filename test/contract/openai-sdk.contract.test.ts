@@ -7,6 +7,7 @@ import type { LoadedConfig } from "../../src/config/load.js";
 import { configSchema } from "../../src/config/schema.js";
 import { createUndiciClient } from "../../src/infra/http/undici-client.js";
 import { createLogger } from "../../src/infra/logger.js";
+import { MemoryRateLimiter } from "../../src/infra/memory/rate-limiter.js";
 import { createProviderRegistry } from "../../src/modules/providers/registry.js";
 import { createKeyViaAdmin } from "../helpers/admin.js";
 import { MemoryKeyStore, TEST_ADMIN_TOKEN, TEST_PEPPER } from "../helpers/memory-key-store.js";
@@ -58,6 +59,7 @@ describe("official OpenAI Node SDK against Switchyard", () => {
       checks: [],
       config,
       providers: createProviderRegistry(config, {}, { http }),
+      rateLimiter: new MemoryRateLimiter(),
       keyStore: store,
       keyPepper: TEST_PEPPER,
       adminToken: TEST_ADMIN_TOKEN,
@@ -98,6 +100,24 @@ describe("official OpenAI Node SDK against Switchyard", () => {
     });
     const error = await anonymous.models.list().catch((e: unknown) => e);
     expect(error).toBeInstanceOf(OpenAI.AuthenticationError);
+  });
+
+  it("surfaces gateway rate limits as RateLimitError with rate limit headers (spec 005)", async () => {
+    const limitedKey = await createKeyViaAdmin(baseUrl, TEST_ADMIN_TOKEN, {
+      team: `limited-${Date.now()}`,
+      rpm: 1,
+    });
+    const limited = new OpenAI({ baseURL: `${baseUrl}/v1`, apiKey: limitedKey, maxRetries: 0 });
+    const ok = await limited.chat.completions
+      .create({ model: "fast", messages: [{ role: "user", content: "hi" }] })
+      .withResponse();
+    expect(ok.response.headers.get("x-ratelimit-limit-requests")).toBe("1");
+    const error = await limited.chat.completions
+      .create({ model: "fast", messages: [{ role: "user", content: "hi" }] })
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(OpenAI.RateLimitError);
+    const headers = (error as InstanceType<typeof OpenAI.RateLimitError>).headers;
+    expect(Number(headers?.get("retry-after"))).toBeGreaterThanOrEqual(1);
   });
 
   it("lists models", async () => {

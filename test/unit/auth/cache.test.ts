@@ -27,11 +27,11 @@ describe("AuthCache", () => {
     expect(cache.get("h3")).toEqual(record("k3"));
   });
 
-  it("invalidates every entry of a key id", () => {
+  it("invalidates entries matching a predicate", () => {
     const cache = new AuthCache<{ id: string }>({ ttlMs: 30_000, maxEntries: 10 });
     cache.set("h1", record("k1"));
     cache.set("h2", record("k2"));
-    cache.invalidateKey("k1");
+    cache.invalidate((value) => value.id === "k1");
     expect(cache.get("h1")).toBeUndefined();
     expect(cache.get("h2")).toEqual(record("k2"));
   });

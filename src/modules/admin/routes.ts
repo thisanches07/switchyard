@@ -1,7 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import type { ApiKeyRecord, KeyStore } from "../../core/auth.js";
+import type { ApiKeyRecord, AuthRecord, KeyStore } from "../../core/auth.js";
 import { invalidAdminToken, notFound } from "../../core/errors.js";
 import type { AuthCache } from "../auth/cache.js";
 import { displayPrefix, generateKey, hashKey, parseBearer } from "../auth/keys.js";
@@ -12,15 +12,31 @@ export interface AdminRoutesOptions {
   store: KeyStore;
   pepper: string;
   adminToken: string;
-  cache: AuthCache<ApiKeyRecord>;
+  cache: AuthCache<AuthRecord>;
 }
 
-const teamBody = z.object({ name: z.string().trim().min(1).max(100) });
+/** A per-minute limit: positive integer, or null to clear it (spec 005). */
+const limit = z.number().int().positive().nullable();
+
+const teamBody = z.object({
+  name: z.string().trim().min(1).max(100),
+  rpm: limit.optional(),
+  tpm: limit.optional(),
+});
+
+const limitsPatch = z
+  .object({ rpm: limit.optional(), tpm: limit.optional() })
+  .refine((patch) => patch.rpm !== undefined || patch.tpm !== undefined, {
+    message: "set rpm and/or tpm (a positive integer, or null to clear)",
+    path: ["rpm"],
+  });
 
 const keyBody = z.object({
   teamId: z.uuid(),
   name: z.string().trim().min(1).max(100),
   allowedModels: z.array(z.string().min(1)).max(100).nullable().optional(),
+  rpm: limit.optional(),
+  tpm: limit.optional(),
   expiresAt: z.iso
     .datetime({ offset: true })
     .refine((value) => Date.parse(value) > Date.now(), "must be in the future")
@@ -41,6 +57,8 @@ function keyView(record: ApiKeyRecord) {
     prefix: record.prefix,
     allowedModels: record.allowedModels,
     status: record.status,
+    rpm: record.rpm,
+    tpm: record.tpm,
     expiresAt: record.expiresAt,
     createdAt: record.createdAt,
     revokedAt: record.revokedAt,
@@ -59,8 +77,8 @@ export async function adminRoutes(app: FastifyInstance, opts: AdminRoutesOptions
   });
 
   app.post("/admin/teams", { schema: docs.createTeam }, async (request, reply) => {
-    const { name } = parseWith(teamBody, request.body);
-    const team = await opts.store.createTeam(name);
+    const { name, rpm, tpm } = parseWith(teamBody, request.body);
+    const team = await opts.store.createTeam(name, { rpm: rpm ?? null, tpm: tpm ?? null });
     return reply.code(201).send(team);
   });
 
@@ -81,6 +99,8 @@ export async function adminRoutes(app: FastifyInstance, opts: AdminRoutesOptions
       prefix: displayPrefix(key),
       allowedModels: body.allowedModels ?? null,
       expiresAt: body.expiresAt ? new Date(body.expiresAt) : null,
+      rpm: body.rpm ?? null,
+      tpm: body.tpm ?? null,
     });
     request.log.info({ keyId: record.id, teamId: team.id }, "api key created");
     // The only time the plaintext key leaves the gateway.
@@ -96,8 +116,28 @@ export async function adminRoutes(app: FastifyInstance, opts: AdminRoutesOptions
     const { id } = parseWith(keyParams, request.params);
     const record = await opts.store.revokeKey(id);
     if (!record) throw notFound("API key", id);
-    opts.cache.invalidateKey(id);
+    opts.cache.invalidate((cached) => cached.key.id === id);
     request.log.info({ keyId: id }, "api key revoked");
     return keyView(record);
+  });
+
+  app.patch("/admin/keys/:id", { schema: docs.patchKeyLimits }, async (request) => {
+    const { id } = parseWith(keyParams, request.params);
+    const patch = parseWith(limitsPatch, request.body);
+    const record = await opts.store.updateKeyLimits(id, patch);
+    if (!record) throw notFound("API key", id);
+    opts.cache.invalidate((cached) => cached.key.id === id);
+    request.log.info({ keyId: id, ...patch }, "api key limits updated");
+    return keyView(record);
+  });
+
+  app.patch("/admin/teams/:id", { schema: docs.patchTeamLimits }, async (request) => {
+    const { id } = parseWith(keyParams, request.params);
+    const patch = parseWith(limitsPatch, request.body);
+    const team = await opts.store.updateTeamLimits(id, patch);
+    if (!team) throw notFound("Team", id);
+    opts.cache.invalidate((cached) => cached.team.id === id);
+    request.log.info({ teamId: id, ...patch }, "team limits updated");
+    return team;
   });
 }

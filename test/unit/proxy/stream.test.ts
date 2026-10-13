@@ -1,8 +1,10 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import type { ChatChunk } from "../../../src/core/chat.js";
 import type { ChatProvider } from "../../../src/core/provider.js";
+import { MemoryRateLimiter } from "../../../src/infra/memory/rate-limiter.js";
 import { createMockProvider } from "../../../src/modules/providers/mock.js";
 import { testApp } from "../../helpers/app.js";
+import { MemoryKeyStore } from "../../helpers/memory-key-store.js";
 import { spiedRegistry } from "../../helpers/providers.js";
 import { installInMemoryTracing } from "../../helpers/telemetry.js";
 
@@ -141,5 +143,49 @@ describe("POST /v1/chat/completions with stream: true", () => {
       "gen_ai.usage.output_tokens": 2,
       "switchyard.stream": true,
     });
+  });
+});
+
+describe("streaming token reconciliation (spec 005)", () => {
+  const apps: { close(): Promise<unknown> }[] = [];
+  afterEach(async () => {
+    await Promise.all(apps.splice(0).map((a) => a.close()));
+  });
+
+  async function streamWithLimit(model: string) {
+    const store = new MemoryKeyStore();
+    const limiter = new MemoryRateLimiter();
+    const { app } = await testApp({ store, limiter, authenticated: false });
+    apps.push(app);
+    const { key, record } = await store.issueKey({ limits: { tpm: 10_000 } });
+    const res = await app.inject({
+      method: "POST",
+      url: "/v1/chat/completions",
+      headers: { authorization: `Bearer ${key}` },
+      payload: { model, stream: true, messages: [{ role: "user", content: "12345678" }] },
+    });
+    const level = await limiter.peek(`sy:rl:key:${record.id}:tok`, 10_000);
+    return { res, level };
+  }
+
+  it("reconciles against the usage reported at the end of the stream", async () => {
+    const { res, level } = await streamWithLimit("fast");
+    expect(res.statusCode).toBe(200);
+    // Reserved 2 + 512; the mock reports 2 + 6 = 8.
+    // Allow for a little refill (10 000/min) during the request.
+    expect(level).toBeGreaterThanOrEqual(10_000 - 8);
+    expect(level).toBeLessThan(10_000 - 5);
+  });
+
+  it("reconciles a mid-stream failure against what was generated so far", async () => {
+    const { res, level } = await streamWithLimit("mock/error-midstream");
+    expect(res.statusCode).toBe(200);
+    expect(level).toBeGreaterThan(10_000 - 10);
+  });
+
+  it("refunds everything when the stream fails before the first chunk", async () => {
+    const { res, level } = await streamWithLimit("mock/error-500");
+    expect(res.statusCode).toBe(502);
+    expect(level).toBeCloseTo(10_000, 0);
   });
 });

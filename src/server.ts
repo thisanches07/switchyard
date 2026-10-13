@@ -9,6 +9,7 @@ import { createPostgresPool, postgresCheck } from "./infra/db/postgres.js";
 import { createUndiciClient } from "./infra/http/undici-client.js";
 import { createLogger } from "./infra/logger.js";
 import { createRedisClient, redisCheck } from "./infra/redis/client.js";
+import { RedisRateLimiter } from "./infra/redis/rate-limiter.js";
 import { shutdownTelemetry } from "./infra/telemetry/sdk.js";
 import { installShutdown } from "./lifecycle/shutdown.js";
 import { createProviderRegistry } from "./modules/providers/registry.js";
@@ -72,6 +73,12 @@ async function main(): Promise<void> {
     if (redisDown) logger.info("redis connection restored");
     redisDown = false;
   });
+  // Connect before listening: rate limiting (spec 005) needs Redis from the first request.
+  // If Redis is down the gateway still starts (fail-open policy); the client keeps retrying.
+  await Promise.race([
+    redis.connect().catch(() => {}),
+    new Promise((resolve) => setTimeout(resolve, 3_000).unref()),
+  ]);
 
   const http = createUndiciClient(config.server.timeouts);
   const providers = createProviderRegistry(config, process.env, { http });
@@ -82,6 +89,7 @@ async function main(): Promise<void> {
     config,
     providers,
     keyStore: new DrizzleKeyStore(db),
+    rateLimiter: new RedisRateLimiter(redis),
     keyPepper: env.KEY_PEPPER,
     adminToken: env.ADMIN_TOKEN,
   });
