@@ -42,9 +42,9 @@ One commit per task, ending in `[spec-009]`. Lint, typecheck and the task's test
   - Test: `test/unit/proxy/cache-routes.test.ts` › miss then hit (JSON), headers, alias strategy order, team scope, bypass/force/invalid header, non-cacheable finish reason and errors not stored, n > 1; `test/unit/proxy/cache-accounting.test.ts` › usage event, TPM reconcile, budget 0, savings known/unknown; `test/unit/proxy/cache-pii.test.ts` › key on masked request, stored placeholders, restored per request, block never reaches cache; `test/unit/proxy/cache-failures.test.ts` › exact store errors → miss.
   - Files: `src/modules/cache/stage.ts`, `src/modules/proxy/{routes,cached,messages}.ts`, `src/app.ts`, `test/helpers/app.ts`
 
-- [ ] **T8. Streaming: store streamed misses, re-chunk hits**
+- [x] **T8. Streaming: store streamed misses, re-chunk hits**
   - ACs: AC-4, AC-7, AC-8
-  - Test: `cache-routes.test.ts` › streamed miss stored and served as JSON, JSON miss served as stream, include_usage, midstream failure and client close not stored.
+  - Test: `test/unit/proxy/cache-stream.test.ts` › streamed miss stored and served as JSON, JSON miss served as stream, include_usage, midstream failure and client close not stored.
   - Files: `src/modules/proxy/{stream,routes,cached}.ts`
 
 - [ ] **T9. Semantic cache in the stage, Postgres store and cleanup**
