@@ -73,6 +73,12 @@ async function main(): Promise<void> {
     if (redisDown) logger.info("redis connection restored");
     redisDown = false;
   });
+  // Connect before listening: rate limiting (spec 005) needs Redis from the first request.
+  // If Redis is down the gateway still starts (fail-open policy); the client keeps retrying.
+  await Promise.race([
+    redis.connect().catch(() => {}),
+    new Promise((resolve) => setTimeout(resolve, 3_000).unref()),
+  ]);
 
   const http = createUndiciClient(config.server.timeouts);
   const providers = createProviderRegistry(config, process.env, { http });

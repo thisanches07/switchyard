@@ -50,7 +50,7 @@ One commit per task, ending in `[spec-005]`. `pnpm verify` exit code checked aft
   - ACs: AC-2
   - Test: `admin.test.ts` › create key/team with limits, PATCH key/team, `null` clears, validation, cache invalidation (key and team).
 
-- [ ] **T12. Server wiring and multi-instance correctness**
+- [x] **T12. Server wiring and multi-instance correctness**
   - ACs: AC-9, AC-10
   - Test: `ratelimit.int.test.ts` › two app instances on one Redis (exactly 10 of 50), Redis down open/closed through the HTTP API.
 
