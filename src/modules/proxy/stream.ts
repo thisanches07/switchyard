@@ -4,6 +4,7 @@ import type { Principal } from "../../core/auth.js";
 import type { ChatChunk, ChatRequest, Usage } from "../../core/chat.js";
 import { GatewayError, upstreamError } from "../../core/errors.js";
 import type { ChatProvider } from "../../core/provider.js";
+import type { Admission } from "../ratelimit/admission.js";
 import { startUpstreamSpan } from "./telemetry.js";
 import { deltaText, estimateTokens, forwardChunk, messageChars, usageFromChunk } from "./usage.js";
 
@@ -14,6 +15,7 @@ export interface StreamChatArgs {
   request: ChatRequest;
   logger: FastifyBaseLogger;
   principal?: Principal | undefined;
+  admission?: Admission | undefined;
 }
 
 const sseEvent = (payload: unknown) => `data: ${JSON.stringify(payload)}\n\n`;

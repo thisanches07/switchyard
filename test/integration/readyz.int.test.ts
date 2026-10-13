@@ -7,6 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../../src/app.js";
 import { createPostgresPool, postgresCheck } from "../../src/infra/db/postgres.js";
 import { createLogger } from "../../src/infra/logger.js";
+import { MemoryRateLimiter } from "../../src/infra/memory/rate-limiter.js";
 import { createRedisClient, redisCheck } from "../../src/infra/redis/client.js";
 import { testConfig } from "../helpers/config.js";
 import { MemoryKeyStore, TEST_PEPPER } from "../helpers/memory-key-store.js";
@@ -30,6 +31,7 @@ describe("/readyz with real dependencies", () => {
       checks: [postgresCheck(pool), redisCheck(redis)],
       config: testConfig(),
       providers: new Map(),
+      rateLimiter: new MemoryRateLimiter(),
       keyStore: new MemoryKeyStore(),
       keyPepper: TEST_PEPPER,
       readinessTimeoutMs: 1_000,

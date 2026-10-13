@@ -34,7 +34,7 @@ One commit per task, ending in `[spec-005]`. `pnpm verify` exit code checked aft
   - ACs: AC-3, AC-5, AC-6, AC-10, AC-12
   - Test: `test/unit/ratelimit/admission.test.ts` › admit/reject per scope and kind, reconcile rules, fail-open (metric, throttled warning) and fail-closed (503), span attributes, rejection counter.
 
-- [ ] **T8. Wire into chat and embeddings routes**
+- [x] **T8. Wire into chat and embeddings routes**
   - ACs: AC-3, AC-5, AC-6, AC-7
   - Test: `test/unit/proxy/ratelimit-routes.test.ts` › 429 before any provider call, headers on 200/429, 400 for oversized requests, refund on upstream failure, reconcile with usage.
 

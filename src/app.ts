@@ -21,12 +21,14 @@ import {
 } from "./core/errors.js";
 import type { DependencyCheck } from "./core/health.js";
 import type { ChatProvider } from "./core/provider.js";
+import type { RateLimiter } from "./core/ratelimit.js";
 import { adminRoutes } from "./modules/admin/routes.js";
 import { AuthCache } from "./modules/auth/cache.js";
 import { recordAuthFailure } from "./modules/auth/telemetry.js";
 import { openApiInfo } from "./modules/docs.js";
 import { healthRoutes } from "./modules/health/routes.js";
 import { proxyRoutes } from "./modules/proxy/routes.js";
+import { createAdmission } from "./modules/ratelimit/admission.js";
 
 export interface AppDeps {
   logger: FastifyBaseLogger;
@@ -34,6 +36,7 @@ export interface AppDeps {
   config: LoadedConfig;
   providers: ReadonlyMap<string, ChatProvider>;
   keyStore: KeyStore;
+  rateLimiter: RateLimiter;
   /** Secret mixed into key hashes (KEY_PEPPER). */
   keyPepper: string;
   /** Enables the admin API when set (ADMIN_TOKEN). */
@@ -95,9 +98,16 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   // Validated keys, shared by the auth hook and the admin API (revocations invalidate it).
   const authCache = new AuthCache<AuthRecord>({ ttlMs: 30_000, maxEntries: 10_000 });
 
+  const admission = createAdmission({
+    limiter: deps.rateLimiter,
+    config: deps.config.limits,
+    logger: deps.logger,
+  });
+
   await app.register(proxyRoutes, {
     config: deps.config,
     providers: deps.providers,
+    admission,
     auth: {
       store: deps.keyStore,
       pepper: deps.keyPepper,

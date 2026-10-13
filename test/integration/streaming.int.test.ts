@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../../src/app.js";
 import { createLogger } from "../../src/infra/logger.js";
+import { MemoryRateLimiter } from "../../src/infra/memory/rate-limiter.js";
 import { createMockProvider } from "../../src/modules/providers/mock.js";
 import { testConfig } from "../helpers/config.js";
 import { MemoryKeyStore, TEST_PEPPER } from "../helpers/memory-key-store.js";
@@ -26,6 +27,7 @@ describe("streaming over a real socket", () => {
       checks: [],
       config: testConfig(),
       providers: new Map([["mock", spy.provider]]),
+      rateLimiter: new MemoryRateLimiter(),
       keyStore: store,
       keyPepper: TEST_PEPPER,
     });

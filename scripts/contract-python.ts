@@ -10,6 +10,7 @@ import type { LoadedConfig } from "../src/config/load.js";
 import { configSchema } from "../src/config/schema.js";
 import { createUndiciClient } from "../src/infra/http/undici-client.js";
 import { createLogger } from "../src/infra/logger.js";
+import { MemoryRateLimiter } from "../src/infra/memory/rate-limiter.js";
 import { createProviderRegistry } from "../src/modules/providers/registry.js";
 import { createKeyViaAdmin } from "../test/helpers/admin.js";
 import { MemoryKeyStore, TEST_ADMIN_TOKEN, TEST_PEPPER } from "../test/helpers/memory-key-store.js";
@@ -53,6 +54,7 @@ const app = await buildApp({
   checks: [],
   config,
   providers: createProviderRegistry(config, {}, { http }),
+  rateLimiter: new MemoryRateLimiter(),
   keyStore: store,
   keyPepper: TEST_PEPPER,
   adminToken: TEST_ADMIN_TOKEN,

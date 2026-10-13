@@ -9,6 +9,7 @@ import { createPostgresPool, postgresCheck } from "./infra/db/postgres.js";
 import { createUndiciClient } from "./infra/http/undici-client.js";
 import { createLogger } from "./infra/logger.js";
 import { createRedisClient, redisCheck } from "./infra/redis/client.js";
+import { RedisRateLimiter } from "./infra/redis/rate-limiter.js";
 import { shutdownTelemetry } from "./infra/telemetry/sdk.js";
 import { installShutdown } from "./lifecycle/shutdown.js";
 import { createProviderRegistry } from "./modules/providers/registry.js";
@@ -82,6 +83,7 @@ async function main(): Promise<void> {
     config,
     providers,
     keyStore: new DrizzleKeyStore(db),
+    rateLimiter: new RedisRateLimiter(redis),
     keyPepper: env.KEY_PEPPER,
     adminToken: env.ADMIN_TOKEN,
   });
