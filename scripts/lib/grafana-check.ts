@@ -281,6 +281,14 @@ function checkQueries(
   }
 }
 
+/** Every metric a dashboard's panels and variables query (the AC-9 smoke step checks them). */
+export function dashboardMetrics(text: string): string[] {
+  const parsed: unknown = JSON.parse(text);
+  if (!isRecord(parsed)) return [];
+  const names = dashboardQueries(parsed).flatMap((q) => q.exprs.flatMap(metricNames));
+  return [...new Set(names)];
+}
+
 const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 export function checkGrafana(

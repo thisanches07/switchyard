@@ -33,7 +33,7 @@ One commit per task, ending in `[spec-011]`. T13 and T14 are blocked on things o
   - Test: `test/unit/usage/token-metrics.test.ts` › tokens_total by direction/provider/model equals the usage events' sums through the app; `test/unit/usage/telemetry.test.ts` › dropped counter exported at 0 per reason.
   - Files: `src/modules/usage/{token-metrics,telemetry}.ts`, `src/app.ts`
 
-- [ ] **T6. Grafana provisioning and the Overview dashboard**
+- [x] **T6. Grafana provisioning and the Overview dashboard**
   - ACs: AC-6, AC-8
   - Do: provisioning descriptor, compose mounts, `overview.json`.
   - Test: `test/unit/scripts/grafana-files.test.ts` › repo files pass the check; Overview has the AC-6 panels; compose mounts the three paths read-only.

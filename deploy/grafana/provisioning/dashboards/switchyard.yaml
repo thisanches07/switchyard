@@ -1,0 +1,16 @@
+# Dashboards as code (spec 011, ADR-0020). Mounted read-only into grafana/otel-lgtm next to its
+# own dashboard providers; the JSON in deploy/grafana/dashboards is the source of truth.
+apiVersion: 1
+
+providers:
+  - name: Switchyard
+    orgId: 1
+    folder: Switchyard
+    type: file
+    disableDeletion: true
+    # Edits in the UI cannot be saved: export the JSON back into the repo instead.
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      path: /otel-lgtm/switchyard/dashboards
+      foldersFromFilesStructure: false
