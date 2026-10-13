@@ -9,6 +9,7 @@ import type { RateLimiter } from "../../src/core/ratelimit.js";
 import type { OutcomeRecorder, UsageReader } from "../../src/core/usage.js";
 import { createLogger } from "../../src/infra/logger.js";
 import { MemoryRateLimiter } from "../../src/infra/memory/rate-limiter.js";
+import type { ConfigRuntime } from "../../src/modules/config/runtime.js";
 import { createProviderRegistry } from "../../src/modules/providers/registry.js";
 import type { Timers } from "../../src/modules/routing/timers.js";
 import { testConfig } from "./config.js";
@@ -38,6 +39,8 @@ export interface TestAppOptions {
   budgetStore?: BudgetStore;
   /** Clock for budget periods (spec 007). */
   clock?: () => number;
+  /** Live config (spec 008 hot reload); `config`/`providers` should match its first snapshot. */
+  runtime?: ConfigRuntime;
   /** Routing clock and RNG (spec 008); default: real clock, backoff waits skipped. */
   routing?: { timers?: Timers; random?: () => number };
   /**
@@ -70,6 +73,7 @@ export async function testApp(options: TestAppOptions = {}) {
     ...(options.clock === undefined ? {} : { clock: options.clock }),
     ...(options.budgetStore === undefined ? {} : { budgetStore: options.budgetStore }),
     ...(options.bodyLimitBytes === undefined ? {} : { bodyLimitBytes: options.bodyLimitBytes }),
+    runtime: options.runtime,
     routing: { timers: instantTimers(), random: () => 0.5, ...options.routing },
   });
 

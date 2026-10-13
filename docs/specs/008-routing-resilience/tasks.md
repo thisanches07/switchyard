@@ -56,7 +56,7 @@ One commit per task, ending in `[spec-008]`. `pnpm verify` green after each. T7�
   - Test: `test/unit/config/runtime.test.ts` › unchanged hash, reload swaps snapshot, startup-fixed kept with restartRequired, provider instances reused, health retained/dropped, invalid YAML and schema keep the old snapshot and count failure, issues without values.
   - Files: `src/modules/config/runtime.ts`
 
-- [ ] **T11. Requests read the config snapshot**
+- [x] **T11. Requests read the config snapshot**
   - ACs: AC-12
   - Test: `test/unit/proxy/reload-routes.test.ts` › new alias served after reload, in-flight request finishes with its config, reloaded limits and PII apply.
   - Files: `src/modules/proxy/routes.ts`, `src/modules/ratelimit/admission.ts`, `src/app.ts`

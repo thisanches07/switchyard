@@ -25,7 +25,8 @@ export interface Admission {
 
 export interface AdmissionDeps {
   limiter: RateLimiter;
-  config: AdmissionConfig;
+  /** A getter reads reloaded limits per request (spec 008 hot reload). */
+  config: AdmissionConfig | (() => AdmissionConfig);
   logger: FastifyBaseLogger;
   now?: () => number;
 }
@@ -59,10 +60,12 @@ const WARN_INTERVAL_MS = 60_000;
 /** Rate-limit admission for `/v1` requests (spec 005). */
 export function createAdmission(deps: AdmissionDeps) {
   const now = deps.now ?? Date.now;
+  const source = deps.config;
+  const config = typeof source === "function" ? source : () => source;
   let lastWarning = Number.NEGATIVE_INFINITY;
 
   function limiterFailed(error: unknown): Admission {
-    if (deps.config.onRedisError === "closed") throw rateLimiterUnavailable();
+    if (config().onRedisError === "closed") throw rateLimiterUnavailable();
     counters().failOpen.add(1);
     if (now() - lastWarning >= WARN_INTERVAL_MS) {
       lastWarning = now();
@@ -87,7 +90,7 @@ export function createAdmission(deps: AdmissionDeps) {
 
   return {
     async admit(principal: Principal, estimate: number): Promise<Admission> {
-      const plan = buildPlan(principal, deps.config.defaults, estimate);
+      const plan = buildPlan(principal, config().defaults, estimate);
       if (plan.oversized) {
         throw requestTooLargeForLimit(plan.oversized.scope, plan.oversized.capacity);
       }

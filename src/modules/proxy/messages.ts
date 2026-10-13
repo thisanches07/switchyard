@@ -1,6 +1,5 @@
 import type { Span } from "@opentelemetry/api";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import type { LoadedConfig } from "../../config/load.js";
 import type { ChatRequest } from "../../core/chat.js";
 import { invalidRequest } from "../../core/errors.js";
 import type { ChatProvider, ChatResult } from "../../core/provider.js";
@@ -10,6 +9,7 @@ import { fromAnthropicRequest } from "../anthropic/inbound-request.js";
 import { toAnthropicMessage, withRequestedModel } from "../anthropic/inbound-response.js";
 import { createAnthropicEncoder } from "../anthropic/inbound-stream.js";
 import { parseMessagesRequest } from "../anthropic/schema.js";
+import type { ConfigSnapshot } from "../config/runtime.js";
 import { docs } from "../docs.js";
 import { restoreAnthropicMessage, restoreChatResponse } from "../pii/restore.js";
 import type { PiiStage } from "../pii/stage.js";
@@ -31,8 +31,8 @@ declare module "fastify" {
 
 /** Pipeline steps shared with `/v1/chat/completions` (defined in `routes.ts`). */
 export interface MessagesRouteDeps {
-  config: LoadedConfig;
-  providers: ReadonlyMap<string, ChatProvider>;
+  /** Config and providers of this request, fixed at its start (spec 008 hot reload). */
+  snapshot(request: FastifyRequest): ConfigSnapshot;
   /** Candidates of a model the key may use (404/403 otherwise, spec 008 AC-1). */
   route(model: string, request: FastifyRequest): RoutePlan;
   /** The attempt loop (spec 008). */
@@ -59,8 +59,8 @@ export interface MessagesRouteDeps {
     estimate: (result: T) => TokenUsage,
   ): Promise<T>;
   abortOnClientDisconnect(reply: FastifyReply): AbortSignal;
-  /** PII stage (spec 010), run on the canonical request right after admission. */
-  pii: PiiStage;
+  /** PII stage (spec 010) of the request's config, run on the canonical request after admission. */
+  pii(request: FastifyRequest): PiiStage;
 }
 
 /**
@@ -83,10 +83,11 @@ export function registerMessagesRoute(app: FastifyInstance, deps: MessagesRouteD
       const { request: canonical, blockers } = fromAnthropicRequest(body, {
         beta: typeof beta === "string" ? beta : undefined,
       });
-      const plan = sameFamilyOnly(routed, blockers, deps.providers);
+      const { config, providers } = deps.snapshot(request);
+      const plan = sameFamilyOnly(routed, blockers, providers);
 
       const stream = body.stream === true;
-      const reserve = deps.config.limits.completionReserveTokens;
+      const reserve = config.limits.completionReserveTokens;
       // One usage event per admitted request, operation "messages" (spec 006).
       const admission = await deps.admit(request, reply, estimateChatTokens(canonical, reserve), {
         operation: "messages",
@@ -97,7 +98,7 @@ export function registerMessagesRoute(app: FastifyInstance, deps: MessagesRouteD
       reply.headers(anthropicRateLimitHeaders(admission?.headers ?? {}, Date.now()));
       // PII (spec 010) masks canonical text in place; spread keeps the Anthropic extension (a
       // symbol key), so the same-family adapter writes masked text back into the client's blocks.
-      const masked = await deps.pii.chat({ request, reply, admission, stream }, canonical);
+      const masked = await deps.pii(request).chat({ request, reply, admission, stream }, canonical);
       const upstreamRequest: ChatRequest = masked.body;
       const estimate = estimateChatTokenCounts(canonical, reserve);
 

@@ -7,9 +7,10 @@ import type { UsageOperation } from "../../core/usage.js";
 import { type AuthenticateOptions, createAuthenticate } from "../auth/authenticate.js";
 import { isModelAllowed } from "../auth/models.js";
 import type { BudgetCheck } from "../budgets/check.js";
+import type { ConfigRuntime, ConfigSnapshot } from "../config/runtime.js";
 import { docs } from "../docs.js";
 import { restoreChatResponse } from "../pii/restore.js";
-import { createPiiStage } from "../pii/stage.js";
+import { createPiiStage, type PiiStage } from "../pii/stage.js";
 import type { Admission, AdmissionService } from "../ratelimit/admission.js";
 import {
   estimateChatTokenCounts,
@@ -31,9 +32,16 @@ import { streamChat } from "./stream.js";
 import type { UpstreamOutcome } from "./telemetry.js";
 import { estimateChatUsage } from "./usage.js";
 
+declare module "fastify" {
+  interface FastifyRequest {
+    /** Config and providers this request runs with, fixed at its start (spec 008 hot reload). */
+    snapshot?: ConfigSnapshot;
+  }
+}
+
 export interface ProxyRoutesOptions {
-  config: LoadedConfig;
-  providers: ReadonlyMap<string, ChatProvider>;
+  /** The live config; each request reads it once (spec 008, AC-12). */
+  runtime: Pick<ConfigRuntime, "current">;
   auth: AuthenticateOptions;
   admission: AdmissionService;
   /** Monthly budgets (spec 007), checked before rate limiting. */
@@ -66,19 +74,34 @@ export type AttemptFn = <T>(
 ) => Promise<Served<T>>;
 
 export async function proxyRoutes(app: FastifyInstance, opts: ProxyRoutesOptions): Promise<void> {
+  // In-flight requests finish with the config they started with (spec 008, AC-12).
+  app.addHook("onRequest", async (request) => {
+    request.snapshot = opts.runtime.current();
+  });
   // Every /v1 route requires a valid key (spec 004); health routes live outside this plugin.
   app.addHook("onRequest", createAuthenticate(opts.auth));
 
+  const snapshot = (request: FastifyRequest) => request.snapshot ?? opts.runtime.current();
   const allowedModels = (request: FastifyRequest) => request.principal?.allowedModels ?? null;
-  // PII mask/block (spec 010): after admission, before the cache and any provider.
-  const pii = createPiiStage(opts.config.pii);
+  // PII mask/block (spec 010): after admission, before the cache and any provider. One stage per
+  // config version, so a reloaded `pii` section applies to new requests.
+  const piiStages = new WeakMap<LoadedConfig, PiiStage>();
+  const pii = (request: FastifyRequest): PiiStage => {
+    const { config } = snapshot(request);
+    let stage = piiStages.get(config);
+    if (!stage) {
+      stage = createPiiStage(config.pii);
+      piiStages.set(config, stage);
+    }
+    return stage;
+  };
 
   /**
    * Resolves the model to its candidates and keeps those the key may use (spec 008, AC-1: the
    * spec 004 rule per candidate). 404 for unknown models, 403 when no candidate is allowed.
    */
   function route(model: string, request: FastifyRequest): RoutePlan {
-    const plan = planRoute(model, opts.config);
+    const plan = planRoute(model, snapshot(request).config);
     if (!plan) throw modelNotFound(model);
     const allowed = allowedModels(request);
     const candidates = plan.candidates.filter((c) => isModelAllowed(allowed, model, c.ref));
@@ -91,11 +114,12 @@ export async function proxyRoutes(app: FastifyInstance, opts: ProxyRoutesOptions
    * event name the candidate and the attempt count (AC-10): the served one on success, the last
    * one tried on error, none (attempts 0) when no attempt was made.
    */
-  const attempt: AttemptFn = (request, reply, plan, options) =>
-    runAttempts({
+  const attempt: AttemptFn = (request, reply, plan, options) => {
+    const { config, providers } = snapshot(request);
+    return runAttempts({
       plan,
-      providers: opts.providers,
-      settings: { retry: opts.config.retry, totalMs: opts.config.server.timeouts.totalMs },
+      providers,
+      settings: { retry: config.retry, totalMs: config.server.timeouts.totalMs },
       deps: opts.routing,
       signal: options.signal,
       estimate: options.estimate,
@@ -120,6 +144,7 @@ export async function proxyRoutes(app: FastifyInstance, opts: ProxyRoutesOptions
         });
       },
     });
+  };
 
   /**
    * Rate-limit admission (spec 005); sets x-ratelimit-* headers or throws 429/400/503.
@@ -169,12 +194,13 @@ export async function proxyRoutes(app: FastifyInstance, opts: ProxyRoutesOptions
   });
 
   app.get("/v1/models", { schema: docs.models }, async (request) => {
-    const list = listModels(opts.config, opts.startedAt);
+    const { config } = snapshot(request);
+    const list = listModels(config, opts.startedAt);
     const allowed = allowedModels(request);
     if (!allowed || allowed.length === 0) return list;
     // An alias is listed when any of its candidates is allowed (spec 008, AC-1).
     const data = list.data.filter((m) =>
-      planRoute(m.id, opts.config)?.candidates.some((c) => isModelAllowed(allowed, m.id, c.ref)),
+      planRoute(m.id, config)?.candidates.some((c) => isModelAllowed(allowed, m.id, c.ref)),
     );
     return { ...list, data };
   });
@@ -183,14 +209,14 @@ export async function proxyRoutes(app: FastifyInstance, opts: ProxyRoutesOptions
     const body = parseChatRequest(request.body);
     const plan = route(body.model, request);
     const stream = body.stream === true;
-    const reserve = opts.config.limits.completionReserveTokens;
+    const reserve = snapshot(request).config.limits.completionReserveTokens;
     const admission = await admit(request, reply, estimateChatTokens(body, reserve), {
       operation: "chat",
       stream,
       model: body.model,
       resolved: plan.candidates[0] as Candidate,
     });
-    const masked = await pii.chat({ request, reply, admission, stream }, body);
+    const masked = await pii(request).chat({ request, reply, admission, stream }, body);
     const estimate = estimateChatTokenCounts(body, reserve);
 
     if (stream) {
@@ -236,7 +262,7 @@ export async function proxyRoutes(app: FastifyInstance, opts: ProxyRoutesOptions
       model: body.model,
       resolved: plan.candidates[0] as Candidate,
     });
-    const masked = await pii.embeddings({ request, reply, admission }, body);
+    const masked = await pii(request).embeddings({ request, reply, admission }, body);
 
     const signal = abortOnClientDisconnect(reply);
     const started = performance.now();
@@ -263,8 +289,7 @@ export async function proxyRoutes(app: FastifyInstance, opts: ProxyRoutesOptions
 
   // Anthropic Messages API (spec 014): same routing, admission and streaming steps.
   registerMessagesRoute(app, {
-    config: opts.config,
-    providers: opts.providers,
+    snapshot,
     route,
     attempt,
     admit,
