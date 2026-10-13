@@ -30,7 +30,12 @@ describe("Postgres: migrations and DrizzleKeyStore", () => {
     const { rows } = await pool.query<{ table_name: string }>(
       "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY 1",
     );
-    expect(rows.map((r) => r.table_name)).toEqual(["api_keys", "teams"]);
+    expect(rows.map((r) => r.table_name)).toEqual([
+      "api_keys",
+      "teams",
+      "usage_daily",
+      "usage_events",
+    ]);
   });
 
   it("creates, lists and fetches teams; duplicates are a 409", async () => {

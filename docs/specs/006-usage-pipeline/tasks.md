@@ -35,7 +35,7 @@ One commit per task, ending in `[spec-006]`. `pnpm verify` exit code checked aft
   - Do: `src/infra/kafka/{client,producer}.ts`, `server.ts` (required `KAFKA_BROKERS`, publisher start, closer with deadline), `installShutdown` passes `{ deadlineAt }`, `@testcontainers/redpanda`.
   - Test: `boot.test.ts` › missing `KAFKA_BROKERS` exits naming it, starts with Kafka unreachable; `shutdown.test.ts` › closers receive the deadline; `test/integration/usage-producer.int.test.ts` › events published to Redpanda with the team id as key.
 
-- [ ] **T7. Migration `0002_usage_events` and the usage store**
+- [x] **T7. Migration `0002_usage_events` and the usage store**
   - ACs: AC-8, AC-9, AC-10
   - Do: Drizzle tables, generated migration, `DrizzleUsageStore.insertEvents`.
   - Test: `test/integration/usage-store.int.test.ts` › row with every field (exact `cost_usd`), daily aggregate, same event twice → one row counted once, unknown costs counted apart, model = provider/servedModel or requested model; `db.int.test.ts` › table list.
