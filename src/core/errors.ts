@@ -146,6 +146,16 @@ export const upstreamOverloaded = (provider: string) =>
     { retryable: true },
   );
 
+/** Every allowed candidate has an open circuit breaker (spec 008, AC-9). */
+export const noHealthyUpstream = (retryAfterSeconds: number) =>
+  new GatewayError(
+    503,
+    SERVER,
+    "no_healthy_upstream",
+    "No healthy upstream for this model: every candidate is temporarily disabled after repeated failures",
+    { "retry-after": String(Math.max(1, Math.ceil(retryAfterSeconds))) },
+  );
+
 export const internalError = () =>
   new GatewayError(500, SERVER, "internal_error", "Internal server error");
 

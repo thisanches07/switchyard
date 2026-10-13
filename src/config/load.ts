@@ -25,9 +25,18 @@ export type LoadedConfig = Omit<AppConfig, "providers"> & {
 };
 
 export function loadConfig(path: string, env: Record<string, string | undefined>): LoadedConfig {
-  const result = configSchema.safeParse(readYaml(path));
+  return parseConfig(readSource(path), path, env);
+}
+
+/** Validates config YAML text (spec 008 hot reload reads the file itself); `source` names it in errors. */
+export function parseConfig(
+  text: string,
+  source: string,
+  env: Record<string, string | undefined>,
+): LoadedConfig {
+  const result = configSchema.safeParse(parseYaml(text, source));
   if (!result.success) {
-    throw new ConfigError(path, toConfigIssues(result.error));
+    throw new ConfigError(source, toConfigIssues(result.error));
   }
 
   const issues: ConfigIssue[] = [];
@@ -37,7 +46,7 @@ export function loadConfig(path: string, env: Record<string, string | undefined>
     if (resolved) providers[name] = resolved;
   }
   if (issues.length > 0) {
-    throw new ConfigError(path, issues);
+    throw new ConfigError(source, issues);
   }
 
   return { ...result.data, providers };
@@ -80,7 +89,11 @@ function parseSection<T>(path: string, root: unknown, name: string, schema: z.Zo
 
 /** Reads and parses a YAML file; syntax errors become a ConfigError with line and column. */
 export function readYaml(path: string): unknown {
-  const doc = parseDocument(readSource(path));
+  return parseYaml(readSource(path), path);
+}
+
+function parseYaml(text: string, path: string): unknown {
+  const doc = parseDocument(text);
   if (doc.errors.length > 0) {
     throw new ConfigError(
       path,
@@ -94,7 +107,8 @@ export function readYaml(path: string): unknown {
   return doc.toJS() ?? {};
 }
 
-function readSource(path: string): string {
+/** Reads the config file; a missing or unreadable file is a ConfigError. */
+export function readSource(path: string): string {
   try {
     return readFileSync(path, "utf8");
   } catch (error) {

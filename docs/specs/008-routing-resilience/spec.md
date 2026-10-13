@@ -1,6 +1,6 @@
 # Spec 008: Routing strategies, retries, circuit breakers and config hot reload
 
-- **Status:** Approved (2026-10-13)
+- **Status:** Done (2026-10-13)
 - **Owner:** @thisanches07
 - **Release:** v0.1
 - **Depends on:** 003, 006 (and the pricing module of 007 for `lowest-cost`, see Open questions)

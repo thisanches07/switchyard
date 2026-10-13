@@ -13,6 +13,7 @@ import {
   type ChatStream,
   type EmbeddingsResult,
   type HttpClient,
+  type HttpHeaders,
   UpstreamNetworkError,
   UpstreamTimeoutError,
 } from "../../core/provider.js";
@@ -72,13 +73,22 @@ export function createOpenAiCompatibleProvider(
     return error;
   }
 
-  /** Non-2xx response → gateway error. 4xx are passed through; 5xx bodies are never forwarded. */
-  function statusError(status: number, text: string): GatewayError {
-    if (status >= 400 && status < 500) {
-      const fields = upstreamErrorBody.safeParse(parseJson(text));
-      return upstreamClientError(status, fields.success ? fields.data.error : {});
+  /**
+   * Non-2xx response → gateway error. 4xx are passed through; 5xx bodies are never forwarded.
+   * `retry-after` on 429 and 503 is kept for the retry backoff (spec 008, AC-4).
+   */
+  function statusError(status: number, text: string, headers?: HttpHeaders): GatewayError {
+    const error =
+      status >= 400 && status < 500
+        ? upstreamClientError(status, errorFields(text))
+        : upstreamError(config.name);
+    const retryAfter = headers?.["retry-after"];
+    if ((status === 429 || status === 503) && retryAfter !== undefined) {
+      return new GatewayError(error.status, error.type, error.code, error.message, {
+        "retry-after": retryAfter,
+      });
     }
-    return upstreamError(config.name);
+    return error;
   }
 
   async function postJson(path: string, body: unknown, ctx: CallContext): Promise<unknown> {
@@ -89,7 +99,7 @@ export function createOpenAiCompatibleProvider(
       throw transportError(error, ctx.signal);
     }
     if (response.status < 200 || response.status >= 300) {
-      throw statusError(response.status, response.text);
+      throw statusError(response.status, response.text, response.headers);
     }
     const parsed = parseJson(response.text);
     if (parsed === undefined) throw upstreamError(config.name);
@@ -140,7 +150,7 @@ export function createOpenAiCompatibleProvider(
       }
       if (response.status < 200 || response.status >= 300) {
         const text = await response.text().catch(() => "");
-        throw statusError(response.status, text);
+        throw statusError(response.status, text, response.headers);
       }
 
       const name = config.name;
@@ -170,6 +180,11 @@ export function createOpenAiCompatibleProvider(
       };
     },
   };
+}
+
+function errorFields(text: string) {
+  const fields = upstreamErrorBody.safeParse(parseJson(text));
+  return fields.success ? fields.data.error : {};
 }
 
 function parseJson(text: string): unknown {

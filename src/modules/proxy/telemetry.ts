@@ -52,6 +52,14 @@ export interface UpstreamCallInfo {
   stream?: boolean;
   /** The authenticated caller (spec 004); absent only in low-level tests. */
   principal?: Principal | undefined;
+  /** Routing attempt (spec 008): candidate, attempt number and the backoff waited before it. */
+  attempt?: { number: number; candidate: string; backoffMs: number } | undefined;
+}
+
+/** Options of a failed attempt (spec 008). */
+export interface UpstreamFailOptions {
+  /** False when another attempt follows: `switchyard_requests_total` counts client requests. */
+  countRequest?: boolean;
 }
 
 export interface UpstreamUsage {
@@ -73,8 +81,24 @@ export interface UpstreamSpan {
   /** Marks the first streamed chunk (records TTFB); returns TTFB in ms. */
   firstChunk(): number;
   succeed(outcome: UpstreamOutcome): void;
-  fail(error: unknown, phase: "before_first_byte" | "midstream"): void;
+  fail(
+    error: unknown,
+    phase: "before_first_byte" | "midstream",
+    options?: UpstreamFailOptions,
+  ): void;
   clientGone(): void;
+  /** Adds metadata attributes (never content, ADR-0010). */
+  annotate(attributes: Record<string, string | number | boolean>): void;
+}
+
+/** Counts one client request against `switchyard_requests_total` (final failed attempt, spec 008). */
+export function countUpstreamRequest(info: UpstreamCallInfo, status: string): void {
+  getInstruments().requests.add(1, {
+    provider: info.provider.name,
+    model: info.model,
+    status,
+    team: info.principal?.teamId ?? "none",
+  });
 }
 
 /**
@@ -97,6 +121,11 @@ export function startUpstreamSpan(info: UpstreamCallInfo): UpstreamSpan {
         "switchyard.team_id": info.principal.teamId,
         "switchyard.key_id": info.principal.keyId,
       }),
+      ...(info.attempt && {
+        "switchyard.candidate": info.attempt.candidate,
+        "switchyard.attempt": info.attempt.number,
+        "switchyard.backoff_ms": info.attempt.backoffMs,
+      }),
     },
   });
   // Team only on the request counter: durations stay low-cardinality.
@@ -106,10 +135,10 @@ export function startUpstreamSpan(info: UpstreamCallInfo): UpstreamSpan {
   const labels = { provider: provider.name, model };
   let ended = false;
 
-  const finish = (status: string, outcome: string) => {
+  const finish = (status: string, outcome: string, countRequest = true) => {
     ended = true;
     const { requests, upstreamDuration } = getInstruments();
-    requests.add(1, { ...labels, status, team });
+    if (countRequest) requests.add(1, { ...labels, status, team });
     upstreamDuration.record((performance.now() - started) / 1000, { ...labels, outcome });
     span.end();
   };
@@ -138,8 +167,9 @@ export function startUpstreamSpan(info: UpstreamCallInfo): UpstreamSpan {
       finish("200", "ok");
     },
 
-    fail(error, phase) {
+    fail(error, phase, options = {}) {
       if (ended) return;
+      const countRequest = options.countRequest ?? true;
       const status = error instanceof GatewayError ? error.status : 500;
       const code = error instanceof GatewayError ? error.code : "internal_error";
       const outcome = code === "upstream_timeout" ? "timeout" : "error";
@@ -154,7 +184,11 @@ export function startUpstreamSpan(info: UpstreamCallInfo): UpstreamSpan {
       }
       span.setAttribute("http.response.status_code", status);
       if (status >= 500) logger.warn({ ...labels, code, status }, "upstream request failed");
-      finish(String(status), outcome);
+      finish(String(status), outcome, countRequest);
+    },
+
+    annotate(attributes) {
+      if (!ended) span.setAttributes(attributes);
     },
 
     clientGone() {

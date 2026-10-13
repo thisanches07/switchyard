@@ -360,5 +360,82 @@ export const docs = {
   },
   keyBudget: budgetStatusDoc("key"),
   teamBudget: budgetStatusDoc("team"),
+  providersHealth: {
+    tags: ["Admin"],
+    summary:
+      "Circuit breaker, EWMA latency and error rate of every candidate (spec 008; per gateway instance)",
+    security: adminAuth,
+    response: {
+      200: {
+        type: "object",
+        properties: {
+          scope: { type: "string", enum: ["instance"] },
+          note: { type: "string" },
+          data: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                candidate: { type: "string", description: "provider/model" },
+                state: { type: "string", enum: ["closed", "half-open", "open"] },
+                consecutiveFailures: { type: "integer" },
+                halfOpenAt: { type: ["string", "null"], format: "date-time" },
+                latencyMs: {
+                  type: "object",
+                  properties: {
+                    ewma: { type: ["number", "null"] },
+                    samples: { type: "integer" },
+                  },
+                },
+                errorRate: { type: "number", description: "Over the last `window` attempts" },
+                window: { type: "integer", maximum: 100 },
+              },
+            },
+          },
+        },
+      },
+      401: errorResponse,
+    },
+  },
+  configReload: {
+    tags: ["Admin"],
+    summary: "Reload the config file now (spec 008; this instance only)",
+    security: adminAuth,
+    response: {
+      200: {
+        type: "object",
+        properties: {
+          result: { type: "string", enum: ["reloaded", "unchanged"] },
+          restartRequired: {
+            type: "array",
+            items: { type: "string" },
+            description: "Settings bound at startup that changed; their old value is kept",
+          },
+        },
+      },
+      400: {
+        description: "Invalid config (code invalid_config); the previous config keeps serving",
+        type: "object",
+        properties: {
+          error: {
+            type: "object",
+            properties: {
+              message: { type: "string" },
+              type: { type: "string" },
+              code: { type: "string" },
+              issues: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: { path: { type: "string" }, message: { type: "string" } },
+                },
+              },
+            },
+          },
+        },
+      },
+      401: errorResponse,
+    },
+  },
   health: { tags: ["Health"], summary: "Liveness / readiness probe" },
 };

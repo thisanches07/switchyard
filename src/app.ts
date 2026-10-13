@@ -34,11 +34,15 @@ import {
 import { AuthCache } from "./modules/auth/cache.js";
 import { recordAuthFailure } from "./modules/auth/telemetry.js";
 import { createBudgets } from "./modules/budgets/service.js";
+import { type ConfigRuntime, createConfigRuntime } from "./modules/config/runtime.js";
 import { openApiInfo } from "./modules/docs.js";
 import { healthRoutes } from "./modules/health/routes.js";
 import { PriceTable, priceEvent } from "./modules/pricing/table.js";
 import { proxyRoutes } from "./modules/proxy/routes.js";
 import { countRejection, createAdmission } from "./modules/ratelimit/admission.js";
+import { CandidateHealthRegistry } from "./modules/routing/health.js";
+import { aliasCandidates } from "./modules/routing/resolve.js";
+import { systemTimers, type Timers } from "./modules/routing/timers.js";
 import { createOutcomeHook } from "./modules/usage/outcome.js";
 import { fanOut, noopRecorder } from "./modules/usage/recorders.js";
 
@@ -70,6 +74,13 @@ export interface AppDeps {
   clock?: () => number;
   bodyLimitBytes?: number;
   readinessTimeoutMs?: number;
+  /**
+   * The live config (spec 008 hot reload); `config` and `providers` are its initial snapshot.
+   * Without it the config is static.
+   */
+  runtime?: ConfigRuntime | undefined;
+  /** Clock and randomness for retries and breakers (spec 008); tests inject deterministic ones. */
+  routing?: { timers?: Timers; random?: () => number } | undefined;
 }
 
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
@@ -136,9 +147,18 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   // Validated keys, shared by the auth hook and the admin API (revocations invalidate it).
   const authCache = new AuthCache<AuthRecord>({ ttlMs: 30_000, maxEntries: 10_000 });
 
+  // The live config (spec 008): requests read a snapshot; reloads swap it for new requests.
+  const runtime =
+    deps.runtime ??
+    createConfigRuntime({
+      initial: { config: deps.config, providers: deps.providers },
+      buildProviders: () => deps.providers,
+      logger: deps.logger,
+    });
+
   const admission = createAdmission({
     limiter: deps.rateLimiter,
-    config: deps.config.limits,
+    config: () => runtime.current().config.limits,
     logger: deps.logger,
   });
 
@@ -146,7 +166,16 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const budgetCounters = deps.budgetCounters ?? new MemoryBudgetCounters();
   const budgets = createBudgets({
     counters: budgetCounters,
-    config: deps.config.budgets,
+    // Read per check from the live config, so a reloaded `budgets.onRedisError` applies (spec 008).
+    config: {
+      get onRedisError() {
+        return runtime.current().config.budgets.onRedisError;
+      },
+      // The usage worker's setting; it reads the file when it starts.
+      get reconcileIntervalSeconds() {
+        return runtime.current().config.budgets.reconcileIntervalSeconds;
+      },
+    },
     logger: deps.logger,
     ...(deps.clock ? { now: deps.clock } : {}),
   });
@@ -163,12 +192,25 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     ...(deps.clock ? { now: deps.clock } : {}),
   });
 
+  // Breaker and latency state per candidate, in memory per instance (spec 008).
+  const health = new CandidateHealthRegistry({
+    settings: () => runtime.current().config,
+    logger: deps.logger,
+  });
+  runtime.onChange((prev, next) => health.retain(prev, next));
+  const timers = deps.routing?.timers ?? systemTimers;
+
   await app.register(proxyRoutes, {
-    config: deps.config,
-    providers: deps.providers,
+    runtime,
     admission,
     budgets: budgets.check,
     outcomes,
+    routing: {
+      health,
+      timers,
+      random: deps.routing?.random ?? Math.random,
+      costEstimator: deps.costEstimator,
+    },
     auth: {
       store: deps.keyStore,
       pepper: deps.keyPepper,
@@ -192,6 +234,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       cache: authCache,
       usage: deps.usageReader,
       budgets: { counters: budgetCounters, store: deps.budgetStore, now: deps.clock ?? Date.now },
+      routing: {
+        health: () =>
+          health.snapshot(timers.now(), aliasCandidates(runtime.current().config.aliases)),
+        reload: () => runtime.reload(),
+      },
     });
   }
   return app;

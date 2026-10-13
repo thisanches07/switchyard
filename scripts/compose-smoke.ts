@@ -1,7 +1,7 @@
 // Smoke test for the Docker Compose stack (spec 001: AC-1..AC-6, AC-9; specs 002-003: chat,
 // streaming and embeddings via the mock provider; spec 004: API keys through the admin API;
 // spec 005: per-minute rate limits; spec 006: usage events through Redpanda and the worker;
-// spec 010: PII block and mask).
+// spec 010: PII block and mask; spec 008: alias fallback).
 // Cross-platform: `node scripts/compose-smoke.ts [--down]` locally (Windows or Linux) and in CI.
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
@@ -296,6 +296,16 @@ try {
       console.log(`  cost ${cost} USD, then 429 budget_exceeded`);
     },
   );
+  await step("an alias falls back when its first candidate fails (spec 008)", async () => {
+    // config/switchyard.example.yaml: resilient = [mock/error-503, mock/smoke].
+    const res = await chatWith(apiKey, { content: "hi", model: "resilient" });
+    const body = await res.text();
+    if (res.status !== 200) throw new Error(`${res.status} ${body}`);
+    const attempts = res.headers.get("x-switchyard-attempts");
+    const model = res.headers.get("x-switchyard-model");
+    if (attempts !== "2") throw new Error(`x-switchyard-attempts: ${attempts}`);
+    if (model !== "smoke") throw new Error(`x-switchyard-model: ${model}`);
+  });
 
   await step("ollama profile adds the ollama service", () => {
     const services = run(["compose", "--profile", "ollama", "config", "--services"]).stdout;

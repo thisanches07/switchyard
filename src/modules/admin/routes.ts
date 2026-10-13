@@ -1,6 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { ConfigError } from "../../config/errors.js";
 import type { ApiKeyRecord, AuthRecord, KeyStore } from "../../core/auth.js";
 import type { BudgetCounters, BudgetRef, BudgetStore } from "../../core/budget.js";
 import { invalidAdminToken, notFound, usageUnavailable } from "../../core/errors.js";
@@ -9,8 +10,10 @@ import type { UsageReader } from "../../core/usage.js";
 import type { AuthCache } from "../auth/cache.js";
 import { displayPrefix, generateKey, hashKey, parseBearer } from "../auth/keys.js";
 import { budgetStatus } from "../budgets/status.js";
+import type { ReloadResult } from "../config/runtime.js";
 import { docs } from "../docs.js";
 import { normalize, tryDecimal } from "../pricing/decimal.js";
+import type { CandidateHealthView } from "../routing/health.js";
 import { normalizeDecimal, parseUsageQuery, todayUtc } from "../usage/report.js";
 import { parseWith } from "../validation.js";
 
@@ -23,6 +26,14 @@ export interface AdminRoutesOptions {
   usage?: UsageReader | undefined;
   /** Budget status routes (spec 007); they answer 503 without a store. */
   budgets?: { counters: BudgetCounters; store?: BudgetStore | undefined; now: () => number };
+  /** Candidate health and config reload of this instance (spec 008). */
+  routing?:
+    | {
+        health(): CandidateHealthView[];
+        /** Throws `ConfigError` when the file is invalid (previous config kept). */
+        reload(): ReloadResult;
+      }
+    | undefined;
 }
 
 /** A per-minute limit: positive integer, or null to clear it (spec 005). */
@@ -241,6 +252,34 @@ export async function adminRoutes(app: FastifyInstance, opts: AdminRoutesOptions
     if (!team) throw notFound("Team", id);
     return statusOf({ scope: "team", id: team.id }, team.monthlyBudgetUsd, team.softLimitPct);
   });
+  const routing = opts.routing;
+  if (routing) {
+    // Breakers and latency are learned per instance (spec 008, AC-11).
+    app.get("/admin/providers/health", { schema: docs.providersHealth }, async () => ({
+      scope: "instance",
+      note: "Breaker and latency state is kept in memory by each gateway instance; other instances may differ",
+      data: routing.health(),
+    }));
+
+    // Validates and applies the config file now (spec 008, AC-12/AC-13; ADR-0018).
+    app.post("/admin/config/reload", { schema: docs.configReload }, async (request, reply) => {
+      try {
+        const result = routing.reload();
+        request.log.info({ result: result.result }, "config reload requested");
+        return result;
+      } catch (error) {
+        if (!(error instanceof ConfigError)) throw error;
+        return reply.code(400).send({
+          error: {
+            message: `Invalid configuration in ${error.source}; the previous configuration is still in use`,
+            type: "invalid_request_error",
+            code: "invalid_config",
+            issues: error.issues,
+          },
+        });
+      }
+    });
+  }
 
   app.patch("/admin/teams/:id", { schema: docs.patchTeamLimits }, async (request) => {
     const { id } = parseWith(keyParams, request.params);

@@ -63,14 +63,18 @@ Every request admitted by the rate limiter gets an **outcome tracker** (`src/mod
 
 `POST /v1/messages` (Anthropic Messages API, spec 014) runs the **same pipeline**: the route converts the Anthropic body into the canonical request first, carrying Anthropic-only data (thinking blocks, `cache_control`, documents) in an opaque extension that only the `anthropic` adapter reads (ADR-0016). Same-family requests are re-emitted natively; cross-family requests are translated. Responses are converted back by the route, and errors take the shape of the route the client called.
 
+### Routing and config snapshots
+
+Every `/v1` request reads the live config once, at its start (`request.snapshot`: config + provider registry, `src/modules/config/runtime.ts`), so a hot reload (ADR-0018) only affects new requests. Chat, embeddings and messages all go through one attempt loop (`src/modules/proxy/attempts.ts`, spec 008): candidates allowed for the key, ordered by the alias strategy, tried with retries, full-jitter backoff and per-candidate circuit breakers (`src/modules/routing/`) until the first byte. Each attempt is a `switchyard.upstream` span; the request is admitted, reconciled and recorded once.
+
 ## Code layout
 
 ```
 src/
 ├─ server.ts / worker.ts / app.ts
-├─ config/      Zod schema, loader, hot reload
+├─ config/      Zod schema, loader (the live snapshot and reload triggers are in modules/config)
 ├─ core/        canonical types, errors, ports (interfaces), no infra imports
-├─ modules/     auth · ratelimit · budget · pii · cache · routing · providers · anthropic · proxy · usage · admin
+├─ modules/     auth · ratelimit · budget · pii · cache · routing · providers · anthropic · proxy · usage · admin · config
 └─ infra/       db (Drizzle) · redis · kafka · telemetry · logger
 ```
 
@@ -90,8 +94,8 @@ Dependency rule: `modules → core ← infra`. `core` never imports `modules` or
 
 | Dependency down | Behaviour |
 |---|---|
-| Provider | Retry with backoff, then next candidate; circuit breaker opens after repeated failures |
 | Redis | Rate limits fail open, budgeted keys fail closed (`budgets.onRedisError`, configurable), exact cache skipped; counters lost on restart are rebuilt from Postgres by the worker's reconciliation |
+| Provider | Before the first byte: next candidate, full-jitter backoff when a candidate repeats, up to `retry.maxAttempts` attempts within `server.timeouts.totalMs`; per-candidate circuit breaker (per instance) skips a failing candidate for `openMs`, then probes it; `503 no_healthy_upstream` when all are open. After the first byte: SSE error event, never retried (ADR-0008) |
 | Postgres | Auth served from LRU cache for known keys; new keys fail with 503; semantic cache skipped; the usage worker retries the batch with backoff, without committing offsets or writing to the DLQ |
 | Kafka | Gateway keeps serving; events buffered in memory up to a bound, then dropped and counted; `/readyz` unaffected |
 

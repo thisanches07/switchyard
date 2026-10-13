@@ -8,7 +8,7 @@ server:
   timeouts:
     connectMs: 5000
     ttfbMs: 30000
-    totalMs: 120000
+    totalMs: 120000            # whole request, all attempts and backoff waits (to first chunk for streams)
 
 providers:
   ollama:
@@ -44,6 +44,9 @@ aliases:
   embed:
     strategy: priority
     candidates: [ollama/nomic-embed-text]   # 768 dims (ADR-0005)
+  resilient:                 # demo of fallback (spec 008): the first candidate always fails
+    strategy: priority
+    candidates: [mock/error-503, mock/smoke]
 
 limits:                        # spec 005: per-minute limits enforced in Redis
   defaults:                    # for keys without their own rpm/tpm; remove for unlimited
@@ -69,14 +72,18 @@ pii:                           # spec 010: PII redaction, see docs/pii.md
   detectors: [email, phone, card, cpf, cnpj, ip, term]
   denyList: []                 # literal terms (not regexes), case-insensitive, whole words
 
-retry:
-  maxAttempts: 3
-  baseDelayMs: 200
-  maxDelayMs: 2000
+retry:                       # spec 008: retries and fallback, only before the first byte
+  maxAttempts: 3             # attempts in total, across all candidates of a request
+  baseDelayMs: 200           # full-jitter backoff before retrying a candidate already tried
+  maxDelayMs: 2000           # also caps an upstream Retry-After
 
-circuitBreaker:
-  failureThreshold: 5        # consecutive failures to open
-  openMs: 30000              # time before half-open probe
+circuitBreaker:              # spec 008: per candidate (provider/model), per instance
+  failureThreshold: 10       # consecutive failures to open (a dead provider opens in ~4 requests; 30 % noise almost never does)
+  openMs: 10000              # time before the single half-open probe
+
+routing:                     # spec 008
+  ewmaAlpha: 0.3             # weight of the newest latency sample (lowest-latency aliases)
+  hotReload: true            # poll this file every 2 s; also POST /admin/config/reload, SIGHUP
 
 cache:
   exact:

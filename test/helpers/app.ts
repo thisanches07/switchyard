@@ -9,11 +9,14 @@ import type { RateLimiter } from "../../src/core/ratelimit.js";
 import type { OutcomeRecorder, UsageReader } from "../../src/core/usage.js";
 import { createLogger } from "../../src/infra/logger.js";
 import { MemoryRateLimiter } from "../../src/infra/memory/rate-limiter.js";
+import type { ConfigRuntime } from "../../src/modules/config/runtime.js";
 import { createProviderRegistry } from "../../src/modules/providers/registry.js";
+import type { Timers } from "../../src/modules/routing/timers.js";
 import { testConfig } from "./config.js";
 import { fakeHttp, jsonResponse } from "./http.js";
 import { captureLogs } from "./log-capture.js";
 import { MemoryKeyStore, TEST_PEPPER } from "./memory-key-store.js";
+import { instantTimers } from "./routing.js";
 
 export interface TestAppOptions {
   checks?: DependencyCheck[];
@@ -28,7 +31,7 @@ export interface TestAppOptions {
   usageRecorder?: OutcomeRecorder;
   /** Answers GET /admin/usage (spec 006). */
   usageReader?: UsageReader;
-  /** Prices (spec 007); default: every cost unknown. */
+  /** Prices (spec 007, also lowest-cost routing in spec 008); default: every cost unknown. */
   costEstimator?: CostEstimator;
   /** Budget counters (spec 007); default: fresh in-memory counters. */
   budgetCounters?: BudgetCounters;
@@ -36,6 +39,10 @@ export interface TestAppOptions {
   budgetStore?: BudgetStore;
   /** Clock for budget periods (spec 007). */
   clock?: () => number;
+  /** Live config (spec 008 hot reload); `config`/`providers` should match its first snapshot. */
+  runtime?: ConfigRuntime;
+  /** Routing clock and RNG (spec 008); default: real clock, backoff waits skipped. */
+  routing?: { timers?: Timers; random?: () => number };
   /**
    * Default true: `app.inject` adds `Authorization: Bearer <test key>` unless the request sets
    * its own `authorization` header. Set false to exercise authentication itself.
@@ -66,6 +73,8 @@ export async function testApp(options: TestAppOptions = {}) {
     ...(options.clock === undefined ? {} : { clock: options.clock }),
     ...(options.budgetStore === undefined ? {} : { budgetStore: options.budgetStore }),
     ...(options.bodyLimitBytes === undefined ? {} : { bodyLimitBytes: options.bodyLimitBytes }),
+    runtime: options.runtime,
+    routing: { timers: instantTimers(), random: () => 0.5, ...options.routing },
   });
 
   const { key } = await store.issueKey({ team: "default-test-team" });
