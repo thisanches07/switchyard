@@ -44,7 +44,7 @@ One commit per task, ending in `[spec-011]`. T13 and T14 are blocked on things o
   - Test: `grafana-files.test.ts` › four dashboards with unique uids; Cost and Providers panels.
   - Files: `deploy/grafana/dashboards/{cost,providers,cache}.json`
 
-- [ ] **T8. Alert rules**
+- [x] **T8. Alert rules**
   - ACs: AC-7
   - Test: `grafana-files.test.ts` › four rules (error rate, circuit open, budget near limit, events dropped), summary + description, thresholds documented as examples, no contact points.
   - Files: `deploy/grafana/alerting/switchyard-alerts.yaml`

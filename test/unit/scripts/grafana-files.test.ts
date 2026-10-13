@@ -106,6 +106,39 @@ describe("deploy/grafana (spec 011)", () => {
     );
   });
 
+  it("ships the four example alert rules with a summary and a description (AC-7)", () => {
+    const files = filesIn("alerting", /\.ya?ml$/);
+    const rules = files.flatMap(({ text }) =>
+      (
+        parse(text) as {
+          groups: {
+            folder: string;
+            rules: { uid: string; annotations: Record<string, string> }[];
+          }[];
+        }
+      ).groups.flatMap((g) => g.rules),
+    );
+    expect(rules.map((r) => r.uid)).toEqual([
+      "switchyard-high-error-rate",
+      "switchyard-circuit-open",
+      "switchyard-budget-near-limit",
+      "switchyard-usage-events-dropped",
+    ]);
+    for (const rule of rules) {
+      expect(rule.annotations.summary, rule.uid).toBeTruthy();
+      expect(rule.annotations.description, rule.uid).toMatch(/^Example (threshold|rule)/);
+      expect(rule.annotations.description, rule.uid).toMatch(/Check/);
+    }
+  });
+
+  it("commits no contact point, notification policy or credential", () => {
+    for (const { path, text } of filesIn("alerting", /\.ya?ml$/)) {
+      const doc = parse(text) as Record<string, unknown>;
+      expect(Object.keys(doc).sort(), path).toEqual(["apiVersion", "groups"]);
+      expect(text, path).not.toMatch(/contactPoints|policies|password|token:|webhook/i);
+    }
+  });
+
   it("the dashboard provider points Grafana at the mounted dashboards folder", () => {
     const provisioning = parse(read("provisioning", "dashboards", "switchyard.yaml")) as {
       providers: { name: string; folder: string; options: { path: string } }[];

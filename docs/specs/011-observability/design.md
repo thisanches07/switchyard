@@ -155,8 +155,8 @@ One group `switchyard` in folder `Switchyard`, interval `1m`. Each rule: query `
 
 | uid | Query (A) | Fires when | for |
 |---|---|---|---|
-| `switchyard-high-error-rate` | `sum(rate(switchyard_requests_total{status=~"5..\|upstream_error_midstream"}[5m])) / clamp_min(sum(rate(switchyard_requests_total[5m])), 1e-9)` | `> 0.05` | 5m |
-| `switchyard-circuit-open` | `max(switchyard_circuit_state)` | `>= 2` | 1m |
+| `switchyard-high-error-rate` | `sum(rate(switchyard_request_duration_seconds_count{status="5xx"}[5m])) / clamp_min(sum(rate(switchyard_request_duration_seconds_count[5m])), 1e-9)` (all admitted requests) | `> 0.05` | 5m |
+| `switchyard-circuit-open` | `max(switchyard_circuit_state)` | `> 1.5` (2 = open) | 1m |
 | `switchyard-budget-near-limit` | `max(switchyard_budget_used_ratio)` | `> 0.9` | 5m |
 | `switchyard-usage-events-dropped` | `sum(increase(switchyard_usage_events_dropped_total[5m]))` | `> 0` | 0m |
 
