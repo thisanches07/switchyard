@@ -66,8 +66,11 @@ describe("upstream telemetry", () => {
 
   it("never records message content in spans or logs", async () => {
     const { span, logs } = await call("fast");
-    expect(JSON.stringify(span?.attributes)).not.toContain("4111");
-    expect(JSON.stringify(logs)).not.toContain("4111");
+    // Look for the whole sentence, not a digit run: random trace and span ids are hex.
+    expect(JSON.stringify(span?.attributes)).not.toContain("my card is");
+    expect(JSON.stringify(logs)).not.toContain("my card is");
+    expect(JSON.stringify(span?.attributes)).not.toContain("4111111111111111");
+    expect(JSON.stringify(logs)).not.toContain("4111111111111111");
   });
 
   it("counts requests and records upstream duration by provider and model", async () => {
