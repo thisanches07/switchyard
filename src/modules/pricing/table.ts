@@ -94,6 +94,16 @@ export class PriceTable implements CostEstimator {
   }
 }
 
+/** Prices a finished request at its served `provider/model` (spec 007, AC-2). */
+export function priceEvent(
+  table: PriceTable,
+): (event: TokenCounts & { provider: string | null; servedModel: string | null }) => string | null {
+  return (event) =>
+    event.provider === null || event.servedModel === null
+      ? null
+      : table.costUsd(`${event.provider}/${event.servedModel}`, event);
+}
+
 /**
  * Alias candidates whose input or output price is unknown (no entry, or TODO): the gateway logs
  * them once at boot (AC-1). Distinct, in alias order.

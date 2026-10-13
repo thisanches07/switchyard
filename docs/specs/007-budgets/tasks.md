@@ -15,7 +15,7 @@ One commit per task, ending in `[spec-007]`. `pnpm verify` green after each (exi
   - Do: `src/modules/pricing/{table,load}.ts`; `AppDeps.costEstimator`; `server.ts` loads `pricingFile` (exit on error) and logs the unknown-price warning.
   - Test: `test/unit/pricing/table.test.ts` › exact > most specific pattern > file order, `*` spans `/`, cost formula with cached input (with and without `cachedInput`), zero-count prices not needed, `TODO`/missing → `null`, 10-place half-up, `estimateUsd`, `unknownPriceCandidates`; `test/unit/pricing/load.test.ts` › repo `config/pricing.yaml` loads, unknown field/negative/other string rejected naming the entry, missing file; `boot.test.ts` › invalid pricing file exits 1 naming it.
 
-- [ ] **T3. Cost on usage events, `x-switchyard-cost-usd` and cost metrics**
+- [x] **T3. Cost on usage events, `x-switchyard-cost-usd` and cost metrics**
   - ACs: AC-2, AC-3, AC-13
   - Do: outcome hook `price` dep and `tracker.event`; proxy `onSend` header; charger recorder (metrics only for now) composed with `fanOut` in `buildApp`.
   - Test: `test/unit/usage/outcome.test.ts` › cost from price, `"0"` without upstream call, contribution wins, price errors → `null`; `test/unit/proxy/cost.test.ts` › header on chat/embeddings/messages equals event `costUsd`, absent on streams and unknown prices, estimated tokens priced, `switchyard_cost_usd_total` and `switchyard_cost_unknown_requests_total`.

@@ -89,6 +89,15 @@ export async function proxyRoutes(app: FastifyInstance, opts: ProxyRoutesOptions
   // Records any admitted request whose route did not end its tracker (spec 006).
   registerOutcomeFallback(app);
 
+  // Spec 007, AC-3: non-streaming responses carry their known cost (streams end after headers).
+  app.addHook("onSend", async (request, reply, payload) => {
+    const event = request.outcome?.event;
+    if (event && !event.stream && event.costUsd !== null) {
+      reply.header("x-switchyard-cost-usd", event.costUsd);
+    }
+    return payload;
+  });
+
   app.get("/v1/models", { schema: docs.models }, async (request) => {
     const list = listModels(opts.config, opts.startedAt);
     const allowed = allowedModels(request);

@@ -241,6 +241,92 @@ describe("outcome hook (spec 006, AC-3)", () => {
   });
 });
 
+describe("outcome hook: cost (spec 007, AC-2)", () => {
+  function priced(price: (event: UsageEvent) => string | null) {
+    const events: UsageEvent[] = [];
+    const logs = captureLogs();
+    const hook = createOutcomeHook({
+      recorder: { record: (event) => events.push(event) },
+      logger: createLogger({ level: "info", destination: logs.stream }),
+      price,
+    });
+    const tracker = hook.begin(
+      {},
+      {
+        requestId: "req_c",
+        principal: { teamId: TEAM, keyId: KEY },
+        operation: "chat",
+        stream: false,
+        requestedModel: "fast",
+        provider: "mock",
+        servedModel: "fast-model",
+        elapsedMs: () => 1,
+      },
+    );
+    return { tracker, events, logs: logs.lines };
+  }
+
+  it("prices the final event (provider, model and the same token counts)", () => {
+    const seen: UsageEvent[] = [];
+    const { tracker, events } = priced((event) => {
+      seen.push(event);
+      return "0.0000150000";
+    });
+    expect(tracker.event).toBeUndefined();
+    tracker.failMidstream(new Error("cut"), {
+      usage: { inputTokens: 3, outputTokens: 6 },
+      estimated: true,
+    });
+    const event = only(events);
+    expect(event.costUsd).toBe("0.0000150000");
+    expect(tracker.event).toBe(event);
+    expect(seen[0]).toMatchObject({
+      provider: "mock",
+      servedModel: "fast-model",
+      inputTokens: 3,
+      outputTokens: 6,
+      estimated: true,
+    });
+  });
+
+  it("records an unknown price as null", () => {
+    const { tracker, events } = priced(() => null);
+    tracker.succeed({ usage: { inputTokens: 1, outputTokens: 1 } });
+    expect(only(events).costUsd).toBeNull();
+  });
+
+  it('costs exactly "0" when no upstream call was made, without pricing', () => {
+    const { tracker, events } = priced(() => {
+      throw new Error("must not be priced");
+    });
+    tracker.reject(new GatewayError(400, "invalid_request_error", "pii_detected", "x"));
+    expect(only(events).costUsd).toBe("0");
+  });
+
+  it('costs "0" when a later spec reports zero attempts (cache hit)', () => {
+    const { tracker, events } = priced(() => "0.5000000000");
+    tracker.set({ attempts: 0, cacheStatus: "hit" });
+    tracker.succeed({ usage: { inputTokens: 10, outputTokens: 10 } });
+    expect(only(events).costUsd).toBe("0");
+  });
+
+  it("keeps a cost contributed with set()", () => {
+    const { tracker, events } = priced(() => "0.5000000000");
+    tracker.set({ costUsd: "0.0012" });
+    tracker.succeed({});
+    expect(only(events).costUsd).toBe("0.0012");
+  });
+
+  it("records null (unknown) when pricing throws, and still records the event", () => {
+    const { tracker, events, logs } = priced(() => {
+      throw new Error("bad table");
+    });
+    tracker.succeed({ usage: { inputTokens: 1, outputTokens: 1 } });
+    expect(only(events).costUsd).toBeNull();
+    expect(logs).toContainEqual(expect.objectContaining({ level: "warn", requestId: "req_c" }));
+  });
+});
+
 describe("recorders", () => {
   it("noopRecorder accepts events", () => {
     expect(() => noopRecorder.record({} as UsageEvent)).not.toThrow();

@@ -75,6 +75,8 @@ export interface PartialResult {
 /** One per admitted request. The first terminal call wins; later ones are ignored. */
 export interface OutcomeTracker {
   readonly done: boolean;
+  /** The event handed to the recorder once the request ended (spec 007 reads its cost). */
+  readonly event: UsageEvent | undefined;
   /** Adds or overrides fields of the event (spec 007–010 contributions). */
   set(fields: OutcomeContribution): void;
   /** The full response was delivered (for streams: before `[DONE]`). */
@@ -98,6 +100,12 @@ export interface OutcomeHookDeps {
   recorder: OutcomeRecorder;
   logger: FastifyBaseLogger;
   now?: () => number;
+  /**
+   * Cost of a request that called a provider (spec 007, AC-2): exact decimal string, or null when
+   * unknown. With it, requests that made no upstream call cost exactly "0". Without it, costs stay
+   * null unless a contribution sets them.
+   */
+  price?: (event: UsageEvent) => string | null;
 }
 
 interface Ending {
@@ -154,6 +162,26 @@ export function createOutcomeHook(deps: OutcomeHookDeps): OutcomeHook {
         attempts: init.provider === null ? 0 : 1,
       };
       let done = false;
+      let recorded: UsageEvent | undefined;
+
+      /** Spec 007: a contributed cost wins; no upstream call costs "0"; else the price table's. */
+      const costOf = (event: UsageEvent): string | null => {
+        if (fields.costUsd !== undefined) return fields.costUsd;
+        if (!deps.price) return null;
+        if (event.attempts === 0 || event.provider === null) return "0";
+        try {
+          return deps.price(event);
+        } catch (error) {
+          deps.logger.warn(
+            {
+              requestId: event.requestId,
+              err: error instanceof Error ? error.message : String(error),
+            },
+            "request cost could not be computed",
+          );
+          return null;
+        }
+      };
 
       const finish = ({ outcome, status, errorCode, result }: Ending) => {
         if (done) return;
@@ -185,6 +213,8 @@ export function createOutcomeHook(deps: OutcomeHookDeps): OutcomeHook {
           cacheStatus: fields.cacheStatus ?? "miss",
           piiDetections: fields.piiDetections ?? {},
         };
+        event.costUsd = costOf(event);
+        recorded = event;
         try {
           deps.recorder.record(event);
         } catch (error) {
@@ -203,6 +233,9 @@ export function createOutcomeHook(deps: OutcomeHookDeps): OutcomeHook {
       const tracker: OutcomeTracker = {
         get done() {
           return done;
+        },
+        get event() {
+          return recorded;
         },
         set(contribution) {
           Object.assign(fields, contribution);

@@ -30,13 +30,14 @@ import {
 } from "./modules/anthropic/inbound-errors.js";
 import { AuthCache } from "./modules/auth/cache.js";
 import { recordAuthFailure } from "./modules/auth/telemetry.js";
+import { createBudgetCharger } from "./modules/budgets/charge.js";
 import { openApiInfo } from "./modules/docs.js";
 import { healthRoutes } from "./modules/health/routes.js";
-import type { PriceTable } from "./modules/pricing/table.js";
+import { PriceTable, priceEvent } from "./modules/pricing/table.js";
 import { proxyRoutes } from "./modules/proxy/routes.js";
 import { countRejection, createAdmission } from "./modules/ratelimit/admission.js";
 import { createOutcomeHook } from "./modules/usage/outcome.js";
-import { noopRecorder } from "./modules/usage/recorders.js";
+import { fanOut, noopRecorder } from "./modules/usage/recorders.js";
 
 export interface AppDeps {
   logger: FastifyBaseLogger;
@@ -133,9 +134,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
 
   // The request-outcome hook (spec 006); later specs extend the recorder, not the routes.
+  // Spec 007: every event is priced, then charged to the budget counters and published.
   const outcomes = createOutcomeHook({
-    recorder: deps.usageRecorder ?? noopRecorder,
+    recorder: fanOut(createBudgetCharger(), deps.usageRecorder ?? noopRecorder),
     logger: deps.logger,
+    price: priceEvent(deps.costEstimator ?? PriceTable.empty()),
   });
 
   await app.register(proxyRoutes, {

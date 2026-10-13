@@ -7,6 +7,7 @@ import type { RateLimiter } from "../../src/core/ratelimit.js";
 import type { OutcomeRecorder, UsageReader } from "../../src/core/usage.js";
 import { createLogger } from "../../src/infra/logger.js";
 import { MemoryRateLimiter } from "../../src/infra/memory/rate-limiter.js";
+import type { PriceTable } from "../../src/modules/pricing/table.js";
 import { createProviderRegistry } from "../../src/modules/providers/registry.js";
 import { testConfig } from "./config.js";
 import { fakeHttp, jsonResponse } from "./http.js";
@@ -26,6 +27,8 @@ export interface TestAppOptions {
   usageRecorder?: OutcomeRecorder;
   /** Answers GET /admin/usage (spec 006). */
   usageReader?: UsageReader;
+  /** Prices (spec 007); default: every cost unknown. */
+  costEstimator?: PriceTable;
   /**
    * Default true: `app.inject` adds `Authorization: Bearer <test key>` unless the request sets
    * its own `authorization` header. Set false to exercise authentication itself.
@@ -51,6 +54,7 @@ export async function testApp(options: TestAppOptions = {}) {
     ...(options.adminToken === undefined ? {} : { adminToken: options.adminToken }),
     ...(options.usageRecorder === undefined ? {} : { usageRecorder: options.usageRecorder }),
     ...(options.usageReader === undefined ? {} : { usageReader: options.usageReader }),
+    ...(options.costEstimator === undefined ? {} : { costEstimator: options.costEstimator }),
     ...(options.bodyLimitBytes === undefined ? {} : { bodyLimitBytes: options.bodyLimitBytes }),
   });
 
