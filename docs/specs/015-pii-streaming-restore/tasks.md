@@ -25,7 +25,7 @@ One commit per task, ending in `[spec-015]`. Lint, typecheck and the task's test
   - Do: `HoldClock`, `restoreSteps` in `stream-restore.ts`.
   - Test: `stream-restore.test.ts` › with a manual clock, a stalled upstream yields the held fragment in a synthesised chunk exactly at `maxHoldMs`; `next()` called once per upstream chunk; final flush at upstream end; upstream errors propagate.
 
-- [ ] **T5. Telemetry**
+- [x] **T5. Telemetry**
   - ACs: AC-5
   - Do: `src/modules/pii/telemetry.ts` › `recordStreamHold` (histogram, failure counter, span counts).
   - Test: `test/unit/pii/stream-telemetry.test.ts` › hold seconds recorded for every hold, `switchyard_pii_stream_restore_failures_total{reason="hold_limit"}` only for limit releases, span attributes, no text in points.
