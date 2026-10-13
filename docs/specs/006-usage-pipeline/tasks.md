@@ -15,7 +15,7 @@ One commit per task, ending in `[spec-006]`. `pnpm verify` exit code checked aft
   - Do: `src/core/usage.ts` (schema, types, `OutcomeRecorder`, `MessageProducer`, `UsageStore`, `UsageReader`), `src/core/uuid.ts`.
   - Test: `test/unit/usage/schema.test.ts` › accepts a full event; rejects unknown fields, `schemaVersion: 2`, a v4 id, negative tokens, `costUsd` with exponent or sign; `uuid.test.ts` › version/variant bits, time ordering.
 
-- [ ] **T3. Outcome tracker**
+- [x] **T3. Outcome tracker**
   - ACs: AC-3
   - Do: `src/modules/usage/outcome.ts` (`createOutcomeHook`, tracker, request augmentation), `recorders.ts` (`noopRecorder`, `fanOut`).
   - Test: `test/unit/usage/outcome.test.ts` › success, fail (GatewayError and unknown error), failMidstream, clientClosed (200/499), reject (provider null, attempts 0, tokens 0), `set()` contributions, exactly one event when two terminal calls race, recorder errors swallowed.
