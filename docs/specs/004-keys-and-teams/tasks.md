@@ -13,7 +13,7 @@ One commit per task, ending in `[spec-004]`. `pnpm verify` green after each (exi
   - ACs: AC-2
   - Test: `test/unit/auth/keys.test.ts` › `sk-sy-` + ≥ 43 base62 chars, unique, `hashKey` deterministic and pepper-dependent, prefix, `parseBearer` variants.
 
-- [ ] **T3. Auth cache**
+- [x] **T3. Auth cache**
   - ACs: AC-6
   - Test: `test/unit/auth/cache.test.ts` › TTL expiry (fake timers), LRU eviction, `invalidateKey`.
 
