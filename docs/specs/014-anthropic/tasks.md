@@ -55,7 +55,7 @@ One commit per task, ending in `[spec-014]`. `pnpm verify` green after each.
   - Test: `test/unit/anthropic/inbound-response.test.ts` › finish_reason table, stop_sequence match, tool calls, usage, `msg_` id; `inbound-errors.test.ts` › status → type table, details.error_code, request_id, anthropic-ratelimit-* from x-ratelimit-* (RFC 3339 reset).
   - Files: `src/modules/anthropic/{inbound-response,inbound-errors}.ts`
 
-- [ ] **T11. Stream encoder and Anthropic SSE**
+- [x] **T11. Stream encoder and Anthropic SSE**
   - ACs: AC-11, AC-12
   - Test: `test/unit/anthropic/inbound-stream.test.ts` › synthesised event order (text, tool use, mixed), native forwarding with model rewritten, error event shape; `test/unit/proxy/stream.test.ts` unchanged (default encoder).
   - Files: `src/modules/proxy/stream.ts`, `src/modules/anthropic/inbound-stream.ts`
