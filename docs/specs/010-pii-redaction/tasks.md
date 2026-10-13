@@ -20,7 +20,7 @@ One commit per task, ending in `[spec-010]`. `pnpm verify` green after each (exi
   - Do: create and PATCH accept `piiMode` (PATCH may set it alone), key views return it, cache invalidated, OpenAPI bodies.
   - Test: `test/unit/admin/admin.test.ts` › create with/without `piiMode`, PATCH set/`null`, invalid value 400, listing, cache invalidation.
 
-- [ ] **T4. Validators**
+- [x] **T4. Validators**
   - ACs: AC-3, AC-4
   - Test: `test/unit/pii/validators.test.ts` › Luhn, CPF and CNPJ check digits (numeric and alphanumeric, valid and invalid), repeated digits, DDD list, e-mail domains, IPv4/IPv6.
 
