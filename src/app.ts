@@ -9,7 +9,7 @@ import Fastify, {
   type FastifyRequest,
 } from "fastify";
 import type { LoadedConfig } from "./config/load.js";
-import type { ApiKeyRecord, KeyStore } from "./core/auth.js";
+import type { AuthRecord, KeyStore } from "./core/auth.js";
 import {
   GatewayError,
   internalError,
@@ -90,7 +90,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     readinessTimeoutMs: deps.readinessTimeoutMs ?? 1_000,
   });
   // Validated keys, shared by the auth hook and the admin API (revocations invalidate it).
-  const authCache = new AuthCache<ApiKeyRecord>({ ttlMs: 30_000, maxEntries: 10_000 });
+  const authCache = new AuthCache<AuthRecord>({ ttlMs: 30_000, maxEntries: 10_000 });
 
   await app.register(proxyRoutes, {
     config: deps.config,

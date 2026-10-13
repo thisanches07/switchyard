@@ -1,7 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import type { ApiKeyRecord, KeyStore } from "../../core/auth.js";
+import type { ApiKeyRecord, AuthRecord, KeyStore } from "../../core/auth.js";
 import { invalidAdminToken, notFound } from "../../core/errors.js";
 import type { AuthCache } from "../auth/cache.js";
 import { displayPrefix, generateKey, hashKey, parseBearer } from "../auth/keys.js";
@@ -12,7 +12,7 @@ export interface AdminRoutesOptions {
   store: KeyStore;
   pepper: string;
   adminToken: string;
-  cache: AuthCache<ApiKeyRecord>;
+  cache: AuthCache<AuthRecord>;
 }
 
 const teamBody = z.object({ name: z.string().trim().min(1).max(100) });
@@ -41,6 +41,8 @@ function keyView(record: ApiKeyRecord) {
     prefix: record.prefix,
     allowedModels: record.allowedModels,
     status: record.status,
+    rpm: record.rpm,
+    tpm: record.tpm,
     expiresAt: record.expiresAt,
     createdAt: record.createdAt,
     revokedAt: record.revokedAt,
@@ -96,7 +98,7 @@ export async function adminRoutes(app: FastifyInstance, opts: AdminRoutesOptions
     const { id } = parseWith(keyParams, request.params);
     const record = await opts.store.revokeKey(id);
     if (!record) throw notFound("API key", id);
-    opts.cache.invalidateKey(id);
+    opts.cache.invalidate((cached) => cached.key.id === id);
     request.log.info({ keyId: id }, "api key revoked");
     return keyView(record);
   });

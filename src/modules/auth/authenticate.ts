@@ -1,5 +1,5 @@
 import type { FastifyRequest } from "fastify";
-import type { ApiKeyRecord, KeyStore, Principal } from "../../core/auth.js";
+import type { AuthRecord, KeyStore, Principal } from "../../core/auth.js";
 import { invalidApiKey } from "../../core/errors.js";
 import type { AuthCache } from "./cache.js";
 import { hashKey, KEY_PREFIX, parseBearer } from "./keys.js";
@@ -17,7 +17,7 @@ export type AuthFailureReason = "missing" | "malformed" | "unknown" | "revoked" 
 export interface AuthenticateOptions {
   store: KeyStore;
   pepper: string;
-  cache: AuthCache<ApiKeyRecord>;
+  cache: AuthCache<AuthRecord>;
   now?: () => Date;
   onFailure?: (reason: AuthFailureReason) => void;
 }
@@ -47,17 +47,20 @@ export function createAuthenticate(options: AuthenticateOptions) {
       if (!record) throw reject("unknown");
       options.cache.set(hash, record);
     }
-    if (record.status !== "active") throw reject("revoked");
-    if (record.expiresAt && record.expiresAt.getTime() <= now().getTime()) {
+    const { key, team } = record;
+    if (key.status !== "active") throw reject("revoked");
+    if (key.expiresAt && key.expiresAt.getTime() <= now().getTime()) {
       throw reject("expired");
     }
 
     request.principal = {
-      keyId: record.id,
-      teamId: record.teamId,
-      allowedModels: record.allowedModels,
+      keyId: key.id,
+      teamId: key.teamId,
+      allowedModels: key.allowedModels,
+      keyLimits: { rpm: key.rpm, tpm: key.tpm },
+      teamLimits: { rpm: team.rpm, tpm: team.tpm },
     };
-    request.log = request.log.child({ teamId: record.teamId, keyId: record.id });
+    request.log = request.log.child({ teamId: key.teamId, keyId: key.id });
     tagRequestSpan(request);
   };
 }

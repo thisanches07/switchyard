@@ -9,7 +9,7 @@ One commit per task, ending in `[spec-005]`. `pnpm verify` exit code checked aft
   - ACs: AC-1, AC-10, AC-11
   - Test: `schema.test.ts` › defaults (`completionReserveTokens` 512, `onRedisError` open, `authFailuresPerMinutePerIp` 30, empty `defaults`), validation; example config has `defaults` 60 / 100000.
 
-- [ ] **T2. Limits in the data model**
+- [x] **T2. Limits in the data model**
   - ACs: AC-1, AC-2
   - Do: migration (`rpm`/`tpm` + checks), core types (`Limits`, `AuthRecord`, principal limits), `findKeyByHash` joined with the team, `updateKeyLimits`/`updateTeamLimits`, memory store, `AuthCache.invalidateTeam`.
   - Test: `db.int.test.ts` › columns, join, updates, check constraint; `cache.test.ts` › `invalidateTeam`; existing auth tests adapted.

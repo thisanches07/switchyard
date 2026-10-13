@@ -13,7 +13,7 @@ interface Entry<V> {
  * Validated keys by hash, with a TTL and LRU eviction (spec 004, AC-6). A Map keeps insertion
  * order, so re-inserting on read makes the first entry the least recently used.
  */
-export class AuthCache<V extends { id: string }> {
+export class AuthCache<V> {
   readonly #entries = new Map<string, Entry<V>>();
   readonly #ttlMs: number;
   readonly #maxEntries: number;
@@ -48,10 +48,10 @@ export class AuthCache<V extends { id: string }> {
     }
   }
 
-  /** Drops every cached entry for a key id (used right after a revoke). */
-  invalidateKey(keyId: string): void {
+  /** Drops every cached entry matching the predicate (revocations, limit changes). */
+  invalidate(predicate: (value: V) => boolean): void {
     for (const [hash, entry] of this.#entries) {
-      if (entry.value.id === keyId) this.#entries.delete(hash);
+      if (predicate(entry.value)) this.#entries.delete(hash);
     }
   }
 }
