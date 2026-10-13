@@ -43,7 +43,7 @@ One commit per task, ending in `[spec-003]`. `pnpm verify` green after each.
   - Test: `test/unit/proxy/stream.test.ts` › SSE events and `[DONE]`, headers incl. ttfb, pre-first-chunk errors as JSON, mid-stream error event without `[DONE]`, usage forwarding rules.
   - Files: `src/modules/proxy/{stream,routes,schema}.ts`
 
-- [ ] **T9. Streaming over a real socket**
+- [x] **T9. Streaming over a real socket**
   - ACs: AC-2, AC-6
   - Test: `test/integration/streaming.int.test.ts` › first chunk arrives before the provider finishes; client abort → upstream aborted < 1 s and status 499.
 
