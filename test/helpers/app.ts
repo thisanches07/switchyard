@@ -1,3 +1,4 @@
+import type { FastifyInstance, InjectOptions } from "fastify";
 import { buildApp } from "../../src/app.js";
 import type { LoadedConfig } from "../../src/config/load.js";
 import type { DependencyCheck } from "../../src/core/health.js";
@@ -7,6 +8,7 @@ import { createProviderRegistry } from "../../src/modules/providers/registry.js"
 import { testConfig } from "./config.js";
 import { fakeHttp, jsonResponse } from "./http.js";
 import { captureLogs } from "./log-capture.js";
+import { MemoryKeyStore, TEST_PEPPER } from "./memory-key-store.js";
 
 export interface TestAppOptions {
   checks?: DependencyCheck[];
@@ -14,11 +16,19 @@ export interface TestAppOptions {
   config?: LoadedConfig;
   providers?: ReadonlyMap<string, ChatProvider>;
   bodyLimitBytes?: number;
+  store?: MemoryKeyStore;
+  adminToken?: string;
+  /**
+   * Default true: `app.inject` adds `Authorization: Bearer <test key>` unless the request sets
+   * its own `authorization` header. Set false to exercise authentication itself.
+   */
+  authenticated?: boolean;
 }
 
 export async function testApp(options: TestAppOptions = {}) {
   const logs = captureLogs();
   const config = options.config ?? testConfig();
+  const store = options.store ?? new MemoryKeyStore();
   const providers =
     options.providers ??
     createProviderRegistry(config, {}, { http: fakeHttp(() => jsonResponse(500, {})).client });
@@ -27,7 +37,24 @@ export async function testApp(options: TestAppOptions = {}) {
     checks: options.checks ?? [],
     config,
     providers,
+    keyStore: store,
+    keyPepper: TEST_PEPPER,
+    ...(options.adminToken === undefined ? {} : { adminToken: options.adminToken }),
     ...(options.bodyLimitBytes === undefined ? {} : { bodyLimitBytes: options.bodyLimitBytes }),
   });
-  return { app, logs: logs.lines };
+
+  const { key } = await store.issueKey({ team: "default-test-team" });
+  if (options.authenticated !== false) withDefaultAuth(app, key);
+  return { app, logs: logs.lines, store, key };
+}
+
+/** Wraps `app.inject` so requests carry the test key unless they set `authorization`. */
+function withDefaultAuth(app: FastifyInstance, key: string): void {
+  const inject = app.inject.bind(app) as (opts: InjectOptions) => ReturnType<typeof app.inject>;
+  const patched = (opts: InjectOptions) => {
+    const headers = { ...(opts.headers ?? {}) } as Record<string, unknown>;
+    if (!("authorization" in headers)) headers.authorization = `Bearer ${key}`;
+    return inject({ ...opts, headers } as InjectOptions);
+  };
+  (app as unknown as { inject: typeof patched }).inject = patched;
 }

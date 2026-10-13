@@ -5,6 +5,7 @@ import { buildApp } from "../../src/app.js";
 import { createLogger } from "../../src/infra/logger.js";
 import { createMockProvider } from "../../src/modules/providers/mock.js";
 import { testConfig } from "../helpers/config.js";
+import { MemoryKeyStore, TEST_PEPPER } from "../helpers/memory-key-store.js";
 import { installTestMetrics } from "../helpers/metrics.js";
 import { spyProvider } from "../helpers/providers.js";
 
@@ -12,6 +13,8 @@ describe("streaming over a real socket", () => {
   let app: FastifyInstance;
   let url: string;
   let meters: ReturnType<typeof installTestMetrics>;
+  let key: string;
+  const store = new MemoryKeyStore();
   const spy = spyProvider(
     createMockProvider("mock", { latencyMs: 0, errorRate: 0, chunkDelayMs: 200 }),
   );
@@ -23,7 +26,10 @@ describe("streaming over a real socket", () => {
       checks: [],
       config: testConfig(),
       providers: new Map([["mock", spy.provider]]),
+      keyStore: store,
+      keyPepper: TEST_PEPPER,
     });
+    ({ key } = await store.issueKey());
     await app.listen({ port: 0, host: "127.0.0.1" });
     url = `http://127.0.0.1:${(app.server.address() as AddressInfo).port}/v1/chat/completions`;
   });
@@ -36,7 +42,7 @@ describe("streaming over a real socket", () => {
   const start = (signal?: AbortSignal) =>
     fetch(url, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
       body: JSON.stringify({
         model: "mock/slow",
         stream: true,

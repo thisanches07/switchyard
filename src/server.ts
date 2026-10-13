@@ -2,6 +2,8 @@ import { buildApp } from "./app.js";
 import { loadEnv } from "./config/env.js";
 import { ConfigError, formatConfigError } from "./config/errors.js";
 import { loadConfig } from "./config/load.js";
+import { createDatabase } from "./infra/db/client.js";
+import { DrizzleKeyStore } from "./infra/db/key-store.js";
 import { createPostgresPool, postgresCheck } from "./infra/db/postgres.js";
 import { createUndiciClient } from "./infra/http/undici-client.js";
 import { createLogger } from "./infra/logger.js";
@@ -52,6 +54,9 @@ async function main(): Promise<void> {
     checks: [postgresCheck(pool), redisCheck(redis)],
     config,
     providers,
+    keyStore: new DrizzleKeyStore(createDatabase(pool)),
+    keyPepper: env.KEY_PEPPER,
+    adminToken: env.ADMIN_TOKEN,
   });
 
   installShutdown({

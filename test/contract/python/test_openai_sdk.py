@@ -10,13 +10,14 @@ import pytest
 from openai import OpenAI
 
 BASE_URL = os.environ["SWITCHYARD_BASE_URL"]
+API_KEY = os.environ["SWITCHYARD_API_KEY"]
 OLLAMA_CHAT = os.environ.get("OLLAMA_CHAT") == "1"
 OLLAMA_EMBED = os.environ.get("OLLAMA_EMBED") == "1"
 
 
 @pytest.fixture(scope="module")
 def client() -> OpenAI:
-    return OpenAI(base_url=BASE_URL, api_key="not-checked-until-spec-004", max_retries=0)
+    return OpenAI(base_url=BASE_URL, api_key=API_KEY, max_retries=0)
 
 
 def test_chat_through_alias(client: OpenAI) -> None:

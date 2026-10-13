@@ -26,7 +26,7 @@ One commit per task, ending in `[spec-004]`. `pnpm verify` green after each (exi
   - Test: `test/integration/db.int.test.ts` (Testcontainers) › migrate twice, team/key CRUD, duplicate team 409, find by hash, revoke.
   - Files: `src/infra/db/*`, `drizzle/`, `drizzle.config.ts`, `scripts/db-migrate.ts`.
 
-- [ ] **T6. Authentication hook on `/v1/*`**
+- [x] **T6. Authentication hook on `/v1/*`**
   - ACs: AC-3, AC-4, AC-5
   - Test: `test/unit/auth/authenticate.test.ts` › each 401 reason (provider not called), valid key, expiry on cache hit, 403 `model_not_allowed`, `/v1/models` filtered, health open; existing proxy tests use a test key.
 

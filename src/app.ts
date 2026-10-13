@@ -7,6 +7,7 @@ import Fastify, {
   type FastifyRequest,
 } from "fastify";
 import type { LoadedConfig } from "./config/load.js";
+import type { ApiKeyRecord, KeyStore } from "./core/auth.js";
 import {
   GatewayError,
   internalError,
@@ -18,6 +19,7 @@ import {
 } from "./core/errors.js";
 import type { DependencyCheck } from "./core/health.js";
 import type { ChatProvider } from "./core/provider.js";
+import { AuthCache } from "./modules/auth/cache.js";
 import { healthRoutes } from "./modules/health/routes.js";
 import { proxyRoutes } from "./modules/proxy/routes.js";
 
@@ -26,6 +28,11 @@ export interface AppDeps {
   checks: DependencyCheck[];
   config: LoadedConfig;
   providers: ReadonlyMap<string, ChatProvider>;
+  keyStore: KeyStore;
+  /** Secret mixed into key hashes (KEY_PEPPER). */
+  keyPepper: string;
+  /** Enables the admin API when set (ADMIN_TOKEN). */
+  adminToken?: string | undefined;
   bodyLimitBytes?: number;
   readinessTimeoutMs?: number;
 }
@@ -71,9 +78,13 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     checks: deps.checks,
     readinessTimeoutMs: deps.readinessTimeoutMs ?? 1_000,
   });
+  // Validated keys, shared by the auth hook and the admin API (revocations invalidate it).
+  const authCache = new AuthCache<ApiKeyRecord>({ ttlMs: 30_000, maxEntries: 10_000 });
+
   await app.register(proxyRoutes, {
     config: deps.config,
     providers: deps.providers,
+    auth: { store: deps.keyStore, pepper: deps.keyPepper, cache: authCache },
     startedAt: Math.floor(Date.now() / 1000),
   });
   return app;

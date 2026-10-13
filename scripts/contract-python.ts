@@ -11,6 +11,7 @@ import { configSchema } from "../src/config/schema.js";
 import { createUndiciClient } from "../src/infra/http/undici-client.js";
 import { createLogger } from "../src/infra/logger.js";
 import { createProviderRegistry } from "../src/modules/providers/registry.js";
+import { MemoryKeyStore, TEST_PEPPER } from "../test/helpers/memory-key-store.js";
 
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL ?? "http://localhost:11434/v1";
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? "llama3.2";
@@ -45,12 +46,16 @@ const config = configSchema.parse({
 }) as LoadedConfig;
 
 const http = createUndiciClient(config.server.timeouts);
+const store = new MemoryKeyStore();
 const app = await buildApp({
   logger: createLogger({ level: "silent" }),
   checks: [],
   config,
   providers: createProviderRegistry(config, {}, { http }),
+  keyStore: store,
+  keyPepper: TEST_PEPPER,
 });
+const { key } = await store.issueKey();
 await app.listen({ port: 0, host: "127.0.0.1" });
 const { port } = app.server.address() as AddressInfo;
 
@@ -62,6 +67,7 @@ const code = await new Promise<number>((done) => {
     env: {
       ...process.env,
       SWITCHYARD_BASE_URL: `http://127.0.0.1:${port}/v1`,
+      SWITCHYARD_API_KEY: key,
       OLLAMA_CHAT: has(OLLAMA_MODEL) ? "1" : "0",
       OLLAMA_EMBED: has(OLLAMA_EMBED_MODEL) ? "1" : "0",
     },

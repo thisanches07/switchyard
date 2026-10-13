@@ -8,6 +8,7 @@ import { configSchema } from "../../src/config/schema.js";
 import { createUndiciClient } from "../../src/infra/http/undici-client.js";
 import { createLogger } from "../../src/infra/logger.js";
 import { createProviderRegistry } from "../../src/modules/providers/registry.js";
+import { MemoryKeyStore, TEST_PEPPER } from "../helpers/memory-key-store.js";
 
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL ?? "http://localhost:11434/v1";
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? "llama3.2";
@@ -47,6 +48,7 @@ describe("official OpenAI Node SDK against Switchyard", () => {
   let app: FastifyInstance;
   let client: OpenAI;
   const http = createUndiciClient(config.server.timeouts);
+  const store = new MemoryKeyStore();
 
   beforeAll(async () => {
     app = await buildApp({
@@ -54,12 +56,15 @@ describe("official OpenAI Node SDK against Switchyard", () => {
       checks: [],
       config,
       providers: createProviderRegistry(config, {}, { http }),
+      keyStore: store,
+      keyPepper: TEST_PEPPER,
     });
+    const { key } = await store.issueKey();
     await app.listen({ port: 0, host: "127.0.0.1" });
     const { port } = app.server.address() as AddressInfo;
     client = new OpenAI({
       baseURL: `http://127.0.0.1:${port}/v1`,
-      apiKey: "not-checked-until-spec-004",
+      apiKey: key,
       maxRetries: 0,
     });
   });
