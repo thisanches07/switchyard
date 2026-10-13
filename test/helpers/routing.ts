@@ -73,7 +73,7 @@ export function instantTimers(): Timers {
       timer.unref?.();
       return {
         signal: controller.signal,
-        remaining: () => Math.max(0, at - Date.now()),
+        remaining: () => (controller.signal.aborted ? 0 : Math.max(0, at - Date.now())),
         clear: () => clearTimeout(timer),
       };
     },

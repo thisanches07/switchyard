@@ -32,6 +32,8 @@ describe("OpenAPI documentation", () => {
         "/admin/usage",
         "/admin/keys/{id}/budget",
         "/admin/teams/{id}/budget",
+        "/admin/providers/health",
+        "/admin/config/reload",
       ]),
     );
     // Spec 007: budgets are documented on create and PATCH of keys and teams.

@@ -34,6 +34,11 @@ const toCandidate = (ref: string): Candidate | undefined => {
   return split && { ref, ...split };
 };
 
+/** Every distinct `provider/model` listed by the aliases, in config order. */
+export function aliasCandidates(aliases: RoutingConfig["aliases"]): string[] {
+  return [...new Set(Object.values(aliases).flatMap((alias) => alias.candidates))];
+}
+
 /** Every candidate a client `model` may be served by (spec 008, AC-1); undefined if unknown. */
 export function planRoute(model: string, config: RoutingConfig): RoutePlan | undefined {
   const alias = config.aliases[model];

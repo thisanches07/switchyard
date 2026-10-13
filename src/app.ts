@@ -41,6 +41,7 @@ import { PriceTable, priceEvent } from "./modules/pricing/table.js";
 import { proxyRoutes } from "./modules/proxy/routes.js";
 import { countRejection, createAdmission } from "./modules/ratelimit/admission.js";
 import { CandidateHealthRegistry } from "./modules/routing/health.js";
+import { aliasCandidates } from "./modules/routing/resolve.js";
 import { systemTimers, type Timers } from "./modules/routing/timers.js";
 import { createOutcomeHook } from "./modules/usage/outcome.js";
 import { fanOut, noopRecorder } from "./modules/usage/recorders.js";
@@ -188,6 +189,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     logger: deps.logger,
   });
   runtime.onChange((prev, next) => health.retain(prev, next));
+  const timers = deps.routing?.timers ?? systemTimers;
 
   await app.register(proxyRoutes, {
     runtime,
@@ -196,7 +198,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     outcomes,
     routing: {
       health,
-      timers: deps.routing?.timers ?? systemTimers,
+      timers,
       random: deps.routing?.random ?? Math.random,
       costEstimator: deps.costEstimator,
     },
@@ -223,6 +225,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       cache: authCache,
       usage: deps.usageReader,
       budgets: { counters: budgetCounters, store: deps.budgetStore, now: deps.clock ?? Date.now },
+      routing: {
+        health: () =>
+          health.snapshot(timers.now(), aliasCandidates(runtime.current().config.aliases)),
+        reload: () => runtime.reload(),
+      },
     });
   }
   return app;
