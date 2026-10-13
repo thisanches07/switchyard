@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="320" viewBox="0 0 1280 320" role="img" aria-labelledby="title desc">
+  <title id="title">Switchyard</title>
+  <desc id="desc">One request track splitting into several provider tracks, like a railway switchyard.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F7F9FF"/>
+      <stop offset="1" stop-color="#EAF0FF"/>
+    </linearGradient>
+    <linearGradient id="track" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#3B5BDB"/>
+      <stop offset="1" stop-color="#0CA678"/>
+    </linearGradient>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M32 0H0V32" fill="none" stroke="#1B2A5A" stroke-opacity="0.05"/>
+    </pattern>
+  </defs>
+
+  <rect width="1280" height="320" rx="24" fill="url(#bg)"/>
+  <rect width="1280" height="320" rx="24" fill="url(#grid)"/>
+  <rect x="0.5" y="0.5" width="1279" height="319" rx="24" fill="none" stroke="#1B2A5A" stroke-opacity="0.08"/>
+
+  <g fill="none" stroke="url(#track)" stroke-width="4" stroke-linecap="round">
+    <path d="M760 160 H900"/>
+    <path d="M900 160 C960 160 980 70 1060 70 H1190"/>
+    <path d="M900 160 C960 160 980 130 1060 130 H1190"/>
+    <path d="M900 160 C960 160 980 190 1060 190 H1190"/>
+    <path d="M900 160 C960 160 980 250 1060 250 H1190"/>
+  </g>
+  <circle cx="900" cy="160" r="9" fill="#F7F9FF" stroke="#3B5BDB" stroke-width="4"/>
+  <g font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15" font-weight="600" fill="#2B3A67">
+    <circle cx="1196" cy="70" r="7" fill="#0CA678"/><text x="1212" y="75">Ollama</text>
+    <circle cx="1196" cy="130" r="7" fill="#0CA678"/><text x="1212" y="135">Groq</text>
+    <circle cx="1196" cy="190" r="7" fill="#0CA678"/><text x="1212" y="195">Gemini</text>
+    <circle cx="1196" cy="250" r="7" fill="#0CA678"/><text x="1212" y="255">OpenAI</text>
+  </g>
+
+  <g font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif">
+    <text x="80" y="150" font-size="76" font-weight="800" fill="#0B1020" letter-spacing="-2">Switchyard</text>
+    <text x="84" y="198" font-size="24" font-weight="500" fill="#45527A">The self-hosted, OpenAI-compatible LLM gateway</text>
+    <text x="84" y="236" font-size="18" font-weight="500" fill="#3B5BDB">routing · resilience · budgets · observability</text>
+  </g>
+</svg>

@@ -1,0 +1,102 @@
+# Tasks 002: Chat proxy (non-streaming)
+
+- **Status:** Approved (2026-10-10)
+- **Spec:** [spec.md](spec.md) · **Design:** [design.md](design.md)
+
+One commit per task, ending in `[spec-002]`. `pnpm verify` green after each.
+
+- [x] **T1. Coverage gate**
+  - ACs: AC-12
+  - Do: coverage thresholds (lines ≥ 80%) for `src/core/**` and `src/modules/**` in `vitest.config.ts`; `verify` runs `test:coverage` instead of `test`.
+  - Test: `pnpm verify` fails if the threshold is lowered below current coverage (checked once manually), passes now.
+  - Files: `vitest.config.ts`, `package.json`
+
+- [x] **T2. Canonical types and gateway errors**
+  - ACs: AC-3, AC-4, AC-6 (foundation)
+  - Do: `src/core/chat.ts`, `src/core/provider.ts`; `GatewayError` + helpers in `src/core/errors.ts`.
+  - Test: `test/unit/core/errors.test.ts` › helpers produce status/type/code from design §4.2; `toBody()` returns OpenAI shape.
+  - Files: `src/core/{chat,provider,errors}.ts`
+
+- [x] **T3. Model resolution and model list**
+  - ACs: AC-1, AC-2, AC-3, AC-8
+  - Do: `resolveModel` and `listModels` (pure).
+  - Test: `test/unit/routing/resolve.test.ts` › alias → first candidate, provider/model with slashes, unknown provider, unknown alias; `test/unit/routing/models.test.ts` › aliases first, distinct candidates, owned_by.
+  - Files: `src/modules/routing/{resolve,models}.ts`
+
+- [x] **T4. Mock provider**
+  - ACs: AC-10
+  - Do: adapter per design §4.4 with injectable `random` and abortable latency.
+  - Test: `test/unit/providers/mock.test.ts` › deterministic body and usage, no content echo, latency honoured, `error-500`/`error-429`, `errorRate` with fixed random, abort.
+  - Files: `src/modules/providers/mock.ts`
+
+- [x] **T5. OpenAI-compatible adapter and HttpClient port**
+  - ACs: AC-5, AC-6
+  - Do: `HttpClient` port in core; adapter mapping status/errors per §4.2; bearer key only when configured.
+  - Test: `test/unit/providers/openai-compatible.test.ts` (fake client) › URL and body with resolved model, unknown fields passed through, auth header present/absent, 4xx passthrough with upstream error fields, 5xx→502 without upstream body, network→502, timeout→504, non-JSON 200→502, usage/model extracted.
+  - Files: `src/core/provider.ts`, `src/modules/providers/openai-compatible.ts`
+
+- [x] **T6. Provider registry**
+  - ACs: AC-5 (keys), spec non-goal (anthropic 501)
+  - Do: `createProviderRegistry(config, env, deps)`; anthropic → not-implemented adapter; missing key → adapter that fails 503 `provider_not_configured`.
+  - Test: `test/unit/providers/registry.test.ts` › builds one adapter per provider, anthropic → 501, missing key → 503 naming the variable (no value leaked).
+  - Files: `src/modules/providers/{registry,not-implemented}.ts`
+
+- [x] **T7. undici HTTP client**
+  - ACs: AC-6
+  - Do: `createUndiciClient(timeouts)` with shared `Agent`; normalise errors to `UpstreamNetworkError` / `UpstreamTimeoutError`.
+  - Test: `test/integration/upstream-http.int.test.ts` › local `node:http` server: JSON 200, 500 status returned, headers timeout → timeout error, refused port → network error, abort signal honoured.
+  - Files: `src/infra/http/undici-client.ts`
+
+- [x] **T8. App wiring: error handler, request id header, deps**
+  - ACs: AC-4, AC-7
+  - Do: `AppDeps` from design §3; `genReqId` → `req_<uuid>`; `onSend` adds `x-switchyard-request-id`; `setErrorHandler` maps `GatewayError`, Fastify body errors (invalid JSON, 413, 415) and unknown errors per §4.2; update test helper and `server.ts`.
+  - Test: `test/unit/app/errors.test.ts` › invalid JSON → 400 invalid_json, oversized body → 413, unexpected error → 500 generic message; `health/routes.test.ts` › request id header present.
+  - Files: `src/app.ts`, `src/server.ts`, `test/helpers/app.ts`
+
+- [x] **T9. Chat and models routes**
+  - ACs: AC-1, AC-2, AC-3, AC-4, AC-7, AC-8
+  - Do: `schema.ts` + `routes.ts`; replace `model`, call adapter with request abort signal, set headers, return body.
+  - Test: `test/unit/proxy/chat.test.ts` › alias success, direct provider/model, unknown model 404 (provider not called), missing messages 400 naming field, stream true 400, headers on success and on upstream error, GET /v1/models.
+  - Files: `src/modules/proxy/{schema,routes}.ts`, `src/app.ts`
+
+- [x] **T10. Upstream span and metrics**
+  - ACs: AC-9
+  - Do: `telemetry.ts` (span + counter + histogram), used by routes; warn log on 5xx/timeout without content.
+  - Test: `test/unit/proxy/telemetry.test.ts` › span name/kind/gen_ai attributes and usage; error status on failure; no attribute contains message content; counter and histogram recorded with labels (in-memory metric reader).
+  - Files: `src/modules/proxy/telemetry.ts`, `src/modules/proxy/routes.ts`, `test/helpers/metrics.ts`
+
+- [x] **T11. Contract tests with the official OpenAI SDK**
+  - ACs: AC-11
+  - Do: `contract` Vitest project and `pnpm test:contract`; gateway listening on port 0 with mock provider; Ollama case skipped when `OLLAMA_BASE_URL` (default `http://localhost:11434/v1`) is unreachable; CI step in `verify` job.
+  - Test: `test/contract/openai-sdk.contract.test.ts` › chat via alias on mock, `models.list()` includes aliases, SDK surfaces 404 as `NotFoundError`, chat on Ollama (conditional).
+  - Files: `vitest.config.ts`, `package.json`, `.github/workflows/ci.yml`, `test/contract/*`
+
+- [x] **T12. Local-only port binding, docs and verification**
+  - ACs: spec non-goal (unauthenticated until 004), DoD
+  - Do: compose ports bound to `127.0.0.1`; README: try-it section with curl and SDK against `local`/`mock`, unauthenticated warning; backlog status; verification table.
+  - Test: `pnpm verify`, `pnpm test:int`, `pnpm test:contract`, `pnpm test:smoke` green.
+  - Files: `docker-compose.yml`, `README.md`, `docs/specs/README.md`, this file
+
+## Verification (2026-10-10)
+
+| AC | Proven by | Result |
+|---|---|---|
+| AC-1 | `test/unit/proxy/chat.test.ts` › alias resolves to the first candidate; contract › completes a chat through an alias | ✅ |
+| AC-2 | `test/unit/routing/resolve.test.ts`; `chat.test.ts` › direct provider/model keeps slashes | ✅ |
+| AC-3 | `chat.test.ts` › unknown model → 404, no provider called; contract › NotFoundError | ✅ |
+| AC-4 | `chat.test.ts` › invalid bodies name the field, stream true → 400; `test/unit/app/errors.test.ts` › invalid JSON, 413, 415 | ✅ |
+| AC-5 | `test/unit/providers/openai-compatible.test.ts` › unknown fields passed through, bearer key; `registry.test.ts` › key from env, missing key → 503 | ✅ |
+| AC-6 | `openai-compatible.test.ts` › 4xx passthrough, 5xx → 502 without body, network → 502, timeout → 504; `test/integration/upstream-http.int.test.ts` (real undici + local server) | ✅ |
+| AC-7 | `chat.test.ts` › headers on success and on upstream error; `errors.test.ts` › request id on every response | ✅ |
+| AC-8 | `test/unit/routing/models.test.ts`; `chat.test.ts` › GET /v1/models; contract › lists models | ✅ |
+| AC-9 | `test/unit/proxy/telemetry.test.ts` › span kind/attributes/usage, error status + warn log, no content in spans or logs, counter and histogram labels | ✅ |
+| AC-10 | `test/unit/providers/mock.test.ts` | ✅ |
+| AC-11 | `test/contract/openai-sdk.contract.test.ts`: 5/5 passed, including the Ollama case against `llama3.2` (3B, GTX 1060, NVIDIA driver 582.78) on 2026-10-13 | ✅ |
+| AC-12 | `vitest.config.ts` thresholds; `pnpm verify` fails at 101% (checked) and passes at 82.6% lines | ✅ |
+
+Also run: `pnpm test:smoke` (8/8 steps, now including a chat request through the mock provider inside Docker); `pnpm verify` + `pnpm test:contract` in a `node:24.21.0-bookworm-slim` container (132/132).
+
+Deviations and fixes recorded here:
+- `text/plain` body parser removed so non-JSON requests get 415 (Fastify accepts text/plain by default).
+- Compose publishes Postgres on host port **55432** (configurable `POSTGRES_HOST_PORT`) because a native PostgreSQL service occupies 5432 on the dev machine; `.env.example` updated. All ports bound to `127.0.0.1`.
+- Fixed a race in the spec 001 shutdown process-test fixture (signal handlers now installed before `listen`).
