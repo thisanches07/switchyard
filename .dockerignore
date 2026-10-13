@@ -1,0 +1,16 @@
+.git
+node_modules
+dist
+coverage
+test
+docs
+bench
+deploy
+.github
+.vscode
+.claude
+.env
+.env.*
+!.env.example
+*.md
+!README.md

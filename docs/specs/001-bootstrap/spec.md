@@ -1,6 +1,6 @@
 # Spec 001: Project bootstrap
 
-- **Status:** Approved (2026-10-09)
+- **Status:** Done (2026-10-10), AC-8 pending first CI run on GitHub
 - **Owner:** @thisanches07
 - **Related ADRs:** 0001, 0002 (Node + TS + Fastify), 0011 (OpenTelemetry)
 

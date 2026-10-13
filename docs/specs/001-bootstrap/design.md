@@ -103,12 +103,12 @@ sequenceDiagram
 | GET | `/healthz` | `{"status":"ok"}` | n/a (liveness only; no dependency checks) |
 | GET | `/readyz` | `{"status":"ready","checks":{...}}` | 503 `{"status":"not_ready","checks":{...},"failing":[...]}` |
 
-Unknown routes return 404 in the OpenAI error shape: `{"error":{"message":"Route GET /x not found","type":"invalid_request_error","code":"not_found"}}`. Health endpoints are excluded from request logging at `info` level (logged at `debug`) to keep logs readable; they still produce spans.
+Unknown routes return 404 in the OpenAI error shape: `{"error":{"message":"Route GET /x not found","type":"invalid_request_error","code":"not_found"}}`. Health endpoints use route log level `warn`, so routine probes produce no request log lines (errors still do); they still produce spans.
 
 ### 4.2 Environment variables (`src/config/env.ts`)
 | Var | Required | Default | Notes |
 |---|---|---|---|
-| `PORT` | no | `8080` | int 1–65535 |
+| `PORT` | no | `8080` | int 0–65535 (0 = ephemeral, for tests) |
 | `HOST` | no | `0.0.0.0` | |
 | `LOG_LEVEL` | no | `info` | pino levels |
 | `SWITCHYARD_CONFIG` | no | `config/switchyard.yaml` | path to YAML |
