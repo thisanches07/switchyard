@@ -32,7 +32,7 @@ One commit per task, ending in `[spec-010]`. `pnpm verify` green after each (exi
   - ACs: AC-6
   - Test: `test/unit/pii/linear.test.ts` › no unbounded quantifier in any detector pattern; 1 MiB adversarial inputs (digits, `a@`, `1.`, `:`, `1 `, letters) each scanned in < 500 ms.
 
-- [ ] **T7. Masking and restore (pure)**
+- [x] **T7. Masking and restore (pure)**
   - ACs: AC-7, AC-8
   - Test: `test/unit/pii/mask.test.ts` › placeholders numbered per type, same string same placeholder across messages, reserved client placeholders skipped, all roles, text parts only, tool-call arguments (JSON and raw), embeddings string/array/token arrays, input not mutated; `test/unit/pii/restore.test.ts` › content and arguments of every choice, JSON escaping, unknown/altered placeholders untouched, malformed bodies returned as-is.
 

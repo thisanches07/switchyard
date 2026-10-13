@@ -129,6 +129,9 @@ export function findTerms(
   const lower = lowerSameLength(text);
   const found: { start: number; end: number }[] = [];
   for (const term of terms) {
+    // When every character but the last is a word character, an occurrence starting inside
+    // this one is preceded by a word character and can never be on a boundary: skip past it.
+    const skipOverlaps = [...term.slice(0, -1)].every((c) => isWordCodePoint(c.codePointAt(0)));
     let index = lower.indexOf(term);
     while (index !== -1) {
       const end = index + term.length;
@@ -140,7 +143,7 @@ export function findTerms(
         // Occurrences of one term never overlap: they would replace the same characters.
         index = lower.indexOf(term, end);
       } else {
-        index = lower.indexOf(term, index + 1);
+        index = lower.indexOf(term, skipOverlaps ? end : index + 1);
       }
     }
   }

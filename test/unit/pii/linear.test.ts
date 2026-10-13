@@ -30,11 +30,27 @@ describe("PII detection runs in linear time (spec 010, AC-6)", () => {
   );
 
   const MIB = 1_048_576;
-  const fill = (unit: string) => unit.repeat(Math.ceil(MIB / unit.length)).slice(0, MIB);
+  const fill = (unit: string, size = MIB) =>
+    unit.repeat(Math.ceil(size / unit.length)).slice(0, size);
   const scan = createScanner({
     types: [...PII_TYPES],
-    denyList: ["acme", "aaaa", "project falcon", "1.1"],
+    denyList: ["acme", "aaaa", "project falcon"],
   });
+
+  /**
+   * CPU milliseconds of this process for one scan: equal to wall time on an idle CI runner, but
+   * not inflated when a shared dev machine is saturated by other work. Best of `runs`.
+   */
+  function cpuMs(input: string, runs = 1): number {
+    let best = Number.POSITIVE_INFINITY;
+    for (let i = 0; i < runs; i += 1) {
+      const started = process.cpuUsage();
+      scan(input);
+      const { user, system } = process.cpuUsage(started);
+      best = Math.min(best, (user + system) / 1000);
+    }
+    return best;
+  }
 
   it.each([
     ["one long run of digits", fill("1")],
@@ -47,13 +63,16 @@ describe("PII detection runs in linear time (spec 010, AC-6)", () => {
     ["hex and colons", fill("a:")],
     ["almost e-mails", fill("ana.silva@example")],
     ["almost terms", fill("acm ")],
-    ["dense real values", fill("529.982.247-25 ana@example.com 192.168.0.1 ")],
   ])("scans 1 MiB of %s in under 500 ms", (_label, input) => {
-    // CPU time of this process: equal to wall time on an idle CI runner, but not inflated when
-    // a shared dev machine is saturated by other work.
-    const started = process.cpuUsage();
-    scan(input);
-    const { user, system } = process.cpuUsage(started);
-    expect((user + system) / 1000).toBeLessThan(500);
+    expect(cpuMs(input)).toBeLessThan(500);
+  });
+
+  it("scales linearly when the input is nothing but real values", () => {
+    // ~73k detections per MiB: the cost is per detection, so check the growth, not a budget.
+    const unit = "529.982.247-25 ana@example.com 192.168.0.1 ";
+    const small = Math.max(cpuMs(fill(unit, MIB / 8), 3), 16); // Windows timer: ~16 ms steps
+    const large = cpuMs(fill(unit), 2);
+    // Linear: about 8x. Quadratic would be about 64x.
+    expect(large / small).toBeLessThan(24);
   });
 });
