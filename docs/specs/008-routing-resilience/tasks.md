@@ -71,7 +71,7 @@ One commit per task, ending in `[spec-008]`. `pnpm verify` green after each. T7�
   - Test: `test/unit/config/watch.test.ts` › change detected and reloaded within 2.5 s of fake time, debounce, hotReload false skips, stop; SIGHUP installed only off Windows.
   - Files: `src/modules/config/watch.ts`, `src/server.ts`
 
-- [ ] **T14. Chaos integration test**
+- [x] **T14. Chaos integration test**
   - ACs: AC-15
   - Test: `test/integration/routing-chaos.int.test.ts` › 1000 sequential requests (half streaming) over three `errorRate: 0.3` mocks, seed fixed: ≥ 990 successes, one completion id per stream, identical results on a second run.
   - Files: test only
