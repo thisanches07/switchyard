@@ -154,7 +154,8 @@ describe("streaming token reconciliation (spec 005)", () => {
 
   async function streamWithLimit(model: string) {
     const store = new MemoryKeyStore();
-    const limiter = new MemoryRateLimiter();
+    // Frozen clock: no refill while the request runs, so the levels below are exact.
+    const limiter = new MemoryRateLimiter({ now: () => 0 });
     const { app } = await testApp({ store, limiter, authenticated: false });
     apps.push(app);
     const { key, record } = await store.issueKey({ limits: { tpm: 10_000 } });
@@ -172,9 +173,7 @@ describe("streaming token reconciliation (spec 005)", () => {
     const { res, level } = await streamWithLimit("fast");
     expect(res.statusCode).toBe(200);
     // Reserved 2 + 512; the mock reports 2 + 6 = 8.
-    // Allow for a little refill (10 000/min) during the request.
-    expect(level).toBeGreaterThanOrEqual(10_000 - 8);
-    expect(level).toBeLessThan(10_000 - 5);
+    expect(level).toBe(10_000 - 8);
   });
 
   it("reconciles a mid-stream failure against what was generated so far", async () => {
@@ -186,6 +185,6 @@ describe("streaming token reconciliation (spec 005)", () => {
   it("refunds everything when the stream fails before the first chunk", async () => {
     const { res, level } = await streamWithLimit("mock/error-500");
     expect(res.statusCode).toBe(502);
-    expect(level).toBeCloseTo(10_000, 0);
+    expect(level).toBe(10_000);
   });
 });

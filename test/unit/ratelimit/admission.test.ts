@@ -113,14 +113,15 @@ describe("admission", () => {
     await admitted.reconcile(5);
   });
 
+  // A frozen clock: wall-clock refill during a slow run must not move the levels asserted below.
   it("reconcile refunds unused tokens and charges overruns", async () => {
-    const limiter = new MemoryRateLimiter();
+    const limiter = new MemoryRateLimiter({ now: () => 0 });
     const { admission } = setup(limiter);
     const p = principal({ keyLimits: { rpm: null, tpm: 1_000 } });
 
     const first = await admission.admit(p, 600);
     await first.reconcile(100);
-    expect(await limiter.peek("sy:rl:key:k1:tok", 1_000)).toBeCloseTo(900, 0);
+    expect(await limiter.peek("sy:rl:key:k1:tok", 1_000)).toBe(900);
 
     const second = await admission.admit(p, 100);
     await second.reconcile(1_200);
@@ -128,14 +129,14 @@ describe("admission", () => {
   });
 
   it("reconcile with undefined refunds the whole reservation", async () => {
-    const limiter = new MemoryRateLimiter();
+    const limiter = new MemoryRateLimiter({ now: () => 0 });
     const { admission } = setup(limiter);
     const admitted = await admission.admit(
       principal({ keyLimits: { rpm: null, tpm: 1_000 } }),
       400,
     );
     await admitted.reconcile(undefined);
-    expect(await limiter.peek("sy:rl:key:k1:tok", 1_000)).toBeCloseTo(1_000, 0);
+    expect(await limiter.peek("sy:rl:key:k1:tok", 1_000)).toBe(1_000);
   });
 
   const broken: RateLimiter = {
