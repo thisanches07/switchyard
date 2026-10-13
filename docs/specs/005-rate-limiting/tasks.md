@@ -42,7 +42,7 @@ One commit per task, ending in `[spec-005]`. `pnpm verify` exit code checked aft
   - ACs: AC-6
   - Test: `stream.test.ts` › reconcile on completion, on mid-stream failure, on client disconnect (socket test).
 
-- [ ] **T10. Auth-failure limit per client address**
+- [x] **T10. Auth-failure limit per client address**
   - ACs: AC-11
   - Test: `authenticate.test.ts` › failures counted per IP, 429 without store lookups once exhausted, cached valid key still accepted, `trustProxy`.
 

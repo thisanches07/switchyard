@@ -28,7 +28,7 @@ import { recordAuthFailure } from "./modules/auth/telemetry.js";
 import { openApiInfo } from "./modules/docs.js";
 import { healthRoutes } from "./modules/health/routes.js";
 import { proxyRoutes } from "./modules/proxy/routes.js";
-import { createAdmission } from "./modules/ratelimit/admission.js";
+import { countRejection, createAdmission } from "./modules/ratelimit/admission.js";
 
 export interface AppDeps {
   logger: FastifyBaseLogger;
@@ -50,6 +50,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     loggerInstance: deps.logger,
     bodyLimit: deps.bodyLimitBytes ?? deps.config.server.bodyLimitBytes,
     genReqId: () => `req_${randomUUID()}`,
+    // Client address from X-Forwarded-For only behind a trusted proxy (spec 005).
+    trustProxy: deps.config.server.trustProxy,
   });
 
   // JSON-only API: anything else gets 415 instead of reaching a route as a string.
@@ -113,6 +115,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       pepper: deps.keyPepper,
       cache: authCache,
       onFailure: recordAuthFailure,
+      failureLimit: {
+        limiter: deps.rateLimiter,
+        perMinute: deps.config.limits.authFailuresPerMinutePerIp,
+        onRejected: () => countRejection("ip", "requests"),
+      },
     },
     startedAt: Math.floor(Date.now() / 1000),
   });

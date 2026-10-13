@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { testApp } from "../../helpers/app.js";
+import { testConfig } from "../../helpers/config.js";
 import { MemoryKeyStore } from "../../helpers/memory-key-store.js";
 import { spiedRegistry } from "../../helpers/providers.js";
 
@@ -129,5 +130,77 @@ describe("authentication on /v1/*", () => {
       const ids = (res.json() as { data: { id: string }[] }).data.map((m) => m.id);
       expect(ids).toEqual(["local", "fast", "ollama/llama3.2"]);
     });
+  });
+});
+
+describe("auth-failure limit per client address (spec 005, AC-11)", () => {
+  const apps: { close(): Promise<unknown> }[] = [];
+  afterEach(async () => {
+    await Promise.all(apps.splice(0).map((a) => a.close()));
+  });
+
+  async function setup(server: Record<string, unknown> = {}) {
+    const store = new MemoryKeyStore();
+    const { app } = await testApp({
+      store,
+      authenticated: false,
+      config: testConfig({ limits: { authFailuresPerMinutePerIp: 3 }, server }),
+    });
+    apps.push(app);
+    const get = (authorization: string | undefined, remoteAddress = "203.0.113.7", extra = {}) =>
+      app.inject({
+        method: "GET",
+        url: "/v1/models",
+        remoteAddress,
+        headers: { ...(authorization ? { authorization } : {}), ...extra },
+      });
+    return { store, get };
+  }
+
+  const unknownKey = "Bearer sk-sy-unknownunknownunknownunknownunknown000000";
+
+  it("answers 429 once an address used up its failures, without querying the store", async () => {
+    const { store, get } = await setup();
+    for (let i = 0; i < 3; i += 1) expect((await get(unknownKey)).statusCode).toBe(401);
+    const lookups = store.lookups;
+    const limited = await get(unknownKey);
+    expect(limited.statusCode).toBe(429);
+    expect(limited.json().error.code).toBe("rate_limit_exceeded");
+    expect(Number(limited.headers["retry-after"])).toBeGreaterThanOrEqual(1);
+    expect(store.lookups).toBe(lookups);
+  });
+
+  it("counts missing and malformed keys too", async () => {
+    const { get } = await setup();
+    await get(undefined);
+    await get("Basic abc");
+    await get("Bearer not-a-switchyard-key");
+    expect((await get(undefined)).statusCode).toBe(429);
+  });
+
+  it("keeps serving keys that are already cached, and other addresses", async () => {
+    const { store, get } = await setup();
+    const { key } = await store.issueKey();
+    expect((await get(`Bearer ${key}`)).statusCode).toBe(200); // now cached
+    for (let i = 0; i < 4; i += 1) await get(unknownKey);
+    expect((await get(`Bearer ${key}`)).statusCode).toBe(200);
+    expect((await get(unknownKey, "198.51.100.9")).statusCode).toBe(401);
+  });
+
+  it("uses X-Forwarded-For only when server.trustProxy is true", async () => {
+    const untrusted = await setup();
+    for (let i = 0; i < 3; i += 1) {
+      await untrusted.get(unknownKey, "10.0.0.1", { "x-forwarded-for": `198.51.100.${i}` });
+    }
+    expect((await untrusted.get(unknownKey, "10.0.0.1")).statusCode).toBe(429);
+
+    const trusted = await setup({ trustProxy: true });
+    for (let i = 0; i < 3; i += 1) {
+      await trusted.get(unknownKey, "10.0.0.1", { "x-forwarded-for": `198.51.100.${i}` });
+    }
+    expect(
+      (await trusted.get(unknownKey, "10.0.0.1", { "x-forwarded-for": "198.51.100.99" }))
+        .statusCode,
+    ).toBe(401);
   });
 });

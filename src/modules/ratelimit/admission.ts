@@ -48,6 +48,11 @@ function counters() {
   return instruments;
 }
 
+/** Counts a rejection by scope and kind (also used by the auth-failure limit). */
+export function countRejection(scope: string, kind: string): void {
+  counters().rejections.add(1, { scope, kind });
+}
+
 const NO_LIMITS: Admission = { headers: {}, reservedTokens: 0, reconcile: async () => {} };
 const WARN_INTERVAL_MS = 60_000;
 
@@ -104,7 +109,7 @@ export function createAdmission(deps: AdmissionDeps) {
           (b, i) => (result.buckets[i]?.remaining ?? 0) < b.cost,
         );
         const blocking = plan.buckets[Math.max(0, index)] as PlannedBucket;
-        counters().rejections.add(1, { scope: blocking.scope, kind: blocking.kind });
+        countRejection(blocking.scope, blocking.kind);
         span?.setAttributes({
           "switchyard.ratelimit.scope": blocking.scope,
           "switchyard.ratelimit.kind": blocking.kind,
