@@ -1,6 +1,7 @@
 import type { StartedRedpandaContainer } from "@testcontainers/redpanda";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createKafkaProducer } from "../../src/infra/kafka/producer.js";
+import { ensureTopics } from "../../src/infra/kafka/topics.js";
 import { createLogger } from "../../src/infra/logger.js";
 import { createUsagePublisher } from "../../src/modules/usage/publisher.js";
 import { readTopic, startRedpanda } from "../helpers/kafka.js";
@@ -20,6 +21,12 @@ describe("usage producer on Redpanda (spec 006)", () => {
   it("publishes buffered events to the topic, keyed by team id (AC-5)", async () => {
     const logger = createLogger({ level: "silent" });
     const topic = "usage.events.producer-test";
+    // Create the topic up front, as the gateway does at boot: a reader that subscribes to a
+    // topic that does not exist yet only sees it after a metadata refresh, which made this flaky.
+    await ensureTopics(
+      { brokers: [redpanda.getBootstrapServers()], clientId: "test-admin", logger },
+      [{ topic, numPartitions: 3 }],
+    );
     const publisher = createUsagePublisher({
       config: { enabled: true, topic, bufferSize: 100, flushIntervalMs: 50 },
       producer: createKafkaProducer({
