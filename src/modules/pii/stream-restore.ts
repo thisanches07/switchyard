@@ -330,8 +330,13 @@ export async function* restoreSteps(
           () => EXPIRED,
           () => undefined,
         );
-      const winner = await Promise.race([pending, expired]);
-      wait.abort();
+      let winner: IteratorResult<ChatChunk> | typeof EXPIRED | undefined;
+      try {
+        winner = await Promise.race([pending, expired]);
+      } finally {
+        // Also when the upstream fails while text is held: no timer is left running.
+        wait.abort();
+      }
       if (typeof winner === "object") {
         result = winner;
         break;

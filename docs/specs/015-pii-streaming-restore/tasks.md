@@ -62,6 +62,6 @@ One commit per task, ending in `[spec-015]`. Lint, typecheck and the task's test
 | Non-goal (`/v1/messages`) | `messages-usage.test.ts` › same-family native stream keeps `<EMAIL_1>` and says `masked-unrestored` | ✅ |
 
 Notes:
-- `pnpm verify` green (1204 unit tests); `openai-sdk.contract.test.ts` green (20). No integration test or infrastructure was touched, so `pnpm test:int` was not re-run.
+- `pnpm verify` green (1204 unit tests); `pnpm test:contract` green (35 passed, 3 live-provider tests skipped). No integration test or infrastructure was touched, so `pnpm test:int` was not re-run.
 - Hold counts are set on the serving attempt's upstream span (spec 008's `annotate`), not the request span: `@fastify/otel` ends the request span in `onSend`, before a stream body flows.
 - T6 and T7 were committed together (see T7).
