@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
+  conflict,
   GatewayError,
   internalError,
+  invalidAdminToken,
+  invalidApiKey,
   invalidJson,
   invalidRequest,
+  modelNotAllowed,
   modelNotFound,
+  notFound,
   providerNotConfigured,
   providerNotImplemented,
   requestTooLarge,
@@ -66,5 +71,18 @@ describe("gateway errors", () => {
 
   it("internalError never exposes details", () => {
     expect(internalError().message).toBe("Internal server error");
+  });
+});
+
+describe("auth and admin errors (spec 004)", () => {
+  it.each([
+    [invalidApiKey(), 401, "invalid_api_key"],
+    [modelNotAllowed("smart"), 403, "model_not_allowed"],
+    [invalidAdminToken(), 401, "invalid_admin_token"],
+    [notFound("Team", "x"), 404, "not_found"],
+    [conflict("dup"), 409, "conflict"],
+  ])("%s → %i %s", (error, status, code) => {
+    expect(error.status).toBe(status);
+    expect(error.toBody().error).toMatchObject({ type: "invalid_request_error", code });
   });
 });

@@ -17,7 +17,7 @@ One commit per task, ending in `[spec-004]`. `pnpm verify` green after each (exi
   - ACs: AC-6
   - Test: `test/unit/auth/cache.test.ts` › TTL expiry (fake timers), LRU eviction, `invalidateKey`.
 
-- [ ] **T4. Core auth types, errors, in-memory store and model rules**
+- [x] **T4. Core auth types, errors, in-memory store and model rules**
   - ACs: AC-4, AC-5, AC-7
   - Test: `core/errors.test.ts` › new errors; `test/unit/auth/models.test.ts` › null/empty list allows all, exact match on alias or ref, `provider/*`; memory store behaviour (duplicate team → 409).
 

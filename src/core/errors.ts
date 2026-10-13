@@ -88,3 +88,22 @@ export const upstreamClientError = (status: number, fields: UpstreamErrorFields)
 
 export const internalError = () =>
   new GatewayError(500, SERVER, "internal_error", "Internal server error");
+
+export const invalidApiKey = () =>
+  new GatewayError(
+    401,
+    INVALID,
+    "invalid_api_key",
+    "Invalid or missing API key. Send it as Authorization: Bearer sk-sy-…",
+  );
+
+export const modelNotAllowed = (model: string) =>
+  new GatewayError(403, INVALID, "model_not_allowed", `This API key may not use "${model}"`);
+
+export const invalidAdminToken = () =>
+  new GatewayError(401, INVALID, "invalid_admin_token", "Invalid or missing admin token");
+
+export const notFound = (entity: string, id: string) =>
+  new GatewayError(404, INVALID, "not_found", `${entity} "${id}" not found`);
+
+export const conflict = (message: string) => new GatewayError(409, INVALID, "conflict", message);
