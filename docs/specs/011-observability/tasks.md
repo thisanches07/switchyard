@@ -39,7 +39,7 @@ One commit per task, ending in `[spec-011]`. T13 and T14 are blocked on things o
   - Test: `test/unit/scripts/grafana-files.test.ts` › repo files pass the check; Overview has the AC-6 panels; compose mounts the three paths read-only.
   - Files: `deploy/grafana/**`, `docker-compose.yml`
 
-- [ ] **T7. Cost and Providers dashboards, Cache skeleton**
+- [x] **T7. Cost and Providers dashboards, Cache skeleton**
   - ACs: AC-6
   - Test: `grafana-files.test.ts` › four dashboards with unique uids; Cost and Providers panels.
   - Files: `deploy/grafana/dashboards/{cost,providers,cache}.json`

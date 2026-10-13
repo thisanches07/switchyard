@@ -1,0 +1,50 @@
+{
+  "uid": "switchyard-cache",
+  "title": "Switchyard / Cache",
+  "description": "Exact and semantic cache: hit ratio and USD saved (spec 009). Panels land with spec 009's metrics.",
+  "tags": ["switchyard", "cache"],
+  "editable": false,
+  "graphTooltip": 1,
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  },
+  "links": [
+    {
+      "title": "Switchyard",
+      "type": "dashboards",
+      "tags": ["switchyard"],
+      "asDropdown": true,
+      "includeVars": false,
+      "keepTime": true
+    }
+  ],
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "Cache panels pending",
+      "gridPos": {
+        "h": 6,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "Panels for the cache come with spec 009 (caching), which adds `switchyard_cache_lookups_total{layer,result}`, `switchyard_cache_savings_usd_total`, `switchyard_cache_errors_total` and the `cache` label on `switchyard_requests_total`.\n\nThe dashboard check (`pnpm check:grafana`) only lets panels query metrics the code emits, so they are added in the same change as the metrics. See `docs/observability.md`."
+      }
+    }
+  ],
+  "version": 1
+}

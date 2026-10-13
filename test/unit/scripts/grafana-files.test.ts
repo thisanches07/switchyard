@@ -69,6 +69,43 @@ describe("deploy/grafana (spec 011)", () => {
     ]);
   });
 
+  it("ships the four dashboards with unique uids", () => {
+    const uids = ["overview", "cost", "providers", "cache"].map(
+      (name) => dashboard(`${name}.json`).uid,
+    );
+    expect(uids).toEqual([
+      "switchyard-overview",
+      "switchyard-cost",
+      "switchyard-providers",
+      "switchyard-cache",
+    ]);
+  });
+
+  it("Cost shows spend by model, team share, unknown costs and budgets", () => {
+    expect(titles(dashboard("cost.json").panels)).toEqual(
+      expect.arrayContaining([
+        "Cost rate by model",
+        "Cost by model in range",
+        "Requests by team in range",
+        "Unknown-cost requests by model",
+        "Budget used (top 10)",
+        "Budget rejections and soft-limit requests",
+      ]),
+    );
+  });
+
+  it("Providers shows requests, errors, upstream duration and circuit state per provider", () => {
+    expect(titles(dashboard("providers.json").panels)).toEqual(
+      expect.arrayContaining([
+        "Requests by provider",
+        "Error ratio by provider",
+        "Upstream duration p95 by provider",
+        "Attempts by candidate and outcome",
+        "Circuit state by candidate",
+      ]),
+    );
+  });
+
   it("the dashboard provider points Grafana at the mounted dashboards folder", () => {
     const provisioning = parse(read("provisioning", "dashboards", "switchyard.yaml")) as {
       providers: { name: string; folder: string; options: { path: string } }[];
