@@ -30,7 +30,7 @@ One commit per task, ending in `[spec-007]`. `pnpm verify` green after each (exi
   - Do: create/PATCH bodies, decimal validation, normalized views, cache invalidation, OpenAPI bodies, `createKeyViaAdmin` option.
   - Test: `test/unit/admin/admin-budgets.test.ts` › number and string accepted and normalized, `null` clears, negative/5 places/too large/garbage → 400, PATCH with one field, team `softLimitPct` 1–100, listings, auth cache invalidated.
 
-- [ ] **T6. Periods and budget counters (memory and Redis)**
+- [x] **T6. Periods and budget counters (memory and Redis)**
   - ACs: AC-5, AC-10
   - Do: `src/core/budget.ts`; `src/modules/budgets/period.ts`; `src/infra/memory/budget-counters.ts`; `src/infra/redis/budget-counters.ts`.
   - Test: `test/unit/budgets/period.test.ts` › month boundaries incl. December and leap years, instant at 00:00:00Z; `test/unit/budgets/memory-counters.test.ts` › charge, read, raise never lowers, expiry; `test/integration/budget-counters.int.test.ts` › same on real Redis, PEXPIREAT set, timeout.
