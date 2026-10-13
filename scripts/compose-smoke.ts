@@ -1,6 +1,6 @@
 // Smoke test for the Docker Compose stack (spec 001: AC-1..AC-6, AC-9; specs 002-003: chat,
 // streaming and embeddings via the mock provider; spec 004: API keys through the admin API;
-// spec 005: per-minute rate limits).
+// spec 005: per-minute rate limits; spec 006: usage events through Redpanda and the worker).
 // Cross-platform: `node scripts/compose-smoke.ts [--down]` locally (Windows or Linux) and in CI.
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
@@ -11,15 +11,22 @@ const MAX_STACK_GIB = Number(process.env.SMOKE_MAX_STACK_GIB ?? "4");
 // Compose ships this dev-only default (spec 004); override with ADMIN_TOKEN like the stack does.
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN ?? "dev-only-admin-token-change-me";
 let apiKey = "";
+let apiKeyId = "";
 const authed = () => ({ "content-type": "application/json", authorization: `Bearer ${apiKey}` });
 const root = resolve(import.meta.dirname, "..");
 const down = process.argv.includes("--down");
 
 const failures: string[] = [];
 
-function run(args: string[], opts: { allowFailure?: boolean } = {}) {
-  const result = spawnSync("docker", args, { cwd: root, encoding: "utf8" });
-  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+function run(args: string[], opts: { allowFailure?: boolean; timeoutMs?: number } = {}) {
+  // A hung Docker call fails the step instead of blocking the smoke test forever.
+  const result = spawnSync("docker", args, {
+    cwd: root,
+    encoding: "utf8",
+    timeout: opts.timeoutMs ?? 600_000,
+  });
+  const timedOut = result.error !== undefined && result.signal !== null;
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}${timedOut ? "\n(timed out)" : ""}`;
   if (result.status !== 0 && !opts.allowFailure) {
     throw new Error(`docker ${args.join(" ")} failed (${result.status}):\n${output}`);
   }
@@ -89,7 +96,7 @@ try {
       body: JSON.stringify({ teamId: id, name: "smoke" }),
     });
     if (key.status !== 201) throw new Error(`key: ${key.status} ${await key.text()}`);
-    apiKey = ((await key.json()) as { key: string }).key;
+    ({ key: apiKey, id: apiKeyId } = (await key.json()) as { key: string; id: string });
   });
 
   await step("POST /v1/chat/completions through the mock provider returns 200", async () => {
@@ -165,6 +172,39 @@ try {
     }
   });
 
+  await step("the usage worker created the usage and DLQ topics", () => {
+    const topics = run(["compose", "exec", "-T", "redpanda", "rpk", "topic", "list"]).stdout;
+    for (const topic of ["usage.events.v1", "usage.events.dlq"]) {
+      if (!topics.includes(topic)) throw new Error(`missing topic ${topic}:\n${topics}`);
+    }
+  });
+
+  await step("a chat request is counted in GET /admin/usage?groupBy=key within 10 s", async () => {
+    const usageOf = async () => {
+      const res = await fetch(`${GATEWAY}/admin/usage?groupBy=key`, {
+        headers: { authorization: `Bearer ${ADMIN_TOKEN}` },
+      });
+      if (res.status !== 200) throw new Error(`usage: ${res.status} ${await res.text()}`);
+      const body = (await res.json()) as { data: { group: string; requests: number }[] };
+      return body.data.find((row) => row.group === apiKeyId)?.requests ?? 0;
+    };
+    const before = await usageOf();
+    const res = await fetch(`${GATEWAY}/v1/chat/completions`, {
+      method: "POST",
+      headers: authed(),
+      body: JSON.stringify({ model: "mock/smoke", messages: [{ role: "user", content: "hi" }] }),
+    });
+    if (res.status !== 200) throw new Error(`chat: ${res.status} ${await res.text()}`);
+    const started = Date.now();
+    let after = before;
+    while (after <= before && Date.now() - started < 10_000) {
+      await new Promise((r) => setTimeout(r, 250));
+      after = await usageOf();
+    }
+    if (after <= before) throw new Error(`request not counted after 10 s (still ${after})`);
+    console.log(`  counted after ${Date.now() - started} ms (${after} requests for the key)`);
+  });
+
   await step("ollama profile adds the ollama service", () => {
     const services = run(["compose", "--profile", "ollama", "config", "--services"]).stdout;
     if (!services.split(/\r?\n/).includes("ollama")) throw new Error(services);
@@ -178,9 +218,10 @@ try {
     // The example config resolves the Ollama URL from OLLAMA_BASE_URL; an empty value is invalid.
     const result = run(
       ["compose", "run", "--rm", "--no-deps", "-e", "OLLAMA_BASE_URL=", "gateway"],
-      { allowFailure: true },
+      { allowFailure: true, timeoutMs: 120_000 },
     );
     if (result.status === 0) throw new Error("gateway started with an invalid config");
+    if (result.status === null) throw new Error(`compose run did not finish: ${result.output}`);
     if (!result.output.includes("Invalid configuration in")) throw new Error(result.output);
   });
 
@@ -209,12 +250,14 @@ try {
   });
 } finally {
   if (failures.length > 0) {
-    console.error("\n--- gateway logs ---");
-    console.error(
-      run(["compose", "logs", "--no-color", "--tail", "50", "gateway"], {
-        allowFailure: true,
-      }).output,
-    );
+    for (const service of ["gateway", "usage-worker"]) {
+      console.error(`\n--- ${service} logs ---`);
+      console.error(
+        run(["compose", "logs", "--no-color", "--tail", "50", service], {
+          allowFailure: true,
+        }).output,
+      );
+    }
   }
   if (down) run(["compose", "down", "-v"], { allowFailure: true });
 }

@@ -4,6 +4,7 @@ import type { LoadedConfig } from "../../src/config/load.js";
 import type { DependencyCheck } from "../../src/core/health.js";
 import type { ChatProvider } from "../../src/core/provider.js";
 import type { RateLimiter } from "../../src/core/ratelimit.js";
+import type { OutcomeRecorder, UsageReader } from "../../src/core/usage.js";
 import { createLogger } from "../../src/infra/logger.js";
 import { MemoryRateLimiter } from "../../src/infra/memory/rate-limiter.js";
 import { createProviderRegistry } from "../../src/modules/providers/registry.js";
@@ -21,6 +22,10 @@ export interface TestAppOptions {
   store?: MemoryKeyStore;
   limiter?: RateLimiter;
   adminToken?: string;
+  /** Receives usage events (spec 006). */
+  usageRecorder?: OutcomeRecorder;
+  /** Answers GET /admin/usage (spec 006). */
+  usageReader?: UsageReader;
   /**
    * Default true: `app.inject` adds `Authorization: Bearer <test key>` unless the request sets
    * its own `authorization` header. Set false to exercise authentication itself.
@@ -44,6 +49,8 @@ export async function testApp(options: TestAppOptions = {}) {
     rateLimiter: options.limiter ?? new MemoryRateLimiter(),
     keyPepper: TEST_PEPPER,
     ...(options.adminToken === undefined ? {} : { adminToken: options.adminToken }),
+    ...(options.usageRecorder === undefined ? {} : { usageRecorder: options.usageRecorder }),
+    ...(options.usageReader === undefined ? {} : { usageReader: options.usageReader }),
     ...(options.bodyLimitBytes === undefined ? {} : { bodyLimitBytes: options.bodyLimitBytes }),
   });
 

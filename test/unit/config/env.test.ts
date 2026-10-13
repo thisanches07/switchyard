@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { loadEnv } from "../../../src/config/env.js";
+import { loadEnv, loadWorkerEnv } from "../../../src/config/env.js";
 import { ConfigError } from "../../../src/config/errors.js";
 
 const base = {
@@ -89,5 +89,39 @@ describe("loadEnv: auth settings (spec 004)", () => {
         (i) => i.path,
       ),
     ).toContain("MIGRATE_ON_BOOT");
+  });
+});
+
+describe("KAFKA_BROKERS (spec 006)", () => {
+  it("is optional for the gateway and parsed into a list", () => {
+    expect(loadEnv(base).KAFKA_BROKERS).toBeUndefined();
+    expect(loadEnv({ ...base, KAFKA_BROKERS: "redpanda:9092, other:19092" }).KAFKA_BROKERS).toEqual(
+      ["redpanda:9092", "other:19092"],
+    );
+  });
+
+  it("rejects entries that are not host:port", () => {
+    const issues = issuesOf(() => loadEnv({ ...base, KAFKA_BROKERS: "redpanda" }));
+    expect(issues.map((i) => i.path)).toContain("KAFKA_BROKERS");
+  });
+});
+
+describe("loadWorkerEnv (spec 006)", () => {
+  const worker = { DATABASE_URL: base.DATABASE_URL, KAFKA_BROKERS: "localhost:19092" };
+
+  it("needs only the database and the brokers", () => {
+    expect(loadWorkerEnv(worker)).toMatchObject({
+      DATABASE_URL: base.DATABASE_URL,
+      KAFKA_BROKERS: ["localhost:19092"],
+      LOG_LEVEL: "info",
+      SWITCHYARD_CONFIG: "config/switchyard.yaml",
+      OTEL_SERVICE_NAME: "switchyard-usage-worker",
+      SHUTDOWN_TIMEOUT_MS: 9000,
+    });
+  });
+
+  it("requires KAFKA_BROKERS and DATABASE_URL", () => {
+    const paths = issuesOf(() => loadWorkerEnv({})).map((i) => i.path);
+    expect(paths).toEqual(expect.arrayContaining(["KAFKA_BROKERS", "DATABASE_URL"]));
   });
 });

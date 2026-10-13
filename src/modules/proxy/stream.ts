@@ -5,6 +5,7 @@ import type { ChatChunk, ChatRequest, Usage } from "../../core/chat.js";
 import { GatewayError, upstreamError } from "../../core/errors.js";
 import type { ChatProvider } from "../../core/provider.js";
 import type { Admission } from "../ratelimit/admission.js";
+import type { OutcomeTracker } from "../usage/outcome.js";
 import { startUpstreamSpan } from "./telemetry.js";
 import { deltaText, estimateTokens, forwardChunk, messageChars, usageFromChunk } from "./usage.js";
 
@@ -16,6 +17,8 @@ export interface StreamChatArgs {
   logger: FastifyBaseLogger;
   principal?: Principal | undefined;
   admission?: Admission | undefined;
+  /** Outcome tracker of the admitted request (spec 006). */
+  outcome?: OutcomeTracker | undefined;
 }
 
 const sseEvent = (payload: unknown) => `data: ${JSON.stringify(payload)}\n\n`;
@@ -34,6 +37,7 @@ export async function streamChat({
   logger,
   principal,
   admission,
+  outcome,
 }: StreamChatArgs) {
   const controller = new AbortController();
   let clientClosed = false;
@@ -64,6 +68,8 @@ export async function streamChat({
     else upstream.fail(error, "before_first_byte");
     // Nothing was generated: the whole token reservation goes back (spec 005, AC-6).
     await admission?.reconcile(undefined);
+    if (clientClosed) outcome?.clientClosed({ headersSent: false });
+    else outcome?.fail(error);
     throw error;
   }
 
@@ -82,8 +88,17 @@ export async function streamChat({
     let outputChars = 0;
     let settled = false;
     const inputTokens = estimateTokens(messageChars(request));
+    /** Usage so far: provider-reported if seen, else the spec 003 estimate of what was streamed. */
+    const sofar = () => ({
+      usage: usage ?? { inputTokens, outputTokens: estimateTokens(outputChars) },
+      estimated: usage === undefined,
+      ttfbMs,
+    });
     /** Tokens generated so far, for reconciling streams that did not finish. */
-    const partialTokens = () => inputTokens + estimateTokens(outputChars);
+    const partialTokens = () => {
+      const { usage: u } = sofar();
+      return u.inputTokens + u.outputTokens;
+    };
     try {
       let result = first;
       while (!result.done) {
@@ -95,19 +110,23 @@ export async function streamChat({
         result = await iterator.next();
       }
       settled = true;
-      const finalUsage = usage ?? { inputTokens, outputTokens: estimateTokens(outputChars) };
-      upstream.succeed({ usage: finalUsage, estimated: usage === undefined, responseModel });
-      await admission?.reconcile(finalUsage.inputTokens + finalUsage.outputTokens);
+      const final = sofar();
+      upstream.succeed({ usage: final.usage, estimated: final.estimated, responseModel });
+      await admission?.reconcile(final.usage.inputTokens + final.usage.outputTokens);
+      outcome?.succeed(final);
       yield "data: [DONE]\n\n";
     } catch (error) {
       settled = true;
       await admission?.reconcile(partialTokens());
       if (clientClosed) {
         upstream.clientGone();
+        outcome?.clientClosed({ headersSent: true, ...sofar() });
         return;
       }
       upstream.fail(error, "midstream");
       const gatewayError = error instanceof GatewayError ? error : upstreamError(provider.name);
+      // Headers (200) are gone: the SSE error event is the error the client sees (ADR-0008).
+      outcome?.failMidstream(gatewayError, sofar());
       yield sseEvent(gatewayError.toBody());
     } finally {
       if (!settled) {
@@ -115,6 +134,7 @@ export async function streamChat({
         controller.abort();
         upstream.clientGone();
         await admission?.reconcile(partialTokens());
+        outcome?.clientClosed({ headersSent: true, ...sofar() });
         await iterator.return?.();
       }
     }

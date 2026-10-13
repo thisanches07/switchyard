@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { ConfigError } from "../../../src/config/errors.js";
-import { loadConfig } from "../../../src/config/load.js";
+import { loadConfig, loadUsageConfig } from "../../../src/config/load.js";
 
 const root = resolve(import.meta.dirname, "../../..");
 const example = resolve(root, "config/switchyard.example.yaml");
@@ -63,5 +63,29 @@ describe("loadConfig", () => {
   it("reports missing file", () => {
     const error = configError(() => loadConfig(fixture("does-not-exist.yaml"), env));
     expect(error.issues[0]?.message).toMatch(/file not found/);
+  });
+});
+
+describe("loadUsageConfig (spec 006)", () => {
+  it("reads only the usage section, without provider environment variables", () => {
+    expect(loadUsageConfig(example)).toMatchObject({
+      enabled: true,
+      topic: "usage.events.v1",
+      dlqTopic: "usage.events.dlq",
+    });
+  });
+
+  it("reports an invalid usage section with its path", () => {
+    const error = configError(() => loadUsageConfig(fixture("invalid-usage.yaml")));
+    expect(error.issues).toContainEqual(expect.objectContaining({ path: "usage.bufferSize" }));
+  });
+
+  it("reports YAML syntax errors and missing files", () => {
+    expect(
+      configError(() => loadUsageConfig(fixture("invalid-syntax.yaml"))).issues[0]?.message,
+    ).toMatch(/YAML syntax error/);
+    expect(
+      configError(() => loadUsageConfig(fixture("does-not-exist.yaml"))).issues[0]?.message,
+    ).toMatch(/file not found/);
   });
 });

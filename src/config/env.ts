@@ -2,15 +2,43 @@ import { z } from "zod";
 import { ConfigError } from "./errors.js";
 import { toConfigIssues } from "./zod-issues.js";
 
+const logLevel = z
+  .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
+  .default("info");
+const databaseUrl = z
+  .string({ error: "is required" })
+  .regex(/^postgres(ql)?:\/\//, "must be a postgres:// URL");
+const shutdownTimeoutMs = z.coerce
+  .number()
+  .int()
+  .positive()
+  .max(9999, "must be below 10000 to exit within 10 s")
+  .default(9000);
+
+/** Comma-separated `host:port` list (spec 006), e.g. `redpanda:9092,other:9092`. */
+const splitBrokers = (value: string) =>
+  value
+    .split(",")
+    .map((broker) => broker.trim())
+    .filter(Boolean);
+const kafkaBrokers = z
+  .string({ error: "is required" })
+  .refine(
+    (value) => {
+      const brokers = splitBrokers(value);
+      return brokers.length > 0 && brokers.every((b) => /^[^\s:]+:\d{1,5}$/.test(b));
+    },
+    { message: "must be a comma-separated host:port list" },
+  )
+  .transform(splitBrokers);
+
 const envSchema = z.object({
   // 0 asks the OS for a free port (used by tests).
   PORT: z.coerce.number().int().min(0).max(65535).default(8080),
   HOST: z.string().min(1).default("0.0.0.0"),
-  LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
+  LOG_LEVEL: logLevel,
   SWITCHYARD_CONFIG: z.string().min(1).default("config/switchyard.yaml"),
-  DATABASE_URL: z
-    .string({ error: "is required" })
-    .regex(/^postgres(ql)?:\/\//, "must be a postgres:// URL"),
+  DATABASE_URL: databaseUrl,
   REDIS_URL: z.string({ error: "is required" }).regex(/^rediss?:\/\//, "must be a redis:// URL"),
   /** Secret mixed into API key hashes (spec 004). Losing it invalidates every key. */
   KEY_PEPPER: z
@@ -22,19 +50,35 @@ const envSchema = z.object({
     .enum(["true", "false"], { error: 'must be "true" or "false"' })
     .default("false")
     .transform((value) => value === "true"),
+  /** Required when `usage.enabled` is true (checked at boot, spec 006). */
+  KAFKA_BROKERS: kafkaBrokers.optional(),
   OTEL_SERVICE_NAME: z.string().min(1).default("switchyard-gateway"),
-  SHUTDOWN_TIMEOUT_MS: z.coerce
-    .number()
-    .int()
-    .positive()
-    .max(9999, "must be below 10000 to exit within 10 s")
-    .default(9000),
+  SHUTDOWN_TIMEOUT_MS: shutdownTimeoutMs,
+});
+
+/** The usage worker (spec 006) needs no Redis, key pepper or provider settings. */
+const workerEnvSchema = z.object({
+  LOG_LEVEL: logLevel,
+  SWITCHYARD_CONFIG: z.string().min(1).default("config/switchyard.yaml"),
+  DATABASE_URL: databaseUrl,
+  KAFKA_BROKERS: kafkaBrokers,
+  OTEL_SERVICE_NAME: z.string().min(1).default("switchyard-usage-worker"),
+  SHUTDOWN_TIMEOUT_MS: shutdownTimeoutMs,
 });
 
 export type Env = z.infer<typeof envSchema>;
+export type WorkerEnv = z.infer<typeof workerEnvSchema>;
 
 export function loadEnv(source: Record<string, string | undefined>): Env {
-  const result = envSchema.safeParse(source);
+  return parseEnv(envSchema, source);
+}
+
+export function loadWorkerEnv(source: Record<string, string | undefined>): WorkerEnv {
+  return parseEnv(workerEnvSchema, source);
+}
+
+function parseEnv<T>(schema: z.ZodType<T>, source: Record<string, string | undefined>): T {
+  const result = schema.safeParse(source);
   if (!result.success) {
     throw new ConfigError("environment", toConfigIssues(result.error));
   }

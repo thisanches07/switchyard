@@ -22,7 +22,7 @@ flowchart LR
 | Process | Entry point | Responsibility |
 |---|---|---|
 | Gateway | `src/server.ts` | Public `/v1/*` API, Admin API, health endpoints |
-| Usage worker | `src/worker.ts` | Consume usage events, idempotent insert, daily aggregates, DLQ |
+| Usage worker | `src/worker.ts` (wired in `src/usage-worker.ts`) | Consume usage events, idempotent insert, daily aggregates, DLQ |
 
 Both are stateless and can run several instances.
 
@@ -57,6 +57,10 @@ sequenceDiagram
 
 Each stage is a small module with its own span (`switchyard.auth`, `switchyard.ratelimit`, …), so traces show exactly where time goes.
 
+### Request outcome hook
+
+Every request admitted by the rate limiter gets an **outcome tracker** (`src/modules/usage/outcome.ts`, spec 006). The proxy routes end it exactly once (success, upstream error, mid-stream failure, client disconnect, policy rejection), and it hands one `UsageEvent` v1 to the configured `OutcomeRecorder` (`AppDeps.usageRecorder`). Later features add data to the tracker (`set({ attempts, cacheStatus, piiDetections, … })`) or wrap the recorder (cost and budget counters) instead of adding completion paths. The gateway's recorder is the usage publisher: it validates the event and appends it to a bounded in-memory buffer that is flushed to Kafka in the background.
+
 ## Code layout
 
 ```
@@ -86,8 +90,8 @@ Dependency rule: `modules → core ← infra`. `core` never imports `modules` or
 |---|---|
 | Provider | Retry with backoff, then next candidate; circuit breaker opens after repeated failures |
 | Redis | Rate limits fail open, hard budgets fail closed (configurable), exact cache skipped |
-| Postgres | Auth served from LRU cache for known keys; new keys fail with 503; semantic cache skipped |
-| Kafka | Events buffered in memory up to a bound, then dropped and counted |
+| Postgres | Auth served from LRU cache for known keys; new keys fail with 503; semantic cache skipped; the usage worker retries the batch with backoff, without committing offsets or writing to the DLQ |
+| Kafka | Gateway keeps serving; events buffered in memory up to a bound, then dropped and counted; `/readyz` unaffected |
 
 ## Related documents
 - [Spec backlog](specs/README.md)

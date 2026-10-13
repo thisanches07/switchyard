@@ -20,6 +20,8 @@ services:
       ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-only-admin-token-change-me}
       KEY_PEPPER: ${KEY_PEPPER:-dev-only-pepper-change-me-0123456789abcdef}
       MIGRATE_ON_BOOT: "true"
+      # Usage events (spec 006); the gateway starts and serves even while Redpanda is down.
+      KAFKA_BROKERS: redpanda:9092
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL_DOCKER:-http://host.docker.internal:11434/v1}
       OTEL_SERVICE_NAME: switchyard-gateway
       OTEL_EXPORTER_OTLP_ENDPOINT: http://lgtm:4318
@@ -41,6 +43,29 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+    restart: unless-stopped
+
+  # Usage worker (spec 006): Kafka → Postgres, idempotent, DLQ. Same image as the gateway.
+  usage-worker:
+    build: .
+    image: switchyard-gateway:dev
+    init: true
+    command: ["node", "--import", "./dist/infra/telemetry/register-worker.js", "dist/worker.js"]
+    environment:
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      SWITCHYARD_CONFIG: /app/config/${SWITCHYARD_CONFIG_NAME:-switchyard.example.yaml}
+      DATABASE_URL: postgres://switchyard:switchyard@postgres:5432/switchyard
+      KAFKA_BROKERS: redpanda:9092
+      OTEL_SERVICE_NAME: switchyard-usage-worker
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://lgtm:4318
+    volumes:
+      - ./config:/app/config:ro
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      # Healthy once its migrations (usage tables included) have run.
+      gateway:
+        condition: service_healthy
     restart: unless-stopped
 
   postgres:

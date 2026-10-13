@@ -140,6 +140,9 @@ export const requestTooLargeForLimit = (scope: string, capacity: number) =>
     `This request needs more tokens than the ${scope} limit allows per minute (${capacity}). Lower max_tokens or the input size.`,
   );
 
+export const usageUnavailable = () =>
+  new GatewayError(503, SERVER, "usage_unavailable", "Usage reporting is not configured");
+
 export const rateLimiterUnavailable = () =>
   new GatewayError(
     503,

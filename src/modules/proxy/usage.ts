@@ -4,9 +4,40 @@ import type { ChatChunk, ChatRequest, Usage } from "../../core/chat.js";
 export function usageFromChunk(chunk: ChatChunk): Usage | undefined {
   const usage = chunk.usage;
   if (typeof usage !== "object" || usage === null) return undefined;
-  const { prompt_tokens: input, completion_tokens: output } = usage as Record<string, unknown>;
+  const {
+    prompt_tokens: input,
+    completion_tokens: output,
+    prompt_tokens_details: details,
+  } = usage as Record<string, unknown>;
   if (typeof input !== "number" || typeof output !== "number") return undefined;
-  return { inputTokens: input, outputTokens: output };
+  const cached =
+    typeof details === "object" && details !== null
+      ? (details as { cached_tokens?: unknown }).cached_tokens
+      : undefined;
+  return {
+    inputTokens: input,
+    outputTokens: output,
+    ...(typeof cached === "number" ? { cachedInputTokens: cached } : {}),
+  };
+}
+
+/**
+ * Usage of a non-streaming chat completion whose provider reported none (spec 006): the
+ * spec 003 estimate of the input messages and of the returned message contents.
+ */
+export function estimateChatUsage(request: ChatRequest, body: unknown): Usage {
+  let outputChars = 0;
+  const choices = typeof body === "object" && body !== null ? Reflect.get(body, "choices") : [];
+  if (Array.isArray(choices)) {
+    for (const choice of choices as unknown[]) {
+      const content = (choice as { message?: { content?: unknown } } | null)?.message?.content;
+      if (typeof content === "string") outputChars += content.length;
+    }
+  }
+  return {
+    inputTokens: estimateTokens(messageChars(request)),
+    outputTokens: estimateTokens(outputChars),
+  };
 }
 
 /**

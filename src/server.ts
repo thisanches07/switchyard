@@ -6,18 +6,26 @@ import { createDatabase } from "./infra/db/client.js";
 import { DrizzleKeyStore } from "./infra/db/key-store.js";
 import { migrateDatabase } from "./infra/db/migrate.js";
 import { createPostgresPool, postgresCheck } from "./infra/db/postgres.js";
+import { DrizzleUsageStore } from "./infra/db/usage-store.js";
 import { createUndiciClient } from "./infra/http/undici-client.js";
+import { createKafkaProducer } from "./infra/kafka/producer.js";
 import { createLogger } from "./infra/logger.js";
 import { createRedisClient, redisCheck } from "./infra/redis/client.js";
 import { RedisRateLimiter } from "./infra/redis/rate-limiter.js";
 import { shutdownTelemetry } from "./infra/telemetry/sdk.js";
 import { installShutdown } from "./lifecycle/shutdown.js";
 import { createProviderRegistry } from "./modules/providers/registry.js";
+import { createUsagePublisher } from "./modules/usage/publisher.js";
 
 function loadSettings() {
   try {
     const env = loadEnv(process.env);
     const config = loadConfig(env.SWITCHYARD_CONFIG, process.env);
+    if (config.usage.enabled && !env.KAFKA_BROKERS) {
+      throw new ConfigError("environment", [
+        { path: "KAFKA_BROKERS", message: "is required when usage.enabled is true" },
+      ]);
+    }
     return { env, config };
   } catch (error) {
     if (error instanceof ConfigError) {
@@ -83,6 +91,21 @@ async function main(): Promise<void> {
   const http = createUndiciClient(config.server.timeouts);
   const providers = createProviderRegistry(config, process.env, { http });
 
+  // Usage events (spec 006): buffered in memory, published in the background; Kafka may be down.
+  const usage = createUsagePublisher({
+    config: config.usage,
+    producer:
+      config.usage.enabled && env.KAFKA_BROKERS
+        ? createKafkaProducer({
+            brokers: env.KAFKA_BROKERS,
+            clientId: "switchyard-gateway",
+            logger,
+          })
+        : undefined,
+    logger,
+  });
+  usage.start();
+
   const app = await buildApp({
     logger,
     checks: [postgresCheck(pool), redisCheck(redis)],
@@ -92,11 +115,15 @@ async function main(): Promise<void> {
     rateLimiter: new RedisRateLimiter(redis),
     keyPepper: env.KEY_PEPPER,
     adminToken: env.ADMIN_TOKEN,
+    usageRecorder: usage,
+    usageReader: new DrizzleUsageStore(db),
   });
 
   installShutdown({
     app,
     closers: [
+      // After app.close(): in-flight requests have recorded their events. Leave 1 s for the rest.
+      { name: "usage-events", close: ({ deadlineAt }) => usage.close(deadlineAt - 1_000) },
       { name: "upstream-http", close: () => http.close() },
       { name: "redis", close: async () => redis.disconnect() },
       { name: "postgres", close: () => pool.end() },

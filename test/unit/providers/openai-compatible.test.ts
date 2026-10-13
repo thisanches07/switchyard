@@ -67,6 +67,20 @@ describe("openai-compatible provider", () => {
     expect(http.calls[0]?.headers).not.toHaveProperty("authorization");
   });
 
+  it("reads provider-reported prompt-cache tokens (spec 006)", async () => {
+    const cached = {
+      ...completion,
+      usage: { ...completion.usage, prompt_tokens_details: { cached_tokens: 10 } },
+    };
+    const http = fakeHttp(() => jsonResponse(200, cached));
+    const provider = createOpenAiCompatibleProvider(
+      { name: "openai", baseUrl: "http://o.test/v1" },
+      http.client,
+    );
+    const result = await provider.chat(request, ctx());
+    expect(result.usage).toEqual({ inputTokens: 12, outputTokens: 3, cachedInputTokens: 10 });
+  });
+
   it("tolerates responses without usage", async () => {
     const { usage: _usage, ...noUsage } = completion;
     const http = fakeHttp(() => jsonResponse(200, noUsage));

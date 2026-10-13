@@ -16,7 +16,7 @@
 | Spoofing | Stolen or guessed virtual key | High-entropy keys, hashed at rest with pepper, constant-time compare, revocation, per-key limits | 004, 005 |
 | Spoofing | Admin API abuse | Separate admin token, admin routes can be bound to a private interface | 004 |
 | Tampering | Malicious config (e.g. provider URL pointing to attacker) | Config is operator-owned, validated with Zod, never accepted from requests | 001, 008 |
-| Repudiation | Disputed usage/cost | Immutable usage events with request id, key id and timestamps | 006 |
+| Repudiation | Disputed usage/cost | One usage event per admitted request, carrying the `x-switchyard-request-id` returned to the client, team and key ids, timestamps, tokens and outcome. Events are **insert-only** (no update or delete API or code path), metadata-only (strict schema, ADR-0010) and stored **effectively once** (UUIDv7 id + `ON CONFLICT DO NOTHING`, aggregates updated in the same transaction). Residual risk: during a broker outage longer than the in-memory buffer (`usage.bufferSize`), events are dropped; every drop is counted in `switchyard_usage_events_dropped_total{reason}` (ADR-0007) | 006 |
 | Information disclosure | Cross-tenant answers through the semantic cache | Cache scoped by team + model + params; explicit isolation test | 009 |
 | Information disclosure | PII sent to third-party providers | PII redaction modes `mask` / `block` per key | 010 |
 | Information disclosure | Content leaking via logs or traces | Content never logged; span attributes sanitized | 001, 011 |

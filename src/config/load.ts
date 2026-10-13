@@ -1,7 +1,13 @@
 import { readFileSync } from "node:fs";
 import { parseDocument } from "yaml";
 import { ConfigError, type ConfigIssue } from "./errors.js";
-import { type AppConfig, configSchema, type ProviderConfig } from "./schema.js";
+import {
+  type AppConfig,
+  configSchema,
+  type ProviderConfig,
+  type UsageConfig,
+  usageSchema,
+} from "./schema.js";
 import { toConfigIssues } from "./zod-issues.js";
 
 type OpenAiCompatible = Extract<ProviderConfig, { type: "openai-compatible" }>;
@@ -16,21 +22,7 @@ export type LoadedConfig = Omit<AppConfig, "providers"> & {
 };
 
 export function loadConfig(path: string, env: Record<string, string | undefined>): LoadedConfig {
-  const raw = readSource(path);
-
-  const doc = parseDocument(raw);
-  if (doc.errors.length > 0) {
-    throw new ConfigError(
-      path,
-      doc.errors.map((e) => {
-        const pos = e.linePos?.[0];
-        const where = pos ? ` (line ${pos.line}, column ${pos.col})` : "";
-        return { path: "", message: `YAML syntax error${where}: ${firstLine(e.message)}` };
-      }),
-    );
-  }
-
-  const result = configSchema.safeParse(doc.toJS() ?? {});
+  const result = configSchema.safeParse(readYaml(path));
   if (!result.success) {
     throw new ConfigError(path, toConfigIssues(result.error));
   }
@@ -46,6 +38,43 @@ export function loadConfig(path: string, env: Record<string, string | undefined>
   }
 
   return { ...result.data, providers };
+}
+
+/**
+ * Only the `usage` section of the config file (spec 006). The usage worker uses it so it never
+ * needs provider settings or their environment variables.
+ */
+export function loadUsageConfig(path: string): UsageConfig {
+  const root = readYaml(path);
+  const section =
+    typeof root === "object" && root !== null ? Reflect.get(root, "usage") : undefined;
+  const result = usageSchema.safeParse(section ?? {});
+  if (!result.success) {
+    throw new ConfigError(
+      path,
+      toConfigIssues(result.error).map((issue) => ({
+        ...issue,
+        path: issue.path ? `usage.${issue.path}` : "usage",
+      })),
+    );
+  }
+  return result.data;
+}
+
+/** Reads and parses a YAML file; syntax errors become a ConfigError with line and column. */
+function readYaml(path: string): unknown {
+  const doc = parseDocument(readSource(path));
+  if (doc.errors.length > 0) {
+    throw new ConfigError(
+      path,
+      doc.errors.map((e) => {
+        const pos = e.linePos?.[0];
+        const where = pos ? ` (line ${pos.line}, column ${pos.col})` : "";
+        return { path: "", message: `YAML syntax error${where}: ${firstLine(e.message)}` };
+      }),
+    );
+  }
+  return doc.toJS() ?? {};
 }
 
 function readSource(path: string): string {

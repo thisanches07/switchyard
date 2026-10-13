@@ -28,6 +28,7 @@ describe("OpenAPI documentation", () => {
         "/admin/teams",
         "/admin/keys",
         "/admin/keys/{id}/revoke",
+        "/admin/usage",
       ]),
     );
     expect(JSON.stringify(doc.components)).toContain("bearer");

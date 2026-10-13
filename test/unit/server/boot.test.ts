@@ -12,6 +12,8 @@ const baseEnv = {
   OLLAMA_BASE_URL: "http://127.0.0.1:11434/v1",
   OTEL_SDK_DISABLED: "true",
   KEY_PEPPER: "test-pepper-0123456789abcdefghijklmnop",
+  // Nothing listens here: the gateway must start with Kafka down (spec 006, AC-6).
+  KAFKA_BROKERS: "127.0.0.1:1",
   HOST: "127.0.0.1",
   PORT: "0",
 };
@@ -60,6 +62,13 @@ describe("server boot", () => {
     expect(await run.exited).toBe(1);
     expect(run.output().stderr).toContain("Invalid configuration in environment");
     expect(run.output().stderr).toContain("DATABASE_URL");
+  }, 60_000);
+
+  it("exits non-zero naming KAFKA_BROKERS when usage events are enabled without it", async () => {
+    const run = start({ ...baseEnv, KAFKA_BROKERS: undefined });
+    expect(await run.exited).toBe(1);
+    expect(run.output().stderr).toContain("Invalid configuration in environment");
+    expect(run.output().stderr).toContain("KAFKA_BROKERS: is required when usage.enabled is true");
   }, 60_000);
 
   it("starts and serves /healthz even when dependencies are down", async () => {

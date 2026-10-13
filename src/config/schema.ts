@@ -66,6 +66,15 @@ const limitsSchema = z.strictObject({
   authFailuresPerMinutePerIp: positiveInt.default(30),
 });
 
+/** Usage events (spec 006): published to Kafka through a bounded in-memory buffer. */
+export const usageSchema = z.strictObject({
+  enabled: z.boolean().default(true),
+  topic: z.string().min(1).default("usage.events.v1"),
+  dlqTopic: z.string().min(1).default("usage.events.dlq"),
+  bufferSize: positiveInt.default(10_000),
+  flushIntervalMs: positiveInt.default(200),
+});
+
 const cacheSchema = z.strictObject({
   exact: z
     .strictObject({ enabled: z.boolean().default(false), ttlSeconds: positiveInt.default(3600) })
@@ -99,6 +108,7 @@ export const configSchema = z
       })
       .prefault({}),
     limits: limitsSchema.prefault({}),
+    usage: usageSchema.prefault({}),
     cache: cacheSchema.prefault({}),
     pricingFile: z.string().min(1).default("config/pricing.yaml"),
   })
@@ -125,4 +135,5 @@ export const configSchema = z
   });
 
 export type AppConfig = z.infer<typeof configSchema>;
+export type UsageConfig = z.infer<typeof usageSchema>;
 export type ProviderConfig = z.infer<typeof providerSchema>;
