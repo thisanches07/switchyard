@@ -258,6 +258,45 @@ try {
     if (content !== "My CPF is 529.982.247-25") throw new Error(`content ${content}`);
   });
 
+  await step(
+    "a mock request reports its cost; a budget of 0 then gets 429 (spec 007)",
+    async () => {
+      const admin = { authorization: `Bearer ${ADMIN_TOKEN}`, "content-type": "application/json" };
+      const team = await fetch(`${GATEWAY}/admin/teams`, {
+        method: "POST",
+        headers: admin,
+        body: JSON.stringify({ name: `smoke-budget-${Date.now()}` }),
+      });
+      const { id: teamId } = (await team.json()) as { id: string };
+      const created = await fetch(`${GATEWAY}/admin/keys`, {
+        method: "POST",
+        headers: admin,
+        body: JSON.stringify({ teamId, name: "budget" }),
+      });
+      const { key, id } = (await created.json()) as { key: string; id: string };
+
+      const priced = await chatWith(key, { content: "hi" });
+      if (priced.status !== 200) throw new Error(`chat: ${priced.status} ${await priced.text()}`);
+      const cost = priced.headers.get("x-switchyard-cost-usd");
+      // mock/* has synthetic prices in config/pricing.yaml.
+      if (!cost || !/^\d+\.\d{10}$/.test(cost)) throw new Error(`x-switchyard-cost-usd: ${cost}`);
+
+      const patched = await fetch(`${GATEWAY}/admin/keys/${id}`, {
+        method: "PATCH",
+        headers: admin,
+        body: JSON.stringify({ monthlyBudgetUsd: 0 }),
+      });
+      if (patched.status !== 200)
+        throw new Error(`patch: ${patched.status} ${await patched.text()}`);
+      const rejected = await chatWith(key, { content: "hi" });
+      const body = await rejected.text();
+      if (rejected.status !== 429) throw new Error(`${rejected.status} ${body}`);
+      if (JSON.parse(body).error?.code !== "budget_exceeded") throw new Error(body);
+      if (rejected.headers.get("x-should-retry") !== "false") throw new Error("x-should-retry");
+      console.log(`  cost ${cost} USD, then 429 budget_exceeded`);
+    },
+  );
+
   await step("ollama profile adds the ollama service", () => {
     const services = run(["compose", "--profile", "ollama", "config", "--services"]).stdout;
     if (!services.split(/\r?\n/).includes("ollama")) throw new Error(services);

@@ -18,6 +18,21 @@ const piiModeSchema = {
   description: "PII redaction: off, mask or block; null uses the config default",
 };
 
+/** Monthly budget in USD (spec 007): number or decimal string, at most 4 decimal places. */
+const budgetSchema = {
+  type: ["number", "string", "null"],
+  description:
+    "Monthly budget in USD (calendar month, UTC): 0 to 99999999.9999, at most 4 decimal places; null clears. Returned as a decimal string",
+};
+
+/** Soft limit of a team's budgets, percent (spec 007). */
+const softLimitPctSchema = {
+  type: "integer",
+  minimum: 1,
+  maximum: 100,
+  description: "Percent of the budget that triggers the soft-limit warning (default 80)",
+};
+
 const errorResponse = {
   description: "OpenAI-shaped error",
   type: "object",
@@ -52,6 +67,47 @@ function usageRow(withGroup: boolean) {
     },
   };
 }
+const money = { type: "string", description: "USD, decimal string" };
+
+/** GET /admin/keys|teams/:id/budget (spec 007). */
+function budgetStatusDoc(scope: "key" | "team") {
+  return {
+    tags: ["Admin"],
+    summary: `Monthly budget status of a ${scope}: limit, spend this period and flags (spec 007)`,
+    security: adminAuth,
+    params: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
+    response: {
+      200: {
+        description:
+          "Spend comes from the Redis counter (source: redis) or, if Redis is unavailable, from the usage tables (source: postgres)",
+        type: "object",
+        properties: {
+          scope: { type: "string", enum: ["key", "team"] },
+          id: { type: "string" },
+          period: {
+            type: "object",
+            properties: {
+              start: { type: "string", format: "date-time" },
+              end: { type: "string", format: "date-time" },
+            },
+          },
+          limitUsd: { ...money, type: ["string", "null"] },
+          softLimitPct: { type: "integer" },
+          spentUsd: money,
+          remainingUsd: { ...money, type: ["string", "null"] },
+          softLimitReached: { type: "boolean" },
+          hardLimitReached: { type: "boolean" },
+          unknownCostRequests: { type: "integer" },
+          source: { type: "string", enum: ["redis", "postgres"] },
+        },
+      },
+      401: errorResponse,
+      404: errorResponse,
+      503: errorResponse,
+    },
+  };
+}
+
 const anthropicErrorResponse = {
   description: "Anthropic-shaped error (spec 014)",
   type: "object",
@@ -181,7 +237,7 @@ export const docs = {
   },
   createTeam: {
     tags: ["Admin"],
-    summary: "Create a team (optional per-minute caps across all its keys)",
+    summary: "Create a team (optional per-minute caps and monthly budget across all its keys)",
     security: adminAuth,
     body: {
       type: "object",
@@ -190,6 +246,8 @@ export const docs = {
         name: { type: "string", minLength: 1, maxLength: 100 },
         rpm: limitSchema,
         tpm: limitSchema,
+        monthlyBudgetUsd: budgetSchema,
+        softLimitPct: softLimitPctSchema,
       },
     },
   },
@@ -213,25 +271,39 @@ export const docs = {
         rpm: limitSchema,
         tpm: limitSchema,
         piiMode: piiModeSchema,
+        monthlyBudgetUsd: budgetSchema,
       },
     },
   },
   patchKeyLimits: {
     tags: ["Admin"],
-    summary: "Set or clear (null) the per-minute limits and the PII mode of a key",
+    summary: "Set or clear (null) the per-minute limits, PII mode and monthly budget of a key",
     security: adminAuth,
     params: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
     body: {
       type: "object",
-      properties: { rpm: limitSchema, tpm: limitSchema, piiMode: piiModeSchema },
+      properties: {
+        rpm: limitSchema,
+        tpm: limitSchema,
+        piiMode: piiModeSchema,
+        monthlyBudgetUsd: budgetSchema,
+      },
     },
   },
   patchTeamLimits: {
     tags: ["Admin"],
-    summary: "Set or clear (null) the per-minute caps of a team",
+    summary: "Set or clear (null) the per-minute caps and monthly budget of a team",
     security: adminAuth,
     params: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
-    body: { type: "object", properties: { rpm: limitSchema, tpm: limitSchema } },
+    body: {
+      type: "object",
+      properties: {
+        rpm: limitSchema,
+        tpm: limitSchema,
+        monthlyBudgetUsd: budgetSchema,
+        softLimitPct: softLimitPctSchema,
+      },
+    },
   },
   listKeys: {
     tags: ["Admin"],
@@ -286,5 +358,7 @@ export const docs = {
       401: errorResponse,
     },
   },
+  keyBudget: budgetStatusDoc("key"),
+  teamBudget: budgetStatusDoc("team"),
   health: { tags: ["Health"], summary: "Liveness / readiness probe" },
 };

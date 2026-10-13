@@ -10,6 +10,7 @@ import Fastify, {
 } from "fastify";
 import type { LoadedConfig } from "./config/load.js";
 import type { AuthRecord, KeyStore } from "./core/auth.js";
+import type { BudgetCounters, BudgetStore } from "./core/budget.js";
 import {
   GatewayError,
   internalError,
@@ -20,9 +21,11 @@ import {
   unsupportedMediaType,
 } from "./core/errors.js";
 import type { DependencyCheck } from "./core/health.js";
+import type { CostEstimator } from "./core/pricing.js";
 import type { ChatProvider } from "./core/provider.js";
 import type { RateLimiter } from "./core/ratelimit.js";
 import type { OutcomeRecorder, UsageReader } from "./core/usage.js";
+import { MemoryBudgetCounters } from "./infra/memory/budget-counters.js";
 import { adminRoutes } from "./modules/admin/routes.js";
 import {
   anthropicRateLimitHeaders,
@@ -30,12 +33,14 @@ import {
 } from "./modules/anthropic/inbound-errors.js";
 import { AuthCache } from "./modules/auth/cache.js";
 import { recordAuthFailure } from "./modules/auth/telemetry.js";
+import { createBudgets } from "./modules/budgets/service.js";
 import { openApiInfo } from "./modules/docs.js";
 import { healthRoutes } from "./modules/health/routes.js";
+import { PriceTable, priceEvent } from "./modules/pricing/table.js";
 import { proxyRoutes } from "./modules/proxy/routes.js";
 import { countRejection, createAdmission } from "./modules/ratelimit/admission.js";
 import { createOutcomeHook } from "./modules/usage/outcome.js";
-import { noopRecorder } from "./modules/usage/recorders.js";
+import { fanOut, noopRecorder } from "./modules/usage/recorders.js";
 
 export interface AppDeps {
   logger: FastifyBaseLogger;
@@ -52,6 +57,17 @@ export interface AppDeps {
   usageRecorder?: OutcomeRecorder;
   /** Answers GET /admin/usage (spec 006); the route returns 503 without it. */
   usageReader?: UsageReader;
+  /**
+   * Prices (spec 007): `estimateUsd` for routing (spec 008). A `PriceTable` (config/pricing.yaml)
+   * also gives exact event costs; any other estimator, or none, leaves every event cost unknown.
+   */
+  costEstimator?: CostEstimator;
+  /** Budget counters (spec 007, Redis in production); defaults to in-process counters. */
+  budgetCounters?: BudgetCounters;
+  /** Stored spend for GET /admin/keys|teams/:id/budget (spec 007); those routes 503 without it. */
+  budgetStore?: BudgetStore;
+  /** Clock for budget periods (spec 007); tests inject one. Defaults to `Date.now`. */
+  clock?: () => number;
   bodyLimitBytes?: number;
   readinessTimeoutMs?: number;
 }
@@ -126,16 +142,32 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     logger: deps.logger,
   });
 
-  // The request-outcome hook (spec 006); later specs extend the recorder, not the routes.
-  const outcomes = createOutcomeHook({
-    recorder: deps.usageRecorder ?? noopRecorder,
+  // Monthly budgets (spec 007): checked before rate limiting, charged when a request ends.
+  const budgetCounters = deps.budgetCounters ?? new MemoryBudgetCounters();
+  const budgets = createBudgets({
+    counters: budgetCounters,
+    config: deps.config.budgets,
     logger: deps.logger,
+    ...(deps.clock ? { now: deps.clock } : {}),
+  });
+  app.addHook("onClose", async () => budgets.close());
+
+  // The request-outcome hook (spec 006); later specs extend the recorder, not the routes.
+  // Spec 007: every event is priced, then charged to the budget counters and published.
+  const outcomes = createOutcomeHook({
+    recorder: fanOut(budgets.charger, deps.usageRecorder ?? noopRecorder),
+    logger: deps.logger,
+    price: priceEvent(
+      deps.costEstimator instanceof PriceTable ? deps.costEstimator : PriceTable.empty(),
+    ),
+    ...(deps.clock ? { now: deps.clock } : {}),
   });
 
   await app.register(proxyRoutes, {
     config: deps.config,
     providers: deps.providers,
     admission,
+    budgets: budgets.check,
     outcomes,
     auth: {
       store: deps.keyStore,
@@ -159,6 +191,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       adminToken: deps.adminToken,
       cache: authCache,
       usage: deps.usageReader,
+      budgets: { counters: budgetCounters, store: deps.budgetStore, now: deps.clock ?? Date.now },
     });
   }
   return app;

@@ -2,6 +2,7 @@ import { buildApp } from "./app.js";
 import { loadEnv } from "./config/env.js";
 import { ConfigError, formatConfigError } from "./config/errors.js";
 import { loadConfig } from "./config/load.js";
+import { DrizzleBudgetStore } from "./infra/db/budget-store.js";
 import { createDatabase } from "./infra/db/client.js";
 import { DrizzleKeyStore } from "./infra/db/key-store.js";
 import { migrateDatabase } from "./infra/db/migrate.js";
@@ -10,10 +11,13 @@ import { DrizzleUsageStore } from "./infra/db/usage-store.js";
 import { createUndiciClient } from "./infra/http/undici-client.js";
 import { createKafkaProducer } from "./infra/kafka/producer.js";
 import { createLogger } from "./infra/logger.js";
+import { RedisBudgetCounters } from "./infra/redis/budget-counters.js";
 import { createRedisClient, redisCheck } from "./infra/redis/client.js";
 import { RedisRateLimiter } from "./infra/redis/rate-limiter.js";
 import { shutdownTelemetry } from "./infra/telemetry/sdk.js";
 import { installShutdown } from "./lifecycle/shutdown.js";
+import { loadPricing } from "./modules/pricing/load.js";
+import { unknownPriceCandidates } from "./modules/pricing/table.js";
 import { createProviderRegistry } from "./modules/providers/registry.js";
 import { createUsagePublisher } from "./modules/usage/publisher.js";
 
@@ -26,7 +30,9 @@ function loadSettings() {
         { path: "KAFKA_BROKERS", message: "is required when usage.enabled is true" },
       ]);
     }
-    return { env, config };
+    // Spec 007: the price table is loaded once at boot; a missing or invalid file stops the gateway.
+    const pricing = loadPricing(config.pricingFile);
+    return { env, config, pricing };
   } catch (error) {
     if (error instanceof ConfigError) {
       process.stderr.write(`${formatConfigError(error)}\n`);
@@ -37,8 +43,17 @@ function loadSettings() {
 }
 
 async function main(): Promise<void> {
-  const { env, config } = loadSettings();
+  const { env, config, pricing } = loadSettings();
   const logger = createLogger({ level: env.LOG_LEVEL });
+
+  // Spec 007, AC-1: models without a verified price are counted as unknown cost, never as free.
+  const unpriced = unknownPriceCandidates(config.aliases, pricing);
+  if (unpriced.length > 0) {
+    logger.warn(
+      { models: unpriced, pricingFile: config.pricingFile },
+      "unknown price for alias candidates: their cost is reported as unknown and not budgeted",
+    );
+  }
 
   // Clients connect lazily: the gateway starts even if a dependency is down,
   // and /readyz reports it (spec 001, AC-5).
@@ -117,6 +132,10 @@ async function main(): Promise<void> {
     adminToken: env.ADMIN_TOKEN,
     usageRecorder: usage,
     usageReader: new DrizzleUsageStore(db),
+    costEstimator: pricing,
+    // Spec 007: hot spend counters in Redis, stored spend in Postgres.
+    budgetCounters: new RedisBudgetCounters(redis),
+    budgetStore: new DrizzleBudgetStore(db),
   });
 
   installShutdown({

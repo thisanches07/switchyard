@@ -204,6 +204,29 @@ export const piiDetected = (types: readonly string[], headers: Record<string, st
     headers,
   );
 
+/**
+ * Monthly budget exhausted (spec 007, AC-6): `insufficient_quota`, as OpenAI reports exhausted
+ * quota, so SDKs raise RateLimitError; `x-should-retry: false` in `headers` stops their retries.
+ * Names the scope and the reset time only, never amounts.
+ */
+export const budgetExceeded = (
+  scope: "key" | "team",
+  resetAt: string,
+  headers: Record<string, string>,
+) =>
+  new GatewayError(
+    429,
+    "insufficient_quota",
+    "budget_exceeded",
+    `Monthly budget exhausted for this ${scope}. It resets at ${resetAt}.`,
+    headers,
+    { retryable: false },
+  );
+
+/** Budget counters unreachable with `budgets.onRedisError: closed` (spec 007, AC-11). */
+export const budgetUnavailable = () =>
+  new GatewayError(503, SERVER, "budget_unavailable", "Budget check unavailable; try again later");
+
 export const rateLimiterUnavailable = () =>
   new GatewayError(
     503,

@@ -1,7 +1,9 @@
 import type { FastifyInstance, InjectOptions } from "fastify";
 import { buildApp } from "../../src/app.js";
 import type { LoadedConfig } from "../../src/config/load.js";
+import type { BudgetCounters, BudgetStore } from "../../src/core/budget.js";
 import type { DependencyCheck } from "../../src/core/health.js";
+import type { CostEstimator } from "../../src/core/pricing.js";
 import type { ChatProvider } from "../../src/core/provider.js";
 import type { RateLimiter } from "../../src/core/ratelimit.js";
 import type { OutcomeRecorder, UsageReader } from "../../src/core/usage.js";
@@ -26,6 +28,14 @@ export interface TestAppOptions {
   usageRecorder?: OutcomeRecorder;
   /** Answers GET /admin/usage (spec 006). */
   usageReader?: UsageReader;
+  /** Prices (spec 007); default: every cost unknown. */
+  costEstimator?: CostEstimator;
+  /** Budget counters (spec 007); default: fresh in-memory counters. */
+  budgetCounters?: BudgetCounters;
+  /** Stored spend for the budget status routes (spec 007). */
+  budgetStore?: BudgetStore;
+  /** Clock for budget periods (spec 007). */
+  clock?: () => number;
   /**
    * Default true: `app.inject` adds `Authorization: Bearer <test key>` unless the request sets
    * its own `authorization` header. Set false to exercise authentication itself.
@@ -51,6 +61,10 @@ export async function testApp(options: TestAppOptions = {}) {
     ...(options.adminToken === undefined ? {} : { adminToken: options.adminToken }),
     ...(options.usageRecorder === undefined ? {} : { usageRecorder: options.usageRecorder }),
     ...(options.usageReader === undefined ? {} : { usageReader: options.usageReader }),
+    ...(options.costEstimator === undefined ? {} : { costEstimator: options.costEstimator }),
+    ...(options.budgetCounters === undefined ? {} : { budgetCounters: options.budgetCounters }),
+    ...(options.clock === undefined ? {} : { clock: options.clock }),
+    ...(options.budgetStore === undefined ? {} : { budgetStore: options.budgetStore }),
     ...(options.bodyLimitBytes === undefined ? {} : { bodyLimitBytes: options.bodyLimitBytes }),
   });
 

@@ -43,6 +43,23 @@ def test_rate_limit_is_rate_limit_error() -> None:
     assert int(info.value.response.headers["retry-after"]) >= 1
 
 
+def test_exhausted_budget_is_rate_limit_error_and_not_retried() -> None:
+    """Spec 007: 429 insufficient_quota/budget_exceeded; x-should-retry: false stops the retries."""
+    calls = []
+    hooks = {"request": [lambda request: calls.append(request)]}
+    http_client = openai.DefaultHttpxClient(event_hooks=hooks)
+    # Default max_retries (2).
+    budgeted = OpenAI(
+        base_url=BASE_URL, api_key=os.environ["SWITCHYARD_BUDGET_KEY"], http_client=http_client
+    )
+    with pytest.raises(openai.RateLimitError) as info:
+        budgeted.chat.completions.create(model="fast", messages=[{"role": "user", "content": "hi"}])
+    assert info.value.status_code == 429
+    assert info.value.code == "budget_exceeded"
+    assert info.value.response.headers["x-should-retry"] == "false"
+    assert len(calls) == 1
+
+
 def test_unknown_model_is_not_found(client: OpenAI) -> None:
     with pytest.raises(openai.NotFoundError) as info:
         client.chat.completions.create(model="gpt-9", messages=[{"role": "user", "content": "x"}])

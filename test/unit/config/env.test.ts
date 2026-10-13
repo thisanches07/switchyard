@@ -107,11 +107,16 @@ describe("KAFKA_BROKERS (spec 006)", () => {
 });
 
 describe("loadWorkerEnv (spec 006)", () => {
-  const worker = { DATABASE_URL: base.DATABASE_URL, KAFKA_BROKERS: "localhost:19092" };
+  const worker = {
+    DATABASE_URL: base.DATABASE_URL,
+    KAFKA_BROKERS: "localhost:19092",
+    REDIS_URL: "redis://localhost:6379",
+  };
 
-  it("needs only the database and the brokers", () => {
+  it("needs only the database, the brokers and Redis (budget reconciliation, spec 007)", () => {
     expect(loadWorkerEnv(worker)).toMatchObject({
       DATABASE_URL: base.DATABASE_URL,
+      REDIS_URL: "redis://localhost:6379",
       KAFKA_BROKERS: ["localhost:19092"],
       LOG_LEVEL: "info",
       SWITCHYARD_CONFIG: "config/switchyard.yaml",
@@ -120,8 +125,10 @@ describe("loadWorkerEnv (spec 006)", () => {
     });
   });
 
-  it("requires KAFKA_BROKERS and DATABASE_URL", () => {
+  it("requires KAFKA_BROKERS, DATABASE_URL and REDIS_URL", () => {
     const paths = issuesOf(() => loadWorkerEnv({})).map((i) => i.path);
-    expect(paths).toEqual(expect.arrayContaining(["KAFKA_BROKERS", "DATABASE_URL"]));
+    expect(paths).toEqual(expect.arrayContaining(["KAFKA_BROKERS", "DATABASE_URL", "REDIS_URL"]));
+    const invalid = issuesOf(() => loadWorkerEnv({ ...worker, REDIS_URL: "localhost" }));
+    expect(invalid.map((i) => i.path)).toContain("REDIS_URL");
   });
 });

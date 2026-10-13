@@ -2,12 +2,15 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { ApiKeyRecord, AuthRecord, KeyStore } from "../../core/auth.js";
+import type { BudgetCounters, BudgetRef, BudgetStore } from "../../core/budget.js";
 import { invalidAdminToken, notFound, usageUnavailable } from "../../core/errors.js";
 import { PII_MODES } from "../../core/pii.js";
 import type { UsageReader } from "../../core/usage.js";
 import type { AuthCache } from "../auth/cache.js";
 import { displayPrefix, generateKey, hashKey, parseBearer } from "../auth/keys.js";
+import { budgetStatus } from "../budgets/status.js";
 import { docs } from "../docs.js";
+import { normalize, tryDecimal } from "../pricing/decimal.js";
 import { normalizeDecimal, parseUsageQuery, todayUtc } from "../usage/report.js";
 import { parseWith } from "../validation.js";
 
@@ -18,21 +21,54 @@ export interface AdminRoutesOptions {
   cache: AuthCache<AuthRecord>;
   /** Usage tables (spec 006); GET /admin/usage answers 503 without it. */
   usage?: UsageReader | undefined;
+  /** Budget status routes (spec 007); they answer 503 without a store. */
+  budgets?: { counters: BudgetCounters; store?: BudgetStore | undefined; now: () => number };
 }
 
 /** A per-minute limit: positive integer, or null to clear it (spec 005). */
 const limit = z.number().int().positive().nullable();
 
+/** At most 8 integer digits and 4 decimal places: what `numeric(12,4)` holds (spec 007). */
+const BUDGET = /^\d{1,8}(\.\d{1,4})?$/;
+const BUDGET_MESSAGE =
+  "must be a number or decimal string from 0 to 99999999.9999 with at most 4 decimal places, or null";
+
+/** A monthly budget in USD (spec 007, AC-4): normalized decimal string, or null to clear. */
+const budgetUsd = z
+  .union([z.number(), z.string().regex(/^\d+(\.\d+)?$/, BUDGET_MESSAGE)], {
+    error: BUDGET_MESSAGE,
+  })
+  .transform((value, ctx) => {
+    const parsed = tryDecimal(value);
+    const text = parsed && normalize(parsed);
+    if (!text || !BUDGET.test(text)) {
+      ctx.addIssue({ code: "custom", message: BUDGET_MESSAGE });
+      return z.NEVER;
+    }
+    return text;
+  })
+  .nullable();
+
+/** Soft limit, percent of the budget (spec 007). */
+const softLimitPct = z.int({ error: "must be an integer from 1 to 100" }).min(1).max(100);
+
 const teamBody = z.object({
   name: z.string().trim().min(1).max(100),
   rpm: limit.optional(),
   tpm: limit.optional(),
+  monthlyBudgetUsd: budgetUsd.optional(),
+  softLimitPct: softLimitPct.optional(),
 });
 
-const limitsPatch = z
-  .object({ rpm: limit.optional(), tpm: limit.optional() })
-  .refine((patch) => patch.rpm !== undefined || patch.tpm !== undefined, {
-    message: "set rpm and/or tpm (a positive integer, or null to clear)",
+const teamPatch = z
+  .object({
+    rpm: limit.optional(),
+    tpm: limit.optional(),
+    monthlyBudgetUsd: budgetUsd.optional(),
+    softLimitPct: softLimitPct.optional(),
+  })
+  .refine((patch) => Object.values(patch).some((value) => value !== undefined), {
+    message: "set rpm, tpm, monthlyBudgetUsd and/or softLimitPct (null clears a limit or budget)",
     path: ["rpm"],
   });
 
@@ -40,9 +76,14 @@ const limitsPatch = z
 const piiMode = z.enum(PII_MODES).nullable();
 
 const keyPatch = z
-  .object({ rpm: limit.optional(), tpm: limit.optional(), piiMode: piiMode.optional() })
-  .refine((p) => p.rpm !== undefined || p.tpm !== undefined || p.piiMode !== undefined, {
-    message: "set rpm, tpm and/or piiMode (null clears)",
+  .object({
+    rpm: limit.optional(),
+    tpm: limit.optional(),
+    piiMode: piiMode.optional(),
+    monthlyBudgetUsd: budgetUsd.optional(),
+  })
+  .refine((patch) => Object.values(patch).some((value) => value !== undefined), {
+    message: "set rpm, tpm, piiMode and/or monthlyBudgetUsd (null clears)",
     path: ["piiMode"],
   });
 
@@ -53,6 +94,7 @@ const keyBody = z.object({
   rpm: limit.optional(),
   tpm: limit.optional(),
   piiMode: piiMode.optional(),
+  monthlyBudgetUsd: budgetUsd.optional(),
   expiresAt: z.iso
     .datetime({ offset: true })
     .refine((value) => Date.parse(value) > Date.now(), "must be in the future")
@@ -76,6 +118,7 @@ function keyView(record: ApiKeyRecord) {
     rpm: record.rpm,
     tpm: record.tpm,
     piiMode: record.piiMode,
+    monthlyBudgetUsd: record.monthlyBudgetUsd,
     expiresAt: record.expiresAt,
     createdAt: record.createdAt,
     revokedAt: record.revokedAt,
@@ -94,8 +137,13 @@ export async function adminRoutes(app: FastifyInstance, opts: AdminRoutesOptions
   });
 
   app.post("/admin/teams", { schema: docs.createTeam }, async (request, reply) => {
-    const { name, rpm, tpm } = parseWith(teamBody, request.body);
-    const team = await opts.store.createTeam(name, { rpm: rpm ?? null, tpm: tpm ?? null });
+    const { name, rpm, tpm, monthlyBudgetUsd, softLimitPct } = parseWith(teamBody, request.body);
+    const team = await opts.store.createTeam(name, {
+      rpm: rpm ?? null,
+      tpm: tpm ?? null,
+      monthlyBudgetUsd: monthlyBudgetUsd ?? null,
+      ...(softLimitPct === undefined ? {} : { softLimitPct }),
+    });
     return reply.code(201).send(team);
   });
 
@@ -119,6 +167,7 @@ export async function adminRoutes(app: FastifyInstance, opts: AdminRoutesOptions
       rpm: body.rpm ?? null,
       tpm: body.tpm ?? null,
       piiMode: body.piiMode ?? null,
+      monthlyBudgetUsd: body.monthlyBudgetUsd ?? null,
     });
     request.log.info({ keyId: record.id, teamId: team.id }, "api key created");
     // The only time the plaintext key leaves the gateway.
@@ -163,13 +212,43 @@ export async function adminRoutes(app: FastifyInstance, opts: AdminRoutesOptions
     };
   });
 
+  /** Spend and limits of a key or team this period (spec 007, AC-12). */
+  const statusOf = (ref: BudgetRef, limitUsd: string | null, softLimitPct: number) => {
+    const budgets = opts.budgets;
+    if (!budgets?.store) throw usageUnavailable();
+    return budgetStatus({
+      ref,
+      limitUsd,
+      softLimitPct,
+      counters: budgets.counters,
+      store: budgets.store,
+      now: budgets.now(),
+    });
+  };
+
+  app.get("/admin/keys/:id/budget", { schema: docs.keyBudget }, async (request) => {
+    const { id } = parseWith(keyParams, request.params);
+    const key = await opts.store.getKey(id);
+    if (!key) throw notFound("API key", id);
+    const team = await opts.store.getTeam(key.teamId);
+    // A key's soft limit is its team's percentage (spec 007).
+    return statusOf({ scope: "key", id: key.id }, key.monthlyBudgetUsd, team?.softLimitPct ?? 80);
+  });
+
+  app.get("/admin/teams/:id/budget", { schema: docs.teamBudget }, async (request) => {
+    const { id } = parseWith(keyParams, request.params);
+    const team = await opts.store.getTeam(id);
+    if (!team) throw notFound("Team", id);
+    return statusOf({ scope: "team", id: team.id }, team.monthlyBudgetUsd, team.softLimitPct);
+  });
+
   app.patch("/admin/teams/:id", { schema: docs.patchTeamLimits }, async (request) => {
     const { id } = parseWith(keyParams, request.params);
-    const patch = parseWith(limitsPatch, request.body);
+    const patch = parseWith(teamPatch, request.body);
     const team = await opts.store.updateTeamLimits(id, patch);
     if (!team) throw notFound("Team", id);
     opts.cache.invalidate((cached) => cached.team.id === id);
-    request.log.info({ teamId: id, ...patch }, "team limits updated");
+    request.log.info({ teamId: id, ...patch }, "team settings updated");
     return team;
   });
 }

@@ -40,7 +40,7 @@ sequenceDiagram
 
   C->>G: POST /v1/chat/completions
   G->>G: auth (LRU cache → Postgres)
-  G->>R: rate limit (Lua) + budget check
+  G->>R: budget check (spend counters) + rate limit (Lua)
   G->>G: PII redaction (if enabled)
   G->>R: exact cache lookup
   G->>D: semantic cache lookup (if enabled)
@@ -51,7 +51,7 @@ sequenceDiagram
     P-->>G: response / SSE chunks
     G-->>C: response / SSE chunks (+ PII restore)
   end
-  G->>R: reconcile TPM and budget
+  G->>R: reconcile TPM, charge the cost to the budget counters
   G->>K: publish UsageEvent
 ```
 
@@ -59,7 +59,7 @@ Each stage is a small module with its own span (`switchyard.auth`, `switchyard.r
 
 ### Request outcome hook
 
-Every request admitted by the rate limiter gets an **outcome tracker** (`src/modules/usage/outcome.ts`, spec 006). The proxy routes end it exactly once (success, upstream error, mid-stream failure, client disconnect, policy rejection), and it hands one `UsageEvent` v1 to the configured `OutcomeRecorder` (`AppDeps.usageRecorder`). Later features add data to the tracker (`set({ attempts, cacheStatus, piiDetections, … })`) or wrap the recorder (cost and budget counters) instead of adding completion paths. The gateway's recorder is the usage publisher: it validates the event and appends it to a bounded in-memory buffer that is flushed to Kafka in the background.
+Every request admitted by the rate limiter gets an **outcome tracker** (`src/modules/usage/outcome.ts`, spec 006). The proxy routes end it exactly once (success, upstream error, mid-stream failure, client disconnect, policy rejection), and it hands one `UsageEvent` v1 to the configured `OutcomeRecorder` (`AppDeps.usageRecorder`). Later features add data to the tracker (`set({ attempts, cacheStatus, piiDetections, … })`) instead of adding completion paths. Spec 007 prices the event inside the hook (`costUsd`, also returned as `x-switchyard-cost-usd` on non-streaming responses) and fans it out to the budget charger, which adds the cost to the Redis spend counters, and to the usage publisher. The gateway's recorder is the usage publisher: it validates the event and appends it to a bounded in-memory buffer that is flushed to Kafka in the background.
 
 `POST /v1/messages` (Anthropic Messages API, spec 014) runs the **same pipeline**: the route converts the Anthropic body into the canonical request first, carrying Anthropic-only data (thinking blocks, `cache_control`, documents) in an opaque extension that only the `anthropic` adapter reads (ADR-0016). Same-family requests are re-emitted natively; cross-family requests are translated. Responses are converted back by the route, and errors take the shape of the route the client called.
 
@@ -91,7 +91,7 @@ Dependency rule: `modules → core ← infra`. `core` never imports `modules` or
 | Dependency down | Behaviour |
 |---|---|
 | Provider | Retry with backoff, then next candidate; circuit breaker opens after repeated failures |
-| Redis | Rate limits fail open, hard budgets fail closed (configurable), exact cache skipped |
+| Redis | Rate limits fail open, budgeted keys fail closed (`budgets.onRedisError`, configurable), exact cache skipped; counters lost on restart are rebuilt from Postgres by the worker's reconciliation |
 | Postgres | Auth served from LRU cache for known keys; new keys fail with 503; semantic cache skipped; the usage worker retries the batch with backoff, without committing offsets or writing to the DLQ |
 | Kafka | Gateway keeps serving; events buffered in memory up to a bound, then dropped and counted; `/readyz` unaffected |
 

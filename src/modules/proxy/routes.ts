@@ -5,6 +5,7 @@ import type { ChatProvider } from "../../core/provider.js";
 import type { UsageOperation } from "../../core/usage.js";
 import { type AuthenticateOptions, createAuthenticate } from "../auth/authenticate.js";
 import { isModelAllowed } from "../auth/models.js";
+import type { BudgetCheck } from "../budgets/check.js";
 import { docs } from "../docs.js";
 import { restoreChatResponse } from "../pii/restore.js";
 import { createPiiStage } from "../pii/stage.js";
@@ -29,6 +30,8 @@ export interface ProxyRoutesOptions {
   providers: ReadonlyMap<string, ChatProvider>;
   auth: AuthenticateOptions;
   admission: AdmissionService;
+  /** Monthly budgets (spec 007), checked before rate limiting. */
+  budgets: BudgetCheck;
   /** Request-outcome hook (spec 006): one usage event per admitted request. */
   outcomes: OutcomeHook;
   /** Gateway start time in seconds, reported as `created` in /v1/models. */
@@ -71,6 +74,9 @@ export async function proxyRoutes(app: FastifyInstance, opts: ProxyRoutesOptions
     usage: { operation: UsageOperation; stream: boolean; model: string; resolved: ResolvedModel },
   ) {
     if (!request.principal) return undefined;
+    // Spec 007: budgets first, so an exhausted budget debits no rate-limit unit (AC-6).
+    const budget = await opts.budgets.check(request.principal);
+    reply.headers(budget.headers);
     const admission = await opts.admission.admit(request.principal, estimate);
     reply.headers(admission.headers);
     opts.outcomes.begin(request, {
@@ -88,6 +94,15 @@ export async function proxyRoutes(app: FastifyInstance, opts: ProxyRoutesOptions
 
   // Records any admitted request whose route did not end its tracker (spec 006).
   registerOutcomeFallback(app);
+
+  // Spec 007, AC-3: non-streaming responses carry their known cost (streams end after headers).
+  app.addHook("onSend", async (request, reply, payload) => {
+    const event = request.outcome?.event;
+    if (event && !event.stream && event.costUsd !== null) {
+      reply.header("x-switchyard-cost-usd", event.costUsd);
+    }
+    return payload;
+  });
 
   app.get("/v1/models", { schema: docs.models }, async (request) => {
     const list = listModels(opts.config, opts.startedAt);

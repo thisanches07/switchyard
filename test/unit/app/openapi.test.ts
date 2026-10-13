@@ -30,8 +30,13 @@ describe("OpenAPI documentation", () => {
         "/admin/keys",
         "/admin/keys/{id}/revoke",
         "/admin/usage",
+        "/admin/keys/{id}/budget",
+        "/admin/teams/{id}/budget",
       ]),
     );
+    // Spec 007: budgets are documented on create and PATCH of keys and teams.
+    expect(JSON.stringify(doc.paths["/admin/keys"])).toContain("monthlyBudgetUsd");
+    expect(JSON.stringify(doc.paths["/admin/teams/{id}"])).toContain("softLimitPct");
     expect(JSON.stringify(doc.components)).toContain("bearer");
     // Spec 010: the key's PII mode is documented on create and PATCH.
     expect(JSON.stringify(doc.paths["/admin/keys"])).toContain("piiMode");

@@ -79,6 +79,12 @@ const anthropicLimitedKey = await createKeyViaAdmin(`http://127.0.0.1:${port}`, 
   rpm: 1,
 });
 
+// Spec 007: a key whose monthly budget is 0, so every request is rejected with budget_exceeded.
+const budgetKey = await createKeyViaAdmin(`http://127.0.0.1:${port}`, TEST_ADMIN_TOKEN, {
+  team: "budget-exhausted",
+  monthlyBudgetUsd: 0,
+});
+
 const root = resolve(import.meta.dirname, "..");
 const code = await new Promise<number>((done) => {
   const child = spawn(PYTHON, ["-m", "pytest", "test/contract/python", "-q", "-rs"], {
@@ -91,6 +97,7 @@ const code = await new Promise<number>((done) => {
       SWITCHYARD_ORIGIN: `http://127.0.0.1:${port}`,
       SWITCHYARD_API_KEY: key,
       SWITCHYARD_LIMITED_KEY: limitedKey,
+      SWITCHYARD_BUDGET_KEY: budgetKey,
       SWITCHYARD_ANTHROPIC_LIMITED_KEY: anthropicLimitedKey,
       OLLAMA_CHAT: has(OLLAMA_MODEL) ? "1" : "0",
       OLLAMA_EMBED: has(OLLAMA_EMBED_MODEL) ? "1" : "0",

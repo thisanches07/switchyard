@@ -8,6 +8,9 @@ const logLevel = z
 const databaseUrl = z
   .string({ error: "is required" })
   .regex(/^postgres(ql)?:\/\//, "must be a postgres:// URL");
+const redisUrl = z
+  .string({ error: "is required" })
+  .regex(/^rediss?:\/\//, "must be a redis:// URL");
 const shutdownTimeoutMs = z.coerce
   .number()
   .int()
@@ -39,7 +42,7 @@ const envSchema = z.object({
   LOG_LEVEL: logLevel,
   SWITCHYARD_CONFIG: z.string().min(1).default("config/switchyard.yaml"),
   DATABASE_URL: databaseUrl,
-  REDIS_URL: z.string({ error: "is required" }).regex(/^rediss?:\/\//, "must be a redis:// URL"),
+  REDIS_URL: redisUrl,
   /** Secret mixed into API key hashes (spec 004). Losing it invalidates every key. */
   KEY_PEPPER: z
     .string({ error: "is required" })
@@ -56,12 +59,14 @@ const envSchema = z.object({
   SHUTDOWN_TIMEOUT_MS: shutdownTimeoutMs,
 });
 
-/** The usage worker (spec 006) needs no Redis, key pepper or provider settings. */
+/** The usage worker (spec 006) needs no key pepper or provider settings; Redis since spec 007. */
 const workerEnvSchema = z.object({
   LOG_LEVEL: logLevel,
   SWITCHYARD_CONFIG: z.string().min(1).default("config/switchyard.yaml"),
   DATABASE_URL: databaseUrl,
   KAFKA_BROKERS: kafkaBrokers,
+  /** Budget reconciliation raises the Redis spend counters (spec 007). */
+  REDIS_URL: redisUrl,
   OTEL_SERVICE_NAME: z.string().min(1).default("switchyard-usage-worker"),
   SHUTDOWN_TIMEOUT_MS: shutdownTimeoutMs,
 });

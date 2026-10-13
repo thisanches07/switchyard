@@ -56,6 +56,8 @@ services:
       SWITCHYARD_CONFIG: /app/config/${SWITCHYARD_CONFIG_NAME:-switchyard.example.yaml}
       DATABASE_URL: postgres://switchyard:switchyard@postgres:5432/switchyard
       KAFKA_BROKERS: redpanda:9092
+      # Budget reconciliation raises the Redis spend counters (spec 007).
+      REDIS_URL: redis://redis:6379
       OTEL_SERVICE_NAME: switchyard-usage-worker
       OTEL_EXPORTER_OTLP_ENDPOINT: http://lgtm:4318
     volumes:

@@ -1,8 +1,11 @@
 import { readFileSync } from "node:fs";
 import { parseDocument } from "yaml";
+import type { z } from "zod";
 import { ConfigError, type ConfigIssue } from "./errors.js";
 import {
   type AppConfig,
+  type BudgetsConfig,
+  budgetsSchema,
   configSchema,
   type ProviderConfig,
   type UsageConfig,
@@ -45,16 +48,30 @@ export function loadConfig(path: string, env: Record<string, string | undefined>
  * needs provider settings or their environment variables.
  */
 export function loadUsageConfig(path: string): UsageConfig {
+  return parseSection(path, readYaml(path), "usage", usageSchema);
+}
+
+/**
+ * The sections the usage worker needs: `usage` (spec 006) and `budgets` (spec 007, for
+ * reconciliation). Never provider settings or their environment variables.
+ */
+export function loadWorkerConfig(path: string): { usage: UsageConfig; budgets: BudgetsConfig } {
   const root = readYaml(path);
-  const section =
-    typeof root === "object" && root !== null ? Reflect.get(root, "usage") : undefined;
-  const result = usageSchema.safeParse(section ?? {});
+  return {
+    usage: parseSection(path, root, "usage", usageSchema),
+    budgets: parseSection(path, root, "budgets", budgetsSchema),
+  };
+}
+
+function parseSection<T>(path: string, root: unknown, name: string, schema: z.ZodType<T>): T {
+  const section = typeof root === "object" && root !== null ? Reflect.get(root, name) : undefined;
+  const result = schema.safeParse(section ?? {});
   if (!result.success) {
     throw new ConfigError(
       path,
       toConfigIssues(result.error).map((issue) => ({
         ...issue,
-        path: issue.path ? `usage.${issue.path}` : "usage",
+        path: issue.path ? `${name}.${issue.path}` : name,
       })),
     );
   }
@@ -62,7 +79,7 @@ export function loadUsageConfig(path: string): UsageConfig {
 }
 
 /** Reads and parses a YAML file; syntax errors become a ConfigError with line and column. */
-function readYaml(path: string): unknown {
+export function readYaml(path: string): unknown {
   const doc = parseDocument(readSource(path));
   if (doc.errors.length > 0) {
     throw new ConfigError(

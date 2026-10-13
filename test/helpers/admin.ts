@@ -8,6 +8,8 @@ export async function createKeyViaAdmin(
     rpm?: number;
     tpm?: number;
     piiMode?: "off" | "mask" | "block";
+    /** Monthly budget of the key (spec 007). */
+    monthlyBudgetUsd?: number | string;
   } = {},
 ): Promise<string> {
   const headers = { authorization: `Bearer ${adminToken}`, "content-type": "application/json" };
@@ -30,6 +32,9 @@ export async function createKeyViaAdmin(
       ...(options.rpm ? { rpm: options.rpm } : {}),
       ...(options.tpm ? { tpm: options.tpm } : {}),
       ...(options.piiMode ? { piiMode: options.piiMode } : {}),
+      ...(options.monthlyBudgetUsd === undefined
+        ? {}
+        : { monthlyBudgetUsd: options.monthlyBudgetUsd }),
     }),
   });
   if (keyRes.status !== 201) throw new Error(`create key: ${keyRes.status} ${await keyRes.text()}`);
