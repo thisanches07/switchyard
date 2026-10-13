@@ -1,6 +1,6 @@
 # Spec 003: Streaming (SSE) and embeddings
 
-- **Status:** Draft (review, then change to Approved)
+- **Status:** Approved (2026-10-13)
 - **Owner:** @thisanches07
 - **Release:** v0.1
 - **Depends on:** 002
