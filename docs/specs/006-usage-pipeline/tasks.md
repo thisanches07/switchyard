@@ -5,7 +5,7 @@
 
 One commit per task, ending in `[spec-006]`. `pnpm verify` exit code checked after each; `pnpm test:int` (only the touched files) for tasks that touch infra.
 
-- [ ] **T1. Config: `usage` section and `KAFKA_BROKERS`**
+- [x] **T1. Config: `usage` section and `KAFKA_BROKERS`**
   - ACs: AC-4
   - Do: `usage` schema with defaults; `KAFKA_BROKERS` (optional, parsed list) in the gateway env; `loadWorkerEnv`; `loadUsageConfig` (reads only the `usage` section); example config.
   - Test: `schema.test.ts` › `usage` defaults and validation; `env.test.ts` › `KAFKA_BROKERS` parsing, worker env requires `DATABASE_URL` and `KAFKA_BROKERS`; `load.test.ts` › `loadUsageConfig` ignores provider env.

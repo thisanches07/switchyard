@@ -52,6 +52,13 @@ limits:                        # spec 005: per-minute limits enforced in Redis
   onRedisError: open           # open: keep serving if Redis is down; closed: return 503
   authFailuresPerMinutePerIp: 30
 
+usage:                         # spec 006: one usage event per admitted request, via Kafka
+  enabled: true                # needs KAFKA_BROKERS; false: events are built but never published
+  topic: usage.events.v1
+  dlqTopic: usage.events.dlq   # malformed events, set aside by the usage worker
+  bufferSize: 10000            # events held in memory while Kafka is slow or down, then dropped
+  flushIntervalMs: 200
+
 retry:
   maxAttempts: 3
   baseDelayMs: 200

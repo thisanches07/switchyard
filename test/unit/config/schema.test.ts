@@ -118,3 +118,33 @@ describe("limits config (spec 005)", () => {
     expect(result.error?.issues.map((i) => formatPath(i.path))).toContain(path);
   });
 });
+
+describe("usage config (spec 006)", () => {
+  const minimal = () => ({ providers: { mock: { type: "mock" } } });
+
+  it("defaults to publishing on the v1 topic", () => {
+    expect(configSchema.parse(minimal()).usage).toEqual({
+      enabled: true,
+      topic: "usage.events.v1",
+      dlqTopic: "usage.events.dlq",
+      bufferSize: 10_000,
+      flushIntervalMs: 200,
+    });
+  });
+
+  it("example config documents the usage section", () => {
+    expect(configSchema.parse(example()).usage.topic).toBe("usage.events.v1");
+  });
+
+  it.each([
+    [{ bufferSize: 0 }, "usage.bufferSize"],
+    [{ flushIntervalMs: 1.5 }, "usage.flushIntervalMs"],
+    [{ topic: "" }, "usage.topic"],
+    [{ enabled: "yes" }, "usage.enabled"],
+    [{ partitions: 3 }, "usage"],
+  ])("rejects invalid usage %j", (usage, path) => {
+    const result = configSchema.safeParse({ ...minimal(), usage });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues.map((i) => formatPath(i.path))).toContain(path);
+  });
+});
