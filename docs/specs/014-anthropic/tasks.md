@@ -10,7 +10,7 @@ One commit per task, ending in `[spec-014]`. `pnpm verify` green after each.
   - Do: `src/core/anthropic.ts` (extension and native-event symbols, accessors); `Usage.cachedInputTokens?`; `ChatResult.native?`; optional `headers` on HTTP responses (undici returns them); `GatewayError` `retryable` option and new factories; `defaultMaxTokens` on `anthropic` providers; `@anthropic-ai/sdk` devDependency.
   - Test: `test/unit/core/errors.test.ts` › new factories and retryable flag; `test/unit/config/schema.test.ts` › `defaultMaxTokens` default 4096; `test/integration/upstream-http.int.test.ts` › response headers returned.
 
-- [ ] **T2. Outbound request translation**
+- [x] **T2. Outbound request translation**
   - ACs: AC-2, AC-3
   - Test: `test/unit/anthropic/outbound-request.test.ts` › system concatenation, role merging, max tokens precedence, stop, user, images (data URI, URL), tools and tool_choice table, parallel_tool_calls, tool_calls → tool_use, invalid arguments 400, tool messages → tool_result turn, rejected and dropped parameter tables.
   - Files: `src/modules/anthropic/outbound-request.ts`
