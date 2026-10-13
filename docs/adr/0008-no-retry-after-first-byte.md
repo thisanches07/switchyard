@@ -13,7 +13,7 @@ With streaming, the gateway forwards chunks as soon as they arrive. If the upstr
 3. **Retry mid-stream and try to "continue" the answer**: unreliable and produces incoherent output.
 
 ## Decision
-Retries and fallback happen **only until the first chunk is written to the client**. After that, an upstream failure ends the stream with an OpenAI-style error event, the usage event is recorded with `status = upstream_error_midstream`, and the circuit breaker counts the failure.
+Retries and fallback happen **only until the first chunk is written to the client**. After that, an upstream failure ends the stream with an OpenAI-style error event, the usage event is recorded with `outcome = upstream_error_midstream`, and the circuit breaker counts the failure.
 
 ## Consequences
 - ✅ Clients never receive duplicated or spliced answers.
