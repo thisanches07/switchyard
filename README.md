@@ -37,10 +37,10 @@
 <br>
 
 > [!NOTE]
-> **Status: v0.1 in progress.** Chat completions (including **SSE streaming**), embeddings, model listing, provider adapters, error mapping, tracing and metrics are **working and tested today**, contract-tested with the official OpenAI Node and Python SDKs. API keys, rate limits, budgets, fallback and caching are specified and on the [roadmap](#%EF%B8%8F-roadmap).
+> **Status: v0.1 in progress.** Chat completions (including **SSE streaming**), embeddings, model listing, provider adapters, error mapping, tracing and metrics are **working and tested today**, plus **virtual API keys with teams and an admin API**, contract-tested with the official OpenAI Node and Python SDKs. Rate limits, budgets, fallback and caching are specified and on the [roadmap](#%EF%B8%8F-roadmap).
 
 > [!WARNING]
-> The `/v1` API has **no authentication yet** (arrives with [spec 004](docs/specs/README.md)). Docker Compose publishes every port on `127.0.0.1` only. Do not expose the gateway to the internet.
+> Docker Compose ships `dev-only` defaults for `ADMIN_TOKEN` and `KEY_PEPPER` so it works out of the box, and publishes every port on `127.0.0.1` only. Set real secrets in `.env` before exposing the gateway; it logs a warning while dev-only values are in use.
 
 ## ✨ Why Switchyard
 
@@ -69,7 +69,8 @@ Teams shipping LLM features hit the same walls:
 | ⏱️ | Connect, time-to-first-byte and total timeouts on every upstream call | ✅ |
 | 🔭 | `switchyard.upstream` spans with GenAI attributes, request and latency metrics, `x-switchyard-*` headers | ✅ |
 | ❤️ | `/healthz`, `/readyz` with time-bounded dependency checks, graceful shutdown | ✅ |
-| 🔑 | Virtual API keys and teams | 🔜 004 |
+| 🔑 | **Virtual API keys** (`sk-sy-…`, stored only as peppered hashes), teams, per-key model allow-lists, revocation | ✅ |
+| 🛠️ | Admin API for teams and keys; OpenAPI document and interactive UI at `/docs` | ✅ |
 | 🚥 | Rate limits (RPM/TPM) with Redis Lua | 🔜 005 |
 | 📨 | Usage events through Kafka (Redpanda), idempotent worker, DLQ | 🔜 006 |
 | 💰 | Monthly budgets with soft and hard limits | 🔜 007 |
@@ -89,20 +90,31 @@ cd switchyard
 docker compose up -d --wait
 ```
 
-**2. Send a request** to the built-in mock provider. No model or API key needed.
+**2. Create an API key** through the admin API (the snippet uses [`jq`](https://jqlang.org); the interactive UI at <http://localhost:8080/docs> works too). Compose ships a `dev-only` admin token for local use; set `ADMIN_TOKEN` and `KEY_PEPPER` in `.env` before exposing anything.
+
+```bash
+ADMIN="Authorization: Bearer dev-only-admin-token-change-me"
+TEAM=$(curl -s localhost:8080/admin/teams -H "$ADMIN" -H "content-type: application/json" \
+  -d '{"name":"my-team"}' | jq -r .id)
+export SWITCHYARD_KEY=$(curl -s localhost:8080/admin/keys -H "$ADMIN" -H "content-type: application/json" \
+  -d "{\"teamId\":\"$TEAM\",\"name\":\"my-app\"}" | jq -r .key)
+echo $SWITCHYARD_KEY   # sk-sy-… shown only once; only its hash is stored
+```
+
+**3. Send a request** to the built-in mock provider (no model needed):
 
 ```bash
 curl -s localhost:8080/v1/chat/completions \
-  -H "content-type: application/json" \
+  -H "Authorization: Bearer $SWITCHYARD_KEY" -H "content-type: application/json" \
   -d '{"model":"mock/demo","messages":[{"role":"user","content":"Hello!"}]}'
 ```
 
-**3. Use a real model.** With Ollama running on your machine, the `local` alias routes to `ollama/llama3.2`:
+**4. Use a real model.** With Ollama running on your machine, the `local` alias routes to `ollama/llama3.2`:
 
 ```bash
 ollama pull llama3.2
 curl -s localhost:8080/v1/chat/completions \
-  -H "content-type: application/json" \
+  -H "Authorization: Bearer $SWITCHYARD_KEY" -H "content-type: application/json" \
   -d '{"model":"local","messages":[{"role":"user","content":"What is a circuit breaker? One sentence."}]}'
 ```
 
@@ -110,8 +122,16 @@ curl -s localhost:8080/v1/chat/completions \
 <summary><b>Windows PowerShell</b> (5.1 strips quotes from <code>curl.exe</code> arguments; use this instead)</summary>
 
 ```powershell
+$admin = @{ Authorization = "Bearer dev-only-admin-token-change-me" }
+$team = Invoke-RestMethod http://localhost:8080/admin/teams -Method Post -Headers $admin `
+  -ContentType "application/json" -Body '{"name":"my-team"}'
+$created = Invoke-RestMethod http://localhost:8080/admin/keys -Method Post -Headers $admin `
+  -ContentType "application/json" -Body (@{ teamId = $team.id; name = "my-app" } | ConvertTo-Json)
+$env:SWITCHYARD_KEY = $created.key
+
 $body = @{ model = "local"; messages = @(@{ role = "user"; content = "What is a circuit breaker? One sentence." }) } | ConvertTo-Json -Depth 5
-$r = Invoke-RestMethod -Uri http://localhost:8080/v1/chat/completions -Method Post `
+$r = Invoke-RestMethod http://localhost:8080/v1/chat/completions -Method Post `
+  -Headers @{ Authorization = "Bearer $env:SWITCHYARD_KEY" } `
   -ContentType "application/json; charset=utf-8" -Body ([Text.Encoding]::UTF8.GetBytes($body))
 $r.choices[0].message.content
 ```
@@ -119,7 +139,7 @@ $r.choices[0].message.content
 
 ### Use it from your code
 
-Only the `baseURL` changes. API keys are not checked until [spec 004](docs/specs/README.md), so any value works for now.
+Only the `baseURL` changes, and your Switchyard key goes where the OpenAI key used to.
 
 <table>
 <tr><th>TypeScript / Node.js</th><th>Python</th></tr>
@@ -131,7 +151,7 @@ import OpenAI from "openai";
 
 const client = new OpenAI({
   baseURL: "http://localhost:8080/v1",
-  apiKey: "unused-until-spec-004",
+  apiKey: process.env.SWITCHYARD_KEY, // sk-sy-…
 });
 
 const res = await client.chat.completions.create({
@@ -145,11 +165,12 @@ console.log(res.choices[0].message.content);
 <td>
 
 ```python
+import os
 from openai import OpenAI
 
 client = OpenAI(
     base_url="http://localhost:8080/v1",
-    api_key="unused-until-spec-004",
+    api_key=os.environ["SWITCHYARD_KEY"],  # sk-sy-…
 )
 
 res = client.chat.completions.create(
@@ -197,14 +218,15 @@ flowchart LR
 
   subgraph GW["Switchyard (Fastify)"]
     direction LR
-    V["Validate<br/>(Zod)"] --> RES["Resolve model<br/>alias → provider/model"]
+    AUTH["API key auth<br/>teams · allow-lists"] --> V["Validate<br/>(Zod)"]
+    V --> RES["Resolve model<br/>alias → provider/model"]
     RES --> AD["Provider adapter<br/>timeouts · error mapping"]
-    AUTH["Auth · rate limit · budget"]:::planned
+    LIM["Rate limit · budget"]:::planned
     CACHE["Cache · PII"]:::planned
     FB["Fallback · circuit breaker"]:::planned
   end
 
-  SDK -->|"POST /v1/chat/completions"| V
+  SDK -->|"POST /v1/chat/completions"| AUTH
   AD -->|undici| OL["Ollama"]
   AD -->|undici| OAI["Groq · Gemini · OpenRouter · OpenAI"]
   AD --> MOCK["Mock provider"]
@@ -233,7 +255,11 @@ sequenceDiagram
   participant G as Switchyard
   participant P as Provider (e.g. Ollama)
 
-  C->>G: POST /v1/chat/completions {model: "local", messages}
+  C->>G: POST /v1/chat/completions (Bearer sk-sy-…)
+  G->>G: hash key → team · key · allowed models (cached 30 s)
+  alt missing / revoked key · model not allowed
+    G-->>C: 401 invalid_api_key · 403 model_not_allowed
+  end
   G->>G: validate body · resolve "local" → ollama/llama3.2
   alt unknown model
     G-->>C: 404 model_not_found (no provider called)
@@ -271,6 +297,8 @@ Every error, from validation to provider failures, comes back in the OpenAI shap
 | Situation | Status | `code` |
 |---|:---:|---|
 | Invalid JSON or body | 400 | `invalid_json` / `invalid_request` |
+| Missing, unknown, revoked or expired API key | 401 | `invalid_api_key` |
+| Model outside the key's allow-list | 403 | `model_not_allowed` |
 | Unknown model | 404 | `model_not_found` |
 | Body too large / not JSON | 413 / 415 | `request_too_large` / `unsupported_media_type` |
 | Provider 4xx (e.g. 429) | same | passed through |
@@ -307,6 +335,9 @@ aliases:                             # model ids are examples; check each provid
 | `PORT` / `HOST` | `8080` / `0.0.0.0` | HTTP listener |
 | `SWITCHYARD_CONFIG` | `config/switchyard.yaml` | Path to the YAML config |
 | `DATABASE_URL` | required | Postgres (`postgres://…`) |
+| `KEY_PEPPER` | required, ≥ 32 chars | Secret mixed into API key hashes. **Back it up**: losing it invalidates every key |
+| `ADMIN_TOKEN` | unset | Enables the admin API (≥ 16 chars) |
+| `MIGRATE_ON_BOOT` | `false` | Apply database migrations at startup (Compose sets `true`; otherwise run `pnpm db:migrate`) |
 | `REDIS_URL` | required | Redis (`redis://…`) |
 | `LOG_LEVEL` | `info` | pino log level |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | unset | OTLP collector, e.g. `http://localhost:4318` |
@@ -329,25 +360,42 @@ See [`.env.example`](.env.example).
 | Redpanda | `19092` | Kafka API |
 </details>
 
+## 🔑 API keys and the admin API
+
+Every `/v1` request needs a Switchyard key (`Authorization: Bearer sk-sy-…`), the same way the OpenAI API does. Keys belong to **teams**, can be restricted to certain models, and can be revoked at any time. Only a peppered SHA-256 hash of each key is stored, and keys never appear in logs.
+
+| Method | Path | What it does |
+|---|---|---|
+| `POST` | `/admin/teams` | Create a team `{ name }` |
+| `GET` | `/admin/teams` | List teams |
+| `POST` | `/admin/keys` | Create a key `{ teamId, name, allowedModels?, expiresAt? }`; the plaintext key is returned **only here** |
+| `GET` | `/admin/keys?teamId=` | List keys (prefix, status, limits; never the key or its hash) |
+| `POST` | `/admin/keys/:id/revoke` | Revoke a key; rejected immediately on this instance, everywhere within 30 s |
+
+`allowedModels` accepts aliases (`fast`), exact refs (`ollama/llama3.2`) and provider wildcards (`ollama/*`); `/v1/models` then lists only what the key may use. Admin routes take `Authorization: Bearer <ADMIN_TOKEN>` and do not exist at all when `ADMIN_TOKEN` is unset.
+
+📖 The full API, including request bodies, is documented in OpenAPI at **<http://localhost:8080/docs>**.
+
 ## 🔭 Observability
 
 Every response tells you what happened:
 
 ```http
 HTTP/1.1 200 OK
-x-switchyard-request-id: req_643a3539-4f0b-4c09-8bd0-a894bfd6c314
+x-switchyard-request-id: req_5b9e1fd5-2c46-4adf-b99a-dbf336c523aa
 x-switchyard-provider: ollama
 x-switchyard-model: llama3.2
-x-switchyard-upstream-ms: 1436
+x-switchyard-upstream-ms: 986
 ```
 
 | Signal | Name | Details |
 |---|---|---|
 | Span | `switchyard.upstream` | `gen_ai.system`, `gen_ai.request.model`, `gen_ai.response.model`, `gen_ai.usage.input_tokens` / `output_tokens` |
-| Counter | `switchyard_requests_total` | by `provider`, `model`, `status` |
+| Counter | `switchyard_requests_total` | by `provider`, `model`, `status`, `team` |
 | Histogram | `switchyard_upstream_duration_seconds` | by `provider`, `model`, `outcome` |
 | Histogram | `switchyard_ttfb_seconds` | time to first streamed token, by `provider`, `model` |
-| Logs | JSON (pino) | every line carries `trace_id` / `span_id`; secrets redacted |
+| Counter | `switchyard_auth_failures_total` | rejected `/v1` requests by `reason` (`missing`, `malformed`, `unknown`, `revoked`, `expired`) |
+| Logs | JSON (pino) | every line carries `trace_id` / `span_id`, plus `teamId` / `keyId` once authenticated; secrets redacted |
 
 > [!IMPORTANT]
 > Prompt and response **content is never written to logs or spans** ([ADR-0010](docs/adr/0010-no-prompt-persistence.md)). Only metadata such as tokens, latency and status is recorded.
@@ -376,6 +424,7 @@ pnpm dev             # gateway in watch mode
 | `pnpm verify` | Biome lint · strict typecheck · unit tests with **≥ 80% line coverage** on core and modules · build |
 | `pnpm test:int` | Real Postgres and Redis (Testcontainers), real HTTP timeouts and connection failures |
 | `pnpm test:contract` | The **official OpenAI Node SDK** against the gateway: chat, streaming, embeddings (mock always; Ollama when running) |
+| `pnpm db:migrate` | Applies database migrations to `DATABASE_URL` (`pnpm db:generate` creates new ones from the Drizzle schema) |
 | `pnpm test:contract:py` | The same with the **official OpenAI Python SDK** (needs `pip install -r test/contract/python/requirements.txt`) |
 | `pnpm test:smoke` | Boots the Compose stack: health, readiness, a chat request, bad config, memory budget, graceful SIGTERM |
 
@@ -430,7 +479,7 @@ Each spec ends with a verification table, for example [spec 002](docs/specs/002-
 - [x] [001](docs/specs/001-bootstrap/spec.md) Bootstrap: validated config, health/readiness, traces + correlated logs, graceful shutdown, Compose, CI
 - [x] [002](docs/specs/002-chat-proxy/spec.md) Chat proxy: `/v1/chat/completions`, `/v1/models`, adapters, error mapping, upstream telemetry, SDK contract tests
 - [x] [003](docs/specs/003-streaming/spec.md) Streaming (SSE) and `/v1/embeddings`, Node + Python SDK contract tests
-- [ ] 004 Virtual keys, teams and admin API
+- [x] [004](docs/specs/004-keys-and-teams/spec.md) Virtual API keys, teams, admin API, Postgres migrations, OpenAPI docs
 - [ ] 005 Rate limiting (RPM / TPM)
 - [ ] 006 Usage events pipeline (Kafka, idempotent worker, DLQ)
 - [ ] 007 Budgets and cost accounting

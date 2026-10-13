@@ -11,6 +11,7 @@ const baseEnv = {
   SWITCHYARD_CONFIG: resolve(root, "config/switchyard.example.yaml"),
   OLLAMA_BASE_URL: "http://127.0.0.1:11434/v1",
   OTEL_SDK_DISABLED: "true",
+  KEY_PEPPER: "test-pepper-0123456789abcdefghijklmnop",
   HOST: "127.0.0.1",
   PORT: "0",
 };
@@ -81,5 +82,36 @@ describe("server boot", () => {
     expect(health.status).toBe(200);
     const ready = await fetch(`${url}/readyz`);
     expect(ready.status).toBe(503);
+  }, 60_000);
+});
+
+describe("server boot warnings (spec 004)", () => {
+  async function bootLogs(env: Record<string, string | undefined>) {
+    const run = start({ ...baseEnv, ...env });
+    await new Promise<void>((resolveReady, reject) => {
+      const timer = setInterval(() => {
+        if (run.output().stdout.includes("Server listening")) {
+          clearInterval(timer);
+          resolveReady();
+        }
+      }, 50);
+      run.exited.then((code) => {
+        clearInterval(timer);
+        reject(new Error(`server exited with ${code}: ${run.output().stderr}`));
+      });
+    });
+    return run.output().stdout;
+  }
+
+  it("warns when dev-only secrets are in use and when the admin API is disabled", async () => {
+    const stdout = await bootLogs({ KEY_PEPPER: "dev-only-pepper-change-me-0123456789abcdef" });
+    expect(stdout).toContain("dev-only");
+    expect(stdout).toContain("admin API disabled");
+  }, 60_000);
+
+  it("does not warn with real secrets and an admin token", async () => {
+    const stdout = await bootLogs({ ADMIN_TOKEN: "a-real-admin-token-0123456789" });
+    expect(stdout).not.toContain("dev-only");
+    expect(stdout).not.toContain("admin API disabled");
   }, 60_000);
 });

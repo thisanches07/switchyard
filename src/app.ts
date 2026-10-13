@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { FastifyOtelInstrumentation } from "@fastify/otel";
+import swagger from "@fastify/swagger";
+import swaggerUi from "@fastify/swagger-ui";
 import Fastify, {
   type FastifyBaseLogger,
   type FastifyError,
@@ -7,6 +9,7 @@ import Fastify, {
   type FastifyRequest,
 } from "fastify";
 import type { LoadedConfig } from "./config/load.js";
+import type { ApiKeyRecord, KeyStore } from "./core/auth.js";
 import {
   GatewayError,
   internalError,
@@ -18,6 +21,10 @@ import {
 } from "./core/errors.js";
 import type { DependencyCheck } from "./core/health.js";
 import type { ChatProvider } from "./core/provider.js";
+import { adminRoutes } from "./modules/admin/routes.js";
+import { AuthCache } from "./modules/auth/cache.js";
+import { recordAuthFailure } from "./modules/auth/telemetry.js";
+import { openApiInfo } from "./modules/docs.js";
 import { healthRoutes } from "./modules/health/routes.js";
 import { proxyRoutes } from "./modules/proxy/routes.js";
 
@@ -26,6 +33,11 @@ export interface AppDeps {
   checks: DependencyCheck[];
   config: LoadedConfig;
   providers: ReadonlyMap<string, ChatProvider>;
+  keyStore: KeyStore;
+  /** Secret mixed into key hashes (KEY_PEPPER). */
+  keyPepper: string;
+  /** Enables the admin API when set (ADMIN_TOKEN). */
+  adminToken?: string | undefined;
   bodyLimitBytes?: number;
   readinessTimeoutMs?: number;
 }
@@ -39,6 +51,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
   // JSON-only API: anything else gets 415 instead of reaching a route as a string.
   app.removeContentTypeParser("text/plain");
+
+  // ADR-0014: route schemas only document the API. Zod validates; bodies are sent untouched.
+  app.setValidatorCompiler(() => () => true);
+  app.setSerializerCompiler(() => (data) => JSON.stringify(data));
+  await app.register(swagger, openApiInfo);
+  await app.register(swaggerUi, { routePrefix: "/docs" });
 
   // Request spans (ADR-0011). Uses the global tracer provider, so tests can swap it.
   await app.register(new FastifyOtelInstrumentation().plugin());
@@ -71,11 +89,30 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     checks: deps.checks,
     readinessTimeoutMs: deps.readinessTimeoutMs ?? 1_000,
   });
+  // Validated keys, shared by the auth hook and the admin API (revocations invalidate it).
+  const authCache = new AuthCache<ApiKeyRecord>({ ttlMs: 30_000, maxEntries: 10_000 });
+
   await app.register(proxyRoutes, {
     config: deps.config,
     providers: deps.providers,
+    auth: {
+      store: deps.keyStore,
+      pepper: deps.keyPepper,
+      cache: authCache,
+      onFailure: recordAuthFailure,
+    },
     startedAt: Math.floor(Date.now() / 1000),
   });
+
+  // Not registered at all without ADMIN_TOKEN: the routes 404 (spec 004, AC-8).
+  if (deps.adminToken) {
+    await app.register(adminRoutes, {
+      store: deps.keyStore,
+      pepper: deps.keyPepper,
+      adminToken: deps.adminToken,
+      cache: authCache,
+    });
+  }
   return app;
 }
 

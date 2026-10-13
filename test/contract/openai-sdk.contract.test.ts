@@ -8,6 +8,8 @@ import { configSchema } from "../../src/config/schema.js";
 import { createUndiciClient } from "../../src/infra/http/undici-client.js";
 import { createLogger } from "../../src/infra/logger.js";
 import { createProviderRegistry } from "../../src/modules/providers/registry.js";
+import { createKeyViaAdmin } from "../helpers/admin.js";
+import { MemoryKeyStore, TEST_ADMIN_TOKEN, TEST_PEPPER } from "../helpers/memory-key-store.js";
 
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL ?? "http://localhost:11434/v1";
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? "llama3.2";
@@ -16,7 +18,7 @@ const OLLAMA_EMBED_MODEL = process.env.OLLAMA_EMBED_MODEL ?? "nomic-embed-text";
 /** Model ids served by Ollama, or undefined when Ollama is not reachable. */
 async function ollamaModels(): Promise<string[] | undefined> {
   try {
-    const res = await fetch(`${OLLAMA_BASE_URL}/models`, { signal: AbortSignal.timeout(1_000) });
+    const res = await fetch(`${OLLAMA_BASE_URL}/models`, { signal: AbortSignal.timeout(5_000) });
     if (!res.ok) return undefined;
     const body = (await res.json()) as { data?: { id: string }[] };
     return (body.data ?? []).map((m) => m.id);
@@ -47,6 +49,8 @@ describe("official OpenAI Node SDK against Switchyard", () => {
   let app: FastifyInstance;
   let client: OpenAI;
   const http = createUndiciClient(config.server.timeouts);
+  const store = new MemoryKeyStore();
+  let baseUrl: string;
 
   beforeAll(async () => {
     app = await buildApp({
@@ -54,12 +58,18 @@ describe("official OpenAI Node SDK against Switchyard", () => {
       checks: [],
       config,
       providers: createProviderRegistry(config, {}, { http }),
+      keyStore: store,
+      keyPepper: TEST_PEPPER,
+      adminToken: TEST_ADMIN_TOKEN,
     });
     await app.listen({ port: 0, host: "127.0.0.1" });
     const { port } = app.server.address() as AddressInfo;
+    baseUrl = `http://127.0.0.1:${port}`;
+    // AC-11: the SDK authenticates with a key issued through the admin API.
+    const key = await createKeyViaAdmin(baseUrl, TEST_ADMIN_TOKEN);
     client = new OpenAI({
       baseURL: `http://127.0.0.1:${port}/v1`,
-      apiKey: "not-checked-until-spec-004",
+      apiKey: key,
       maxRetries: 0,
     });
   });
@@ -78,6 +88,16 @@ describe("official OpenAI Node SDK against Switchyard", () => {
     expect(data.usage?.completion_tokens).toBe(6);
     expect(response.headers.get("x-switchyard-provider")).toBe("mock");
     expect(response.headers.get("x-switchyard-request-id")).toMatch(/^req_/);
+  });
+
+  it("surfaces an invalid key as AuthenticationError", async () => {
+    const anonymous = new OpenAI({
+      baseURL: `${baseUrl}/v1`,
+      apiKey: "sk-sy-wrong",
+      maxRetries: 0,
+    });
+    const error = await anonymous.models.list().catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(OpenAI.AuthenticationError);
   });
 
   it("lists models", async () => {

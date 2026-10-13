@@ -11,6 +11,8 @@ import { configSchema } from "../src/config/schema.js";
 import { createUndiciClient } from "../src/infra/http/undici-client.js";
 import { createLogger } from "../src/infra/logger.js";
 import { createProviderRegistry } from "../src/modules/providers/registry.js";
+import { createKeyViaAdmin } from "../test/helpers/admin.js";
+import { MemoryKeyStore, TEST_ADMIN_TOKEN, TEST_PEPPER } from "../test/helpers/memory-key-store.js";
 
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL ?? "http://localhost:11434/v1";
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? "llama3.2";
@@ -19,7 +21,7 @@ const PYTHON = process.env.SWITCHYARD_PYTHON ?? "python";
 
 async function ollamaModels(): Promise<string[]> {
   try {
-    const res = await fetch(`${OLLAMA_BASE_URL}/models`, { signal: AbortSignal.timeout(1_000) });
+    const res = await fetch(`${OLLAMA_BASE_URL}/models`, { signal: AbortSignal.timeout(5_000) });
     if (!res.ok) return [];
     const body = (await res.json()) as { data?: { id: string }[] };
     return (body.data ?? []).map((m) => m.id);
@@ -45,14 +47,20 @@ const config = configSchema.parse({
 }) as LoadedConfig;
 
 const http = createUndiciClient(config.server.timeouts);
+const store = new MemoryKeyStore();
 const app = await buildApp({
   logger: createLogger({ level: "silent" }),
   checks: [],
   config,
   providers: createProviderRegistry(config, {}, { http }),
+  keyStore: store,
+  keyPepper: TEST_PEPPER,
+  adminToken: TEST_ADMIN_TOKEN,
 });
 await app.listen({ port: 0, host: "127.0.0.1" });
 const { port } = app.server.address() as AddressInfo;
+// Spec 004, AC-11: the SDK authenticates with a key issued through the admin API.
+const key = await createKeyViaAdmin(`http://127.0.0.1:${port}`, TEST_ADMIN_TOKEN);
 
 const root = resolve(import.meta.dirname, "..");
 const code = await new Promise<number>((done) => {
@@ -62,6 +70,7 @@ const code = await new Promise<number>((done) => {
     env: {
       ...process.env,
       SWITCHYARD_BASE_URL: `http://127.0.0.1:${port}/v1`,
+      SWITCHYARD_API_KEY: key,
       OLLAMA_CHAT: has(OLLAMA_MODEL) ? "1" : "0",
       OLLAMA_EMBED: has(OLLAMA_EMBED_MODEL) ? "1" : "0",
     },

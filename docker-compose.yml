@@ -16,6 +16,10 @@ services:
       SWITCHYARD_CONFIG: /app/config/${SWITCHYARD_CONFIG_NAME:-switchyard.example.yaml}
       DATABASE_URL: postgres://switchyard:switchyard@postgres:5432/switchyard
       REDIS_URL: redis://redis:6379
+      # dev-only defaults so "docker compose up" works out of the box; override in .env
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-only-admin-token-change-me}
+      KEY_PEPPER: ${KEY_PEPPER:-dev-only-pepper-change-me-0123456789abcdef}
+      MIGRATE_ON_BOOT: "true"
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL_DOCKER:-http://host.docker.internal:11434/v1}
       OTEL_SERVICE_NAME: switchyard-gateway
       OTEL_EXPORTER_OTLP_ENDPOINT: http://lgtm:4318

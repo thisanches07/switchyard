@@ -9,6 +9,7 @@ import { createPostgresPool, postgresCheck } from "../../src/infra/db/postgres.j
 import { createLogger } from "../../src/infra/logger.js";
 import { createRedisClient, redisCheck } from "../../src/infra/redis/client.js";
 import { testConfig } from "../helpers/config.js";
+import { MemoryKeyStore, TEST_PEPPER } from "../helpers/memory-key-store.js";
 
 describe("/readyz with real dependencies", () => {
   let postgres: StartedPostgreSqlContainer;
@@ -29,6 +30,8 @@ describe("/readyz with real dependencies", () => {
       checks: [postgresCheck(pool), redisCheck(redis)],
       config: testConfig(),
       providers: new Map(),
+      keyStore: new MemoryKeyStore(),
+      keyPepper: TEST_PEPPER,
       readinessTimeoutMs: 1_000,
     });
   });

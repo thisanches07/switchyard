@@ -10,6 +10,7 @@ import {
   trace,
 } from "@opentelemetry/api";
 import type { FastifyBaseLogger } from "fastify";
+import type { Principal } from "../../core/auth.js";
 import { GatewayError } from "../../core/errors.js";
 
 interface Instruments {
@@ -49,6 +50,8 @@ export interface UpstreamCallInfo {
   logger: FastifyBaseLogger;
   operation?: "chat" | "embeddings";
   stream?: boolean;
+  /** The authenticated caller (spec 004); absent only in low-level tests. */
+  principal?: Principal | undefined;
 }
 
 export interface UpstreamUsage {
@@ -90,8 +93,14 @@ export function startUpstreamSpan(info: UpstreamCallInfo): UpstreamSpan {
       "gen_ai.request.model": model,
       "switchyard.provider.type": provider.type,
       "switchyard.stream": info.stream ?? false,
+      ...(info.principal && {
+        "switchyard.team_id": info.principal.teamId,
+        "switchyard.key_id": info.principal.keyId,
+      }),
     },
   });
+  // Team only on the request counter: durations stay low-cardinality.
+  const team = info.principal?.teamId ?? "none";
   const spanContext = trace.setSpan(context.active(), span);
   const started = performance.now();
   const labels = { provider: provider.name, model };
@@ -100,7 +109,7 @@ export function startUpstreamSpan(info: UpstreamCallInfo): UpstreamSpan {
   const finish = (status: string, outcome: string) => {
     ended = true;
     const { requests, upstreamDuration } = getInstruments();
-    requests.add(1, { ...labels, status });
+    requests.add(1, { ...labels, status, team });
     upstreamDuration.record((performance.now() - started) / 1000, { ...labels, outcome });
     span.end();
   };

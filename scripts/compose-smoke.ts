@@ -1,5 +1,5 @@
 // Smoke test for the Docker Compose stack (spec 001: AC-1..AC-6, AC-9; specs 002-003: chat,
-// streaming and embeddings via the mock provider).
+// streaming and embeddings via the mock provider; spec 004: API keys through the admin API).
 // Cross-platform: `node scripts/compose-smoke.ts [--down]` locally (Windows or Linux) and in CI.
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
@@ -7,6 +7,10 @@ import { totalMemoryBytes } from "./lib/stack-memory.ts";
 
 const GATEWAY = process.env.SMOKE_GATEWAY_URL ?? "http://localhost:8080";
 const MAX_STACK_GIB = Number(process.env.SMOKE_MAX_STACK_GIB ?? "4");
+// Compose ships this dev-only default (spec 004); override with ADMIN_TOKEN like the stack does.
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN ?? "dev-only-admin-token-change-me";
+let apiKey = "";
+const authed = () => ({ "content-type": "application/json", authorization: `Bearer ${apiKey}` });
 const root = resolve(import.meta.dirname, "..");
 const down = process.argv.includes("--down");
 
@@ -64,10 +68,33 @@ try {
     if (checks.postgres !== "ok" || checks.redis !== "ok") throw new Error(body);
   });
 
+  await step("a /v1 request without an API key gets 401", async () => {
+    const res = await fetch(`${GATEWAY}/v1/models`);
+    if (res.status !== 401) throw new Error(`expected 401, got ${res.status}`);
+  });
+
+  await step("the admin API creates a team and an API key", async () => {
+    const admin = { authorization: `Bearer ${ADMIN_TOKEN}`, "content-type": "application/json" };
+    const team = await fetch(`${GATEWAY}/admin/teams`, {
+      method: "POST",
+      headers: admin,
+      body: JSON.stringify({ name: `smoke-${Date.now()}` }),
+    });
+    if (team.status !== 201) throw new Error(`team: ${team.status} ${await team.text()}`);
+    const { id } = (await team.json()) as { id: string };
+    const key = await fetch(`${GATEWAY}/admin/keys`, {
+      method: "POST",
+      headers: admin,
+      body: JSON.stringify({ teamId: id, name: "smoke" }),
+    });
+    if (key.status !== 201) throw new Error(`key: ${key.status} ${await key.text()}`);
+    apiKey = ((await key.json()) as { key: string }).key;
+  });
+
   await step("POST /v1/chat/completions through the mock provider returns 200", async () => {
     const res = await fetch(`${GATEWAY}/v1/chat/completions`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: authed(),
       body: JSON.stringify({ model: "mock/smoke", messages: [{ role: "user", content: "hi" }] }),
     });
     const body = await res.text();
@@ -79,7 +106,7 @@ try {
   await step("streamed chat completion arrives as SSE ending with [DONE]", async () => {
     const res = await fetch(`${GATEWAY}/v1/chat/completions`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: authed(),
       body: JSON.stringify({
         model: "mock/smoke",
         stream: true,
@@ -97,7 +124,7 @@ try {
   await step("POST /v1/embeddings through the mock provider returns 768-dim vectors", async () => {
     const res = await fetch(`${GATEWAY}/v1/embeddings`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: authed(),
       body: JSON.stringify({ model: "mock/smoke", input: "hi", encoding_format: "float" }),
     });
     const body = await res.text();

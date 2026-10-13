@@ -25,6 +25,7 @@ WORKDIR /app
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY package.json ./
+COPY drizzle ./drizzle
 COPY config ./config
 USER node
 EXPOSE 8080

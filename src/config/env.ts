@@ -12,6 +12,16 @@ const envSchema = z.object({
     .string({ error: "is required" })
     .regex(/^postgres(ql)?:\/\//, "must be a postgres:// URL"),
   REDIS_URL: z.string({ error: "is required" }).regex(/^rediss?:\/\//, "must be a redis:// URL"),
+  /** Secret mixed into API key hashes (spec 004). Losing it invalidates every key. */
+  KEY_PEPPER: z
+    .string({ error: "is required" })
+    .min(32, "must be at least 32 characters (generate: openssl rand -hex 32)"),
+  /** Bearer token for /admin/*; the admin API is disabled when unset. */
+  ADMIN_TOKEN: z.string().min(16, "must be at least 16 characters").optional(),
+  MIGRATE_ON_BOOT: z
+    .enum(["true", "false"], { error: 'must be "true" or "false"' })
+    .default("false")
+    .transform((value) => value === "true"),
   OTEL_SERVICE_NAME: z.string().min(1).default("switchyard-gateway"),
   SHUTDOWN_TIMEOUT_MS: z.coerce
     .number()
