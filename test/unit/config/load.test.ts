@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { ConfigError } from "../../../src/config/errors.js";
-import { loadConfig, loadUsageConfig } from "../../../src/config/load.js";
+import { loadConfig, loadUsageConfig, loadWorkerConfig } from "../../../src/config/load.js";
 
 const root = resolve(import.meta.dirname, "../../..");
 const example = resolve(root, "config/switchyard.example.yaml");
@@ -63,6 +63,22 @@ describe("loadConfig", () => {
   it("reports missing file", () => {
     const error = configError(() => loadConfig(fixture("does-not-exist.yaml"), env));
     expect(error.issues[0]?.message).toMatch(/file not found/);
+  });
+});
+
+describe("loadWorkerConfig (spec 007)", () => {
+  it("reads the usage and budgets sections only", () => {
+    expect(loadWorkerConfig(example)).toEqual({
+      usage: expect.objectContaining({ topic: "usage.events.v1" }),
+      budgets: { onRedisError: "closed", reconcileIntervalSeconds: 60 },
+    });
+  });
+
+  it("reports an invalid budgets section with its path", () => {
+    const error = configError(() => loadWorkerConfig(fixture("invalid-budgets.yaml")));
+    expect(error.issues).toContainEqual(
+      expect.objectContaining({ path: "budgets.reconcileIntervalSeconds" }),
+    );
   });
 });
 

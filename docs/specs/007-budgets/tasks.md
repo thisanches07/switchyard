@@ -50,7 +50,7 @@ One commit per task, ending in `[spec-007]`. `pnpm verify` green after each (exi
   - Do: `BudgetStore` port; `src/infra/db/budget-store.ts`; `src/modules/budgets/status.ts`; admin routes; OpenAPI.
   - Test: `test/unit/admin/admin-budget-status.test.ts` › key and team shapes, no budget → nulls, soft/hard flags, Redis down → `source: "postgres"`, 404, 503 without store, admin token; `openapi.test.ts` › routes listed; `test/integration/budget-store.int.test.ts` › period sums by key and team, unknown counts, budgets listed.
 
-- [ ] **T10. Worker reconciliation**
+- [x] **T10. Worker reconciliation**
   - ACs: AC-10, AC-13
   - Do: `src/modules/budgets/reconcile.ts`; worker env `REDIS_URL`, `loadWorkerConfig`; `src/worker.ts` starts/stops it.
   - Test: `test/unit/budgets/reconcile.test.ts` › raises lower counters, never lowers, current period only, gauge replaced, failures logged and retried, stop; `env.test.ts`, `load.test.ts`.
