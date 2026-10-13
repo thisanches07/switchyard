@@ -116,17 +116,28 @@ function secondsUntilHalfOpen(order: Candidate[], deps: RoutingDeps): number {
   return (Math.min(...times) - now) / 1_000;
 }
 
+/**
+ * A plan's candidates in the order its strategy tries them now (spec 008, AC-2); also the order
+ * in which the cache looks them up (spec 009, AC-3).
+ */
+export function orderForPlan(
+  plan: Pick<RoutePlan, "strategy" | "candidates">,
+  deps: Pick<RoutingDeps, "health" | "costEstimator">,
+  estimate: TokenCounts | undefined,
+): Candidate[] {
+  const estimator = deps.costEstimator;
+  return orderCandidates(plan.strategy, plan.candidates, {
+    cost: estimator && estimate ? (c) => estimator.estimateUsd(c.ref, estimate) : undefined,
+    latency: (c) => deps.health.peek(c.ref)?.ewma,
+  });
+}
+
 const statusOf = (error: unknown) => String(error instanceof GatewayError ? error.status : 500);
 
 export async function runAttempts<T>(args: RunAttemptsArgs<T>): Promise<Served<T>> {
   const { deps, settings } = args;
   const { timers } = deps;
-  const { estimate } = args;
-  const estimator = deps.costEstimator;
-  const order = orderCandidates(args.plan.strategy, args.plan.candidates, {
-    cost: estimator && estimate ? (c) => estimator.estimateUsd(c.ref, estimate) : undefined,
-    latency: (c) => deps.health.peek(c.ref)?.ewma,
-  });
+  const order = orderForPlan(args.plan, deps, args.estimate);
 
   const deadline = timers.deadline(settings.totalMs);
   const signal = AbortSignal.any([args.signal, deadline.signal]);

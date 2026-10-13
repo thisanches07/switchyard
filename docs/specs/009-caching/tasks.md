@@ -37,7 +37,7 @@ One commit per task, ending in `[spec-009]`. Lint, typecheck and the task's test
   - Test: `test/unit/cache/telemetry.test.ts` › counters and labels, one warning per minute per layer on an injected clock, span attributes without content; `test/unit/proxy/telemetry.test.ts` › `cache` label on requests_total.
   - Files: `src/modules/cache/telemetry.ts`, `src/modules/proxy/{telemetry,attempts}.ts`
 
-- [ ] **T7. Exact cache in the chat route**
+- [x] **T7. Exact cache in the chat route**
   - ACs: AC-2, AC-3, AC-4, AC-8, AC-9, AC-11, AC-12
   - Test: `test/unit/proxy/cache-routes.test.ts` › miss then hit (JSON), headers, alias strategy order, team scope, bypass/force/invalid header, non-cacheable finish reason and errors not stored, n > 1; `test/unit/proxy/cache-accounting.test.ts` › usage event, TPM reconcile, budget 0, savings known/unknown; `test/unit/proxy/cache-pii.test.ts` › key on masked request, stored placeholders, restored per request, block never reaches cache; `test/unit/proxy/cache-failures.test.ts` › exact store errors → miss.
   - Files: `src/modules/cache/stage.ts`, `src/modules/proxy/{routes,cached,messages}.ts`, `src/app.ts`, `test/helpers/app.ts`

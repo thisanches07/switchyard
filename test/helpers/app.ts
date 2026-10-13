@@ -2,6 +2,7 @@ import type { FastifyInstance, InjectOptions } from "fastify";
 import { buildApp } from "../../src/app.js";
 import type { LoadedConfig } from "../../src/config/load.js";
 import type { BudgetCounters, BudgetStore } from "../../src/core/budget.js";
+import type { ExactCacheStore, SemanticCacheStore } from "../../src/core/cache.js";
 import type { DependencyCheck } from "../../src/core/health.js";
 import type { CostEstimator } from "../../src/core/pricing.js";
 import type { ChatProvider } from "../../src/core/provider.js";
@@ -37,8 +38,11 @@ export interface TestAppOptions {
   budgetCounters?: BudgetCounters;
   /** Stored spend for the budget status routes (spec 007). */
   budgetStore?: BudgetStore;
-  /** Clock for budget periods (spec 007). */
+  /** Clock for budget periods (spec 007), cache hits and semantic expiry (spec 009). */
   clock?: () => number;
+  /** Response cache stores (spec 009); default: in-process exact cache, no semantic cache. */
+  exactCache?: ExactCacheStore;
+  semanticCache?: SemanticCacheStore;
   /** Live config (spec 008 hot reload); `config`/`providers` should match its first snapshot. */
   runtime?: ConfigRuntime;
   /** Routing clock and RNG (spec 008); default: real clock, backoff waits skipped. */
@@ -71,6 +75,8 @@ export async function testApp(options: TestAppOptions = {}) {
     ...(options.costEstimator === undefined ? {} : { costEstimator: options.costEstimator }),
     ...(options.budgetCounters === undefined ? {} : { budgetCounters: options.budgetCounters }),
     ...(options.clock === undefined ? {} : { clock: options.clock }),
+    ...(options.exactCache === undefined ? {} : { exactCache: options.exactCache }),
+    ...(options.semanticCache === undefined ? {} : { semanticCache: options.semanticCache }),
     ...(options.budgetStore === undefined ? {} : { budgetStore: options.budgetStore }),
     ...(options.bodyLimitBytes === undefined ? {} : { bodyLimitBytes: options.bodyLimitBytes }),
     runtime: options.runtime,
