@@ -58,6 +58,7 @@ usage:                         # spec 006: one usage event per admitted request,
   dlqTopic: usage.events.dlq   # malformed events, set aside by the usage worker
   bufferSize: 10000            # events held in memory while Kafka is slow or down, then dropped
   flushIntervalMs: 200
+
 pii:                           # spec 010: PII redaction, see docs/pii.md
   defaultMode: off             # off | mask | block, for keys without their own piiMode
   detectors: [email, phone, card, cpf, cnpj, ip, term]

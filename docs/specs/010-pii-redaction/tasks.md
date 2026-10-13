@@ -1,6 +1,6 @@
 # Tasks 010: PII redaction (mask and block)
 
-- **Status:** Approved (2026-10-13)
+- **Status:** Done (2026-10-13)
 - **Spec:** [spec.md](spec.md) · **Design:** [design.md](design.md)
 
 One commit per task, ending in `[spec-010]`. `pnpm verify` green after each (exit code checked, not grepped).
@@ -53,12 +53,12 @@ One commit per task, ending in `[spec-010]`. `pnpm verify` green after each (exi
   - ACs: AC-9 (docs part)
   - Do: README PII section (modes, headers, streaming limitation → spec 015, what is not detected), `docs/pii.md` guide, threat-model row, architecture note, verification table here.
 
-- [ ] **T12. Usage events: `piiDetections` and `rejected` outcome** — *blocked until spec 006 merges*
+- [x] **T12. Usage events: `piiDetections` and `rejected` outcome** (after spec 006 merged)
   - ACs: AC-13 (usage event part)
-  - Do: in 006's outcome hook, set `piiDetections` from `request.pii?.detections ?? {}`; record blocked requests (thrown by the PII stage) as `outcome: "rejected"`, `status: 400`, `errorCode: "pii_detected"`, `provider: null`, `attempts: 0`.
-  - Test: 006's hook tests › mask request event carries counts, off/clean carry `{}`, blocked chat/stream/embeddings produce exactly one `rejected` event.
+  - Do: the PII stage calls `request.outcome?.set({ piiDetections })` after scanning (the hook's default `{}` covers mode `off`), and on block `request.outcome?.reject(error)` before throwing, which records `outcome: "rejected"`, `status: 400`, `errorCode: "pii_detected"`, `provider: null`, `attempts: 0`.
+  - Test: `test/unit/pii/usage-events.test.ts` › masked chat and stream events carry counts, off/clean carry `{}`, blocked chat/stream/embeddings produce exactly one schema-valid `rejected` event, no detected value in any event.
 
-## Verification (2026-10-13, all tasks but T12)
+## Verification (2026-10-13)
 
 | AC | Proven by | Result |
 |---|---|---|
@@ -74,10 +74,10 @@ One commit per task, ending in `[spec-010]`. `pnpm verify` green after each (exi
 | AC-10 | `pii-routes.test.ts` › `none` when clean; header absent and original forwarded when `off`; key mode overrides the default | ✅ |
 | AC-11 | `pii-routes.test.ts` › 400 `pii_detected` `(cpf, email)` for chat, stream and embeddings, provider not called, tokens refunded, request unit kept; contract › `BadRequestError`; smoke › block step | ✅ |
 | AC-12 | `privacy.test.ts` › `trace`-level logs, all spans (attributes, events, status) and metric points of mask and block requests carrying every vector contain none of them | ✅ |
-| AC-13 | `telemetry.test.ts` › `switchyard_pii_detections_total{type}` occurrences, request-span `mode`/`action`/`detections`/`uninspected`, nothing when off; `pii-routes.test.ts` › `request.pii` shape. **`UsageEvent.piiDetections` and `rejected` events: T12, blocked until spec 006 merges** | ⏳ partial |
+| AC-13 | `telemetry.test.ts` › `switchyard_pii_detections_total{type}` occurrences, request-span `mode`/`action`/`detections`/`uninspected`, nothing when off; `pii-routes.test.ts` › `request.pii` shape; `usage-events.test.ts` › `piiDetections` counts on masked chat and stream, `{}` when off or clean, one `rejected` event (400, `pii_detected`, provider null, attempts 0, tokens 0) for blocked chat, stream and embeddings, no value in any event | ✅ |
 | AC-14 | `openai-sdk.contract.test.ts` › `BadRequestError` with `code: "pii_detected"`; `scripts/compose-smoke.ts` › block 400 and mask 200 + `masked` + restored CPF | ✅ |
 
 Notes:
 - AC-6 timing is measured as the scan's **CPU time** (`process.cpuUsage`), equal to wall time on an idle CI runner, so a saturated shared dev machine does not make it flaky. A 1 MiB input made only of real values (~73k detections) is checked for linear growth instead of an absolute budget: its cost is per detection, not adversarial.
-- Migration generated as `0002_pii_mode` on this branch (006's `0002_usage_events` is not merged yet); it becomes `0003_pii_mode` when rebased onto 006 (`pnpm db:generate` on top of `main`, see `waves.md`).
+- Migration `0003_pii_mode`: regenerated with `pnpm db:generate` on top of 006's `0002_usage_events` after the rebase (journal and snapshot generated, not hand-merged); `db.int.test.ts` passes on it.
 - Local smoke runs (project `sy010`, remapped ports): every functional step passed in both complete runs, including both PII steps. `compose up --wait` itself returned non-zero because a container missed its healthcheck window while the shared host was at 100% CPU (the gateway once, then the `lgtm` image; the gateway started in ~4 s on that run), not because of a failed step.

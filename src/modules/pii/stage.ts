@@ -74,11 +74,16 @@ export function createPiiStage(config: AppConfig["pii"]) {
     };
     ctx.request.pii = result;
     recordPiiScan(ctx.request, result);
+    // Usage event (spec 006 outcome hook): counts per type only; `{}` stays the default when off.
+    ctx.request.outcome?.set({ piiDetections: { ...masked.detections } });
 
     if (action === "blocked") {
       // Nothing will be generated: give the tokens back, keep the request unit.
       await ctx.admission?.reconcile(undefined);
-      throw piiDetected(found, { [PII_HEADER]: "blocked" });
+      const error = piiDetected(found, { [PII_HEADER]: "blocked" });
+      // One `rejected` event: provider null, attempts 0 (spec 006 design §4).
+      ctx.request.outcome?.reject(error);
+      throw error;
     }
     if (action === "none") {
       ctx.reply.header(PII_HEADER, "none");

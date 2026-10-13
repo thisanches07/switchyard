@@ -8,7 +8,7 @@ Spec open questions resolved as proposed: identity of a value is the exact match
 
 ## 1. Data and configuration
 
-Migration `pii_mode` (reserved as `0003_pii_mode` in `waves.md`; generated as `0002_pii_mode` on this branch because 006's `0002_usage_events` is not merged yet, and renumbered on rebase): a Postgres enum `pii_mode` (`off`, `mask`, `block`) and a nullable `api_keys.pii_mode` column. `NULL` means "use `pii.defaultMode`".
+Migration `0003_pii_mode` (reserved in `waves.md`, applied after 006's `0002_usage_events`): a Postgres enum `pii_mode` (`off`, `mask`, `block`) and a nullable `api_keys.pii_mode` column. `NULL` means "use `pii.defaultMode`".
 
 ```yaml
 pii:                     # spec 010
