@@ -1,6 +1,6 @@
 # Spec 002: Chat proxy (non-streaming)
 
-- **Status:** Done (2026-10-13); CI run pending first push
+- **Status:** Done (2026-10-13)
 - **Owner:** @thisanches07
 - **Release:** v0.1
 - **Depends on:** 001

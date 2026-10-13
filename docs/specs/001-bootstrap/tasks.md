@@ -138,7 +138,7 @@ Each task keeps `pnpm verify` green once T1 exists. Tests named here are the pro
 | AC-5 | `test/unit/health/readiness.test.ts`; `routes.test.ts` › GET /readyz returns 503 with failing list; `test/integration/readyz.int.test.ts` (Testcontainers) | ✅ |
 | AC-6 | `test/unit/config/{env,schema,load}.test.ts`; `test/unit/server/boot.test.ts`; smoke › invalid config exits non-zero | ✅ |
 | AC-7 | `test/unit/telemetry/correlation.test.ts`; `logger.test.ts`; traces seen in Tempo for `switchyard-gateway` (manual) | ✅ |
-| AC-8 | `.github/workflows/ci.yml` (`verify`, `integration`, `compose-smoke`) | ⏳ pending: no GitHub remote yet. `pnpm verify` passed inside a `node:24.21.0-bookworm-slim` container (61/61 tests) as a stand-in |
+| AC-8 | `.github/workflows/ci.yml` (`verify`, `integration`, `compose-smoke`) | ✅ green on PR #1 (2026-10-13) |
 | AC-9 | `test/unit/lifecycle/shutdown.test.ts`; `shutdown.process.test.ts` (Linux container: 664 ms); smoke › gateway exits 0 within 10 s on SIGTERM (≈ 0.7 s) | ✅ |
 | AC-10 | `test/unit/repo/files.test.ts` | ✅ |
 
