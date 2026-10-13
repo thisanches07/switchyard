@@ -10,7 +10,7 @@ One commit per task, ending in `[spec-015]`. Lint, typecheck and the task's test
   - Do: `src/config/schema.ts`, example config.
   - Test: `test/unit/config/schema.test.ts` › `pii.streamRestore` defaults (`maxHoldMs` 250, no `maxHoldChars`), non-positive values rejected.
 
-- [ ] **T2. Text restorer (pure state machine)**
+- [x] **T2. Text restorer (pure state machine)**
   - ACs: AC-2, AC-3, AC-4 (limits)
   - Do: `src/modules/pii/stream-restore.ts` › `indexPlaceholders`, `createTextRestorer`.
   - Test: `test/unit/pii/stream-restore.test.ts` › every two-chunk split position (table), one char per chunk, three chunks, no partial placeholder emitted; unknown/altered/lone `<` forwarded at the ruling-out character; text without `<` returned as is; JSON escaping; char limit; ms limit via `push` and `expire`; flush; hold events (`restored`, `ruled_out`, `hold_limit`, `end`) with held time.
