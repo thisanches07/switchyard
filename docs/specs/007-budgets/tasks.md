@@ -25,7 +25,7 @@ One commit per task, ending in `[spec-007]`. `pnpm verify` green after each (exi
   - Do: schema + `pnpm db:generate --name budgets` (+ checks); `Team`/`ApiKeyRecord`/`KeyPatch`/`TeamPatch`/`Principal.budget`; Drizzle and memory stores (`getKey`); `authenticate` fills `principal.budget`.
   - Test: `db.int.test.ts` › columns, defaults, round trip, checks; `memory-store.test.ts` › same semantics; `authenticate.test.ts` › principal budget.
 
-- [ ] **T5. Admin API: `monthlyBudgetUsd` and `softLimitPct`**
+- [x] **T5. Admin API: `monthlyBudgetUsd` and `softLimitPct`**
   - ACs: AC-4
   - Do: create/PATCH bodies, decimal validation, normalized views, cache invalidation, OpenAPI bodies, `createKeyViaAdmin` option.
   - Test: `test/unit/admin/admin-budgets.test.ts` › number and string accepted and normalized, `null` clears, negative/5 places/too large/garbage → 400, PATCH with one field, team `softLimitPct` 1–100, listings, auth cache invalidated.

@@ -18,6 +18,21 @@ const piiModeSchema = {
   description: "PII redaction: off, mask or block; null uses the config default",
 };
 
+/** Monthly budget in USD (spec 007): number or decimal string, at most 4 decimal places. */
+const budgetSchema = {
+  type: ["number", "string", "null"],
+  description:
+    "Monthly budget in USD (calendar month, UTC): 0 to 99999999.9999, at most 4 decimal places; null clears. Returned as a decimal string",
+};
+
+/** Soft limit of a team's budgets, percent (spec 007). */
+const softLimitPctSchema = {
+  type: "integer",
+  minimum: 1,
+  maximum: 100,
+  description: "Percent of the budget that triggers the soft-limit warning (default 80)",
+};
+
 const errorResponse = {
   description: "OpenAI-shaped error",
   type: "object",
@@ -181,7 +196,7 @@ export const docs = {
   },
   createTeam: {
     tags: ["Admin"],
-    summary: "Create a team (optional per-minute caps across all its keys)",
+    summary: "Create a team (optional per-minute caps and monthly budget across all its keys)",
     security: adminAuth,
     body: {
       type: "object",
@@ -190,6 +205,8 @@ export const docs = {
         name: { type: "string", minLength: 1, maxLength: 100 },
         rpm: limitSchema,
         tpm: limitSchema,
+        monthlyBudgetUsd: budgetSchema,
+        softLimitPct: softLimitPctSchema,
       },
     },
   },
@@ -213,25 +230,39 @@ export const docs = {
         rpm: limitSchema,
         tpm: limitSchema,
         piiMode: piiModeSchema,
+        monthlyBudgetUsd: budgetSchema,
       },
     },
   },
   patchKeyLimits: {
     tags: ["Admin"],
-    summary: "Set or clear (null) the per-minute limits and the PII mode of a key",
+    summary: "Set or clear (null) the per-minute limits, PII mode and monthly budget of a key",
     security: adminAuth,
     params: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
     body: {
       type: "object",
-      properties: { rpm: limitSchema, tpm: limitSchema, piiMode: piiModeSchema },
+      properties: {
+        rpm: limitSchema,
+        tpm: limitSchema,
+        piiMode: piiModeSchema,
+        monthlyBudgetUsd: budgetSchema,
+      },
     },
   },
   patchTeamLimits: {
     tags: ["Admin"],
-    summary: "Set or clear (null) the per-minute caps of a team",
+    summary: "Set or clear (null) the per-minute caps and monthly budget of a team",
     security: adminAuth,
     params: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
-    body: { type: "object", properties: { rpm: limitSchema, tpm: limitSchema } },
+    body: {
+      type: "object",
+      properties: {
+        rpm: limitSchema,
+        tpm: limitSchema,
+        monthlyBudgetUsd: budgetSchema,
+        softLimitPct: softLimitPctSchema,
+      },
+    },
   },
   listKeys: {
     tags: ["Admin"],
