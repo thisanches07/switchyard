@@ -5,7 +5,7 @@
 
 One commit per task, ending in `[spec-009]`. Lint, typecheck and the task's tests at each commit; full `pnpm verify` and integration suite at the end.
 
-- [ ] **T1. Config, ports and cache key**
+- [x] **T1. Config, ports and cache key**
   - ACs: AC-1 (config keys), AC-10 (key scope), AC-11 (key from the sent request)
   - Do: `cache.semantic.maxTemperature`, `lookupTimeoutMs`; `src/core/cache.ts` ports and `cachedResponseSchema`; `canonicalJson`, `exactKey`, `paramsHash` (ADR-0019).
   - Test: `test/unit/config/schema.test.ts` › cache defaults and bounds; `test/unit/cache/key.test.ts` › key order and whitespace, excluded fields, null removal (top level, messages, not nested), array order, team and candidate in key, each output-affecting parameter changes the key, params hash ignores the final user message.

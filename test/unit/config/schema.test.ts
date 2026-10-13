@@ -66,6 +66,25 @@ describe("configSchema", () => {
     expect(issues(config)[0]?.path).toBe("cache.semantic.similarityThreshold");
   });
 
+  it("defaults the semantic cache temperature cap and lookup timeout (spec 009, AC-1)", () => {
+    const config = configSchema.parse({ providers: { mock: { type: "mock" } } });
+    expect(config.cache.semantic).toMatchObject({ maxTemperature: 0.3, lookupTimeoutMs: 300 });
+    const custom = configSchema.parse({
+      providers: { mock: { type: "mock" } },
+      cache: { semantic: { maxTemperature: 0, lookupTimeoutMs: 50 } },
+    });
+    expect(custom.cache.semantic).toMatchObject({ maxTemperature: 0, lookupTimeoutMs: 50 });
+  });
+
+  it.each([
+    [{ maxTemperature: -0.1 }, "cache.semantic.maxTemperature"],
+    [{ maxTemperature: 2.5 }, "cache.semantic.maxTemperature"],
+    [{ lookupTimeoutMs: 0 }, "cache.semantic.lookupTimeoutMs"],
+  ])("rejects semantic cache setting %j", (semantic, path) => {
+    const found = issues({ providers: { mock: { type: "mock" } }, cache: { semantic } });
+    expect(found[0]?.path).toBe(path);
+  });
+
   it("rejects non-positive timeouts", () => {
     const config = example();
     const server = config.server as { timeouts: { ttfbMs: number } };
