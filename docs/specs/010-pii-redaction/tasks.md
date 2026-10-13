@@ -45,7 +45,7 @@ One commit per task, ending in `[spec-010]`. `pnpm verify` green after each (exi
   - ACs: AC-12, AC-13 (metric and span)
   - Test: `test/unit/pii/telemetry.test.ts` › `switchyard_pii_detections_total{type}` counts occurrences, span attributes for mask/block/none, `uninspected`; `test/unit/pii/privacy.test.ts` › trace-level logs, spans and metric points of mask and block requests with every AC-3 vector contain none of them.
 
-- [ ] **T10. Mock `echo` model, contract test and smoke steps**
+- [x] **T10. Mock `echo` model, contract test and smoke steps**
   - ACs: AC-14 (and AC-8 end to end)
   - Test: `test/unit/providers/mock.test.ts` › `echo` answers and streams the last user text; `openai-sdk.contract.test.ts` › `block` key → `BadRequestError` `pii_detected`; `scripts/compose-smoke.ts` › block 400, mask 200 + `masked` + restored CPF.
 

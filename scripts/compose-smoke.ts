@@ -1,6 +1,7 @@
 // Smoke test for the Docker Compose stack (spec 001: AC-1..AC-6, AC-9; specs 002-003: chat,
 // streaming and embeddings via the mock provider; spec 004: API keys through the admin API;
-// spec 005: per-minute rate limits; spec 006: usage events through Redpanda and the worker).
+// spec 005: per-minute rate limits; spec 006: usage events through Redpanda and the worker;
+// spec 010: PII block and mask).
 // Cross-platform: `node scripts/compose-smoke.ts [--down]` locally (Windows or Linux) and in CI.
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
@@ -58,6 +59,36 @@ async function getWithRetry(path: string, expected: number, timeoutMs = 60_000) 
     await new Promise((r) => setTimeout(r, 1_000));
   }
   throw new Error(`GET ${path} did not return ${expected}: ${last}`);
+}
+
+/** Creates a team and a key with the given settings through the admin API; returns the key. */
+async function createKey(settings: Record<string, unknown>): Promise<string> {
+  const admin = { authorization: `Bearer ${ADMIN_TOKEN}`, "content-type": "application/json" };
+  const team = await fetch(`${GATEWAY}/admin/teams`, {
+    method: "POST",
+    headers: admin,
+    body: JSON.stringify({ name: `smoke-${Date.now()}-${Math.random().toString(36).slice(2)}` }),
+  });
+  if (team.status !== 201) throw new Error(`team: ${team.status} ${await team.text()}`);
+  const { id } = (await team.json()) as { id: string };
+  const key = await fetch(`${GATEWAY}/admin/keys`, {
+    method: "POST",
+    headers: admin,
+    body: JSON.stringify({ teamId: id, name: "smoke", ...settings }),
+  });
+  if (key.status !== 201) throw new Error(`key: ${key.status} ${await key.text()}`);
+  return ((await key.json()) as { key: string }).key;
+}
+
+function chatWith(
+  key: string,
+  { content, model = "mock/smoke" }: { content: string; model?: string },
+) {
+  return fetch(`${GATEWAY}/v1/chat/completions`, {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
+    body: JSON.stringify({ model, messages: [{ role: "user", content }] }),
+  });
 }
 
 try {
@@ -203,6 +234,28 @@ try {
     }
     if (after <= before) throw new Error(`request not counted after 10 s (still ${after})`);
     console.log(`  counted after ${Date.now() - started} ms (${after} requests for the key)`);
+  });
+
+  await step("a PII block key gets 400 pii_detected without the value (spec 010)", async () => {
+    const key = await createKey({ piiMode: "block" });
+    const res = await chatWith(key, { content: "My CPF is 529.982.247-25" });
+    const body = await res.text();
+    if (res.status !== 400) throw new Error(`${res.status} ${body}`);
+    if (JSON.parse(body).error?.code !== "pii_detected") throw new Error(body);
+    if (body.includes("529.982.247-25")) throw new Error("the error body leaks the value");
+  });
+
+  await step("a PII mask key gets 200, x-switchyard-pii: masked and the value back", async () => {
+    const key = await createKey({ piiMode: "mask" });
+    const res = await chatWith(key, { content: "My CPF is 529.982.247-25", model: "mock/echo" });
+    const body = await res.text();
+    if (res.status !== 200) throw new Error(`${res.status} ${body}`);
+    if (res.headers.get("x-switchyard-pii") !== "masked") {
+      throw new Error(`x-switchyard-pii: ${res.headers.get("x-switchyard-pii")}`);
+    }
+    // The echo model answers with what it received: <CPF_1>, restored by the gateway.
+    const content = JSON.parse(body).choices?.[0]?.message?.content;
+    if (content !== "My CPF is 529.982.247-25") throw new Error(`content ${content}`);
   });
 
   await step("ollama profile adds the ollama service", () => {

@@ -120,6 +120,35 @@ describe("official OpenAI Node SDK against Switchyard", () => {
     expect(Number(headers?.get("retry-after"))).toBeGreaterThanOrEqual(1);
   });
 
+  it("surfaces a PII block as BadRequestError with code pii_detected (spec 010)", async () => {
+    const blockKey = await createKeyViaAdmin(baseUrl, TEST_ADMIN_TOKEN, {
+      team: `pii-block-${Date.now()}`,
+      piiMode: "block",
+    });
+    const blocked = new OpenAI({ baseURL: `${baseUrl}/v1`, apiKey: blockKey, maxRetries: 0 });
+    const error = await blocked.chat.completions
+      .create({ model: "fast", messages: [{ role: "user", content: "CPF 529.982.247-25" }] })
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(OpenAI.BadRequestError);
+    const badRequest = error as InstanceType<typeof OpenAI.BadRequestError>;
+    expect(badRequest.code).toBe("pii_detected");
+    expect(badRequest.message).toContain("cpf");
+    expect(badRequest.message).not.toContain("529.982.247-25");
+  });
+
+  it("restores masked values in a non-streaming answer (spec 010)", async () => {
+    const maskKey = await createKeyViaAdmin(baseUrl, TEST_ADMIN_TOKEN, {
+      team: `pii-mask-${Date.now()}`,
+      piiMode: "mask",
+    });
+    const masked = new OpenAI({ baseURL: `${baseUrl}/v1`, apiKey: maskKey, maxRetries: 0 });
+    const { data, response } = await masked.chat.completions
+      .create({ model: "mock/echo", messages: [{ role: "user", content: "CPF 529.982.247-25" }] })
+      .withResponse();
+    expect(response.headers.get("x-switchyard-pii")).toBe("masked");
+    expect(data.choices[0]?.message.content).toBe("CPF 529.982.247-25");
+  });
+
   it("lists models", async () => {
     const ids: string[] = [];
     for await (const model of client.models.list()) ids.push(model.id);
