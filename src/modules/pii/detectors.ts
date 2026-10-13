@@ -83,6 +83,28 @@ export const PATTERN_DETECTORS: readonly PatternDetector[] = [
 
 const WORD_CHAR = /[\p{L}\p{N}_]/u;
 
+/** Code point is a letter, digit or underscore (Unicode-aware, ASCII without allocations). */
+function isWordCodePoint(code: number | undefined): boolean {
+  if (code === undefined) return false;
+  if (code < 128) {
+    return (
+      (code >= 48 && code <= 57) ||
+      (code >= 65 && code <= 90) ||
+      (code >= 97 && code <= 122) ||
+      code === 95
+    );
+  }
+  return WORD_CHAR.test(String.fromCodePoint(code));
+}
+
+/** The code point just before `index` (handles surrogate pairs). */
+function codePointBefore(text: string, index: number): number | undefined {
+  if (index <= 0) return undefined;
+  const unit = text.charCodeAt(index - 1);
+  if (index >= 2 && unit >= 0xdc00 && unit <= 0xdfff) return text.codePointAt(index - 2);
+  return unit;
+}
+
 /** Lower-cases without changing the length, so indexes map back to the original text. */
 export function lowerSameLength(text: string): string {
   const lower = text.toLowerCase();
@@ -93,21 +115,6 @@ export function lowerSameLength(text: string): string {
     out += lowered.length === char.length ? lowered : char;
   }
   return out;
-}
-
-/** The code point just before `index` (handles surrogate pairs), or "". */
-function charBefore(text: string, index: number): string {
-  if (index <= 0) return "";
-  const code = text.codePointAt(index - 1) ?? 0;
-  if (index >= 2 && code >= 0xdc00 && code <= 0xdfff) {
-    return String.fromCodePoint(text.codePointAt(index - 2) ?? 0);
-  }
-  return String.fromCodePoint(code);
-}
-
-function charAt(text: string, index: number): string {
-  if (index >= text.length) return "";
-  return String.fromCodePoint(text.codePointAt(index) ?? 0);
 }
 
 /**
@@ -125,10 +132,16 @@ export function findTerms(
     let index = lower.indexOf(term);
     while (index !== -1) {
       const end = index + term.length;
-      if (!WORD_CHAR.test(charBefore(text, index)) && !WORD_CHAR.test(charAt(text, end))) {
+      if (
+        !isWordCodePoint(codePointBefore(text, index)) &&
+        !isWordCodePoint(text.codePointAt(end))
+      ) {
         found.push({ start: index, end });
+        // Occurrences of one term never overlap: they would replace the same characters.
+        index = lower.indexOf(term, end);
+      } else {
+        index = lower.indexOf(term, index + 1);
       }
-      index = lower.indexOf(term, index + 1);
     }
   }
   return found;

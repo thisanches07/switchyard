@@ -58,23 +58,39 @@ export function createScanner(options: ScannerOptions): Scanner {
 
 /**
  * Longest match first, then validator-backed types, then position; a candidate is kept only if
- * none of its characters is taken yet, so every character is replaced at most once. The
- * occupancy map keeps this linear in the total candidate length.
+ * none of its characters is taken yet, so every character is replaced at most once.
+ *
+ * Linear in the input: candidates are bucketed by (length, rank) instead of being sorted (each
+ * detector yields them in increasing position already), an occupancy map answers "is this range
+ * free", and the result is read back in text order from a position index.
  */
 export function resolveOverlaps(candidates: Detection[], textLength: number): Detection[] {
   if (candidates.length <= 1) return candidates;
-  const ordered = [...candidates].sort(
-    (a, b) =>
-      b.end - b.start - (a.end - a.start) || RANK[a.type] - RANK[b.type] || a.start - b.start,
-  );
-  const taken = new Uint8Array(textLength);
-  const kept: Detection[] = [];
-  for (const candidate of ordered) {
-    let free = true;
-    for (let i = candidate.start; i < candidate.end && free; i += 1) free = taken[i] === 0;
-    if (!free) continue;
-    taken.fill(1, candidate.start, candidate.end);
-    kept.push(candidate);
+  const buckets = new Map<number, Detection[]>();
+  for (const candidate of candidates) {
+    const key = (candidate.end - candidate.start) * 16 + (15 - RANK[candidate.type]);
+    const bucket = buckets.get(key);
+    if (bucket) bucket.push(candidate);
+    else buckets.set(key, [candidate]);
   }
-  return kept.sort((a, b) => a.start - b.start);
+  // taken[i] = 1 + index (in `accepted`) of the detection covering character i, 0 when free.
+  const taken = new Int32Array(textLength);
+  const accepted: Detection[] = [];
+  for (const key of [...buckets.keys()].sort((a, b) => b - a)) {
+    for (const candidate of buckets.get(key) ?? []) {
+      let free = true;
+      for (let i = candidate.start; i < candidate.end && free; i += 1) free = taken[i] === 0;
+      if (!free) continue;
+      accepted.push(candidate);
+      for (let i = candidate.start; i < candidate.end; i += 1) taken[i] = accepted.length;
+    }
+  }
+  const kept: Detection[] = [];
+  for (let i = 0; i < textLength && kept.length < accepted.length; i += 1) {
+    const slot = taken[i] ?? 0;
+    if (slot === 0) continue;
+    const candidate = accepted[slot - 1];
+    if (candidate?.start === i) kept.push(candidate);
+  }
+  return kept;
 }

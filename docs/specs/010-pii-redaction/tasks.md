@@ -28,7 +28,7 @@ One commit per task, ending in `[spec-010]`. `pnpm verify` green after each (exi
   - ACs: AC-3, AC-4, AC-5
   - Test: `test/unit/pii/scan.test.ts` › every AC-3 vector found with the right type, every AC-4 vector not reported, disabled detectors do not run, deny-list case and word boundaries, longest match and validator tie-break, characters replaced once.
 
-- [ ] **T6. Linear-time guarantees**
+- [x] **T6. Linear-time guarantees**
   - ACs: AC-6
   - Test: `test/unit/pii/linear.test.ts` › no unbounded quantifier in any detector pattern; 1 MiB adversarial inputs (digits, `a@`, `1.`, `:`, `1 `, letters) each scanned in < 500 ms.
 
