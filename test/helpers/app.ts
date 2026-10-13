@@ -3,12 +3,12 @@ import { buildApp } from "../../src/app.js";
 import type { LoadedConfig } from "../../src/config/load.js";
 import type { BudgetCounters, BudgetStore } from "../../src/core/budget.js";
 import type { DependencyCheck } from "../../src/core/health.js";
+import type { CostEstimator } from "../../src/core/pricing.js";
 import type { ChatProvider } from "../../src/core/provider.js";
 import type { RateLimiter } from "../../src/core/ratelimit.js";
 import type { OutcomeRecorder, UsageReader } from "../../src/core/usage.js";
 import { createLogger } from "../../src/infra/logger.js";
 import { MemoryRateLimiter } from "../../src/infra/memory/rate-limiter.js";
-import type { PriceTable } from "../../src/modules/pricing/table.js";
 import { createProviderRegistry } from "../../src/modules/providers/registry.js";
 import { testConfig } from "./config.js";
 import { fakeHttp, jsonResponse } from "./http.js";
@@ -29,7 +29,7 @@ export interface TestAppOptions {
   /** Answers GET /admin/usage (spec 006). */
   usageReader?: UsageReader;
   /** Prices (spec 007); default: every cost unknown. */
-  costEstimator?: PriceTable;
+  costEstimator?: CostEstimator;
   /** Budget counters (spec 007); default: fresh in-memory counters. */
   budgetCounters?: BudgetCounters;
   /** Stored spend for the budget status routes (spec 007). */

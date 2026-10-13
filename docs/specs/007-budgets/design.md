@@ -77,7 +77,7 @@ export function unknownPriceCandidates(aliases, table): string[];   // boot warn
 - **Precedence:** exact key; else matching patterns (`*` = any sequence, including `/`; compiled once to an anchored regex with every other character escaped) ranked by the count of non-`*` characters, ties by file order.
 - **Cost (AC-2):** `cached = min(cachedInputTokens, inputTokens)`; `(inputTokens − cached) × input + cached × (cachedInput ?? input) + outputTokens × output`, divided by 10⁶, rounded half-up to 10 decimal places. A price is *needed* only when its token count is > 0; a needed `TODO`, or no entry, gives `null`.
 - **Decimals** (`src/modules/pricing/decimal.ts`): `{ units: bigint, scale: number }` with `parse` (plain strings and JS numbers incl. exponents), `add`, `sub`, `mulInt`, `compare`, `round` (half-up), `toFixed` and `normalize` (no trailing zeros, never an exponent). No new dependency.
-- **AppDeps** gains `costEstimator?: PriceTable` (default `PriceTable.empty()`): the same object gives spec 008 `estimateUsd()` and the outcome hook `costUsd()`. `server.ts` passes the loaded table.
+- **AppDeps** gains `costEstimator?: CostEstimator` (the shared port): spec 008 calls `estimateUsd()`; when it is a `PriceTable` the outcome hook also uses its exact `costUsd()` (otherwise every event cost is unknown). `server.ts` passes the loaded table.
 - **Boot warning (AC-1):** one `warn` log, `{ models: [...] }`, listing every distinct alias candidate whose `input` or `output` price is unknown (no entry, or `TODO`).
 
 ## 4. Cost on every event (AC-2, AC-3)

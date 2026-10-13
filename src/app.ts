@@ -21,6 +21,7 @@ import {
   unsupportedMediaType,
 } from "./core/errors.js";
 import type { DependencyCheck } from "./core/health.js";
+import type { CostEstimator } from "./core/pricing.js";
 import type { ChatProvider } from "./core/provider.js";
 import type { RateLimiter } from "./core/ratelimit.js";
 import type { OutcomeRecorder, UsageReader } from "./core/usage.js";
@@ -57,10 +58,10 @@ export interface AppDeps {
   /** Answers GET /admin/usage (spec 006); the route returns 503 without it. */
   usageReader?: UsageReader;
   /**
-   * Prices of `config/pricing.yaml` (spec 007): exact event costs, and `estimateUsd` for routing
-   * (spec 008). Defaults to an empty table: every cost unknown.
+   * Prices (spec 007): `estimateUsd` for routing (spec 008). A `PriceTable` (config/pricing.yaml)
+   * also gives exact event costs; any other estimator, or none, leaves every event cost unknown.
    */
-  costEstimator?: PriceTable;
+  costEstimator?: CostEstimator;
   /** Budget counters (spec 007, Redis in production); defaults to in-process counters. */
   budgetCounters?: BudgetCounters;
   /** Stored spend for GET /admin/keys|teams/:id/budget (spec 007); those routes 503 without it. */
@@ -156,7 +157,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const outcomes = createOutcomeHook({
     recorder: fanOut(budgets.charger, deps.usageRecorder ?? noopRecorder),
     logger: deps.logger,
-    price: priceEvent(deps.costEstimator ?? PriceTable.empty()),
+    price: priceEvent(
+      deps.costEstimator instanceof PriceTable ? deps.costEstimator : PriceTable.empty(),
+    ),
     ...(deps.clock ? { now: deps.clock } : {}),
   });
 
