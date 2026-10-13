@@ -5,7 +5,7 @@
 
 One commit per task, ending in `[spec-007]`. `pnpm verify` green after each (exit code checked); `pnpm test:int` (only the touched files) for tasks that touch infra.
 
-- [ ] **T1. Pricing port and exact decimals**
+- [x] **T1. Pricing port and exact decimals**
   - ACs: AC-2
   - Do: `src/core/pricing.ts` (`TokenCounts`, `CostEstimator`, shared with spec 008); `src/modules/pricing/decimal.ts`.
   - Test: `test/unit/pricing/decimal.test.ts` › parse (plain, numbers, exponents, invalid), add/sub/mulInt/compare, half-up rounding, toFixed and normalize never emit an exponent.
