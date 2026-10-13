@@ -5,7 +5,7 @@
 
 One commit per task, ending in `[spec-011]`. T13 and T14 are blocked on things outside this branch.
 
-- [ ] **T1. Metric catalogue and Grafana file check**
+- [x] **T1. Metric catalogue and Grafana file check**
   - ACs: AC-8
   - Do: `scripts/lib/metric-catalogue.ts` (scan `src/`, OTLP→Prometheus name translation), `scripts/lib/grafana-check.ts` (JSON/YAML, uids, datasources, PromQL metric names), `scripts/check-grafana.ts`, `deploy/grafana/metrics-allowlist.json`, `pnpm check:grafana` in `pnpm verify`; cost counter unit `{USD}` (design §8.1).
   - Test: `test/unit/scripts/metric-catalogue.test.ts` › translation (seconds kept, `_total`, `_ratio`, braces, `USD` case), real catalogue has the fixed names; `test/unit/scripts/grafana-check.test.ts` › invalid JSON/YAML, duplicate uid, unknown datasource, unknown metric names file + panel + metric, nested rows, templating, rules, allowlist, PromQL functions/labels ignored.

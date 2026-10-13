@@ -34,7 +34,8 @@ function getInstruments(): Instruments {
       provider,
       cost: meter.createCounter("switchyard_cost_usd_total", {
         description: "Known cost of requests in USD, by provider and served model",
-        unit: "USD",
+        // Braces: an annotation, so Prometheus keeps the fixed name (spec 011, design §3.2).
+        unit: "{USD}",
       }),
       unknownCost: meter.createCounter("switchyard_cost_unknown_requests_total", {
         description: "Requests whose cost is unknown (no price, or a TODO price)",
