@@ -11,7 +11,7 @@ One commit per task, ending in `[spec-009]`. Lint, typecheck and the task's test
   - Test: `test/unit/config/schema.test.ts` › cache defaults and bounds; `test/unit/cache/key.test.ts` › key order and whitespace, excluded fields, null removal (top level, messages, not nested), array order, team and candidate in key, each output-affecting parameter changes the key, params hash ignores the final user message.
   - Files: `src/config/schema.ts`, `src/core/cache.ts`, `src/modules/cache/key.ts`
 
-- [ ] **T2. Eligibility and the cache header**
+- [x] **T2. Eligibility and the cache header**
   - ACs: AC-2, AC-5
   - Test: `test/unit/cache/eligibility.test.ts` › header values (absent, force, bypass, case, invalid → 400), temperature 0 / absent / > 0 / force, `n`, semantic temperature cap and tools, last message user text (string, text parts, image part, assistant last).
   - Files: `src/modules/cache/eligibility.ts`, `src/core/errors.ts`

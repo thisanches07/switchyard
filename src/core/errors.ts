@@ -112,6 +112,15 @@ export const unsupportedParameter = (param: string, detail: string) =>
     `Unsupported parameter "${param}" for this provider: ${detail}`,
   );
 
+/** `x-switchyard-cache` with a value other than `force` or `bypass` (spec 009, AC-2). */
+export const invalidCacheHeader = () =>
+  new GatewayError(
+    400,
+    INVALID,
+    "invalid_cache_header",
+    'x-switchyard-cache must be "force" or "bypass"',
+  );
+
 export const invalidToolArguments = (detail: string) =>
   new GatewayError(400, INVALID, "invalid_tool_arguments", detail);
 
