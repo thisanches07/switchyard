@@ -166,7 +166,16 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const budgetCounters = deps.budgetCounters ?? new MemoryBudgetCounters();
   const budgets = createBudgets({
     counters: budgetCounters,
-    config: deps.config.budgets,
+    // Read per check from the live config, so a reloaded `budgets.onRedisError` applies (spec 008).
+    config: {
+      get onRedisError() {
+        return runtime.current().config.budgets.onRedisError;
+      },
+      // The usage worker's setting; it reads the file when it starts.
+      get reconcileIntervalSeconds() {
+        return runtime.current().config.budgets.reconcileIntervalSeconds;
+      },
+    },
     logger: deps.logger,
     ...(deps.clock ? { now: deps.clock } : {}),
   });

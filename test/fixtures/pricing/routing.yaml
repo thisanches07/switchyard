@@ -1,0 +1,5 @@
+# Prices for the lowest-cost routing test (spec 008); synthetic, not real provider prices.
+models:
+  mock/*:       { input: 1.0, output: 2.0 }
+  ollama/*:     { input: 0.1, output: 0.2 }
+  openrouter/*: { input: TODO, output: TODO }
