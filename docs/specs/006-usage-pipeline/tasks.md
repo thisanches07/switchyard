@@ -25,7 +25,7 @@ One commit per task, ending in `[spec-006]`. `pnpm verify` exit code checked aft
   - Do: `AppDeps.usageRecorder`; `admit()` begins the tracker; `settle()` and `streamChat` end it; `onResponse` safety net; provider-reported `cachedInputTokens` (`usage.prompt_tokens_details.cached_tokens`).
   - Test: `test/unit/usage/routes-outcome.test.ts` › one event per case (chat/embeddings, stream/non-stream, success/upstream error/mid-stream/disconnect), none for 401/404/429, cached tokens, marker absent from the event JSON; `openai-compatible.test.ts`/`usage.test.ts` › cached tokens parsed.
 
-- [ ] **T5. Usage publisher (bounded buffer)**
+- [x] **T5. Usage publisher (bounded buffer)**
   - ACs: AC-1, AC-5, AC-6, AC-7, AC-12
   - Do: `src/modules/usage/publisher.ts`, `telemetry.ts`.
   - Test: `test/unit/usage/publisher.test.ts` › validates before buffering, disabled never sends, record is synchronous, key = team id, periodic flush, failed send kept and retried, buffer full → drop + metric + one warning per minute, close flushes and counts leftovers as `shutdown`, gauge and published counter.
