@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PII_MODES, PII_TYPES } from "../core/pii.js";
 
 const positiveInt = z.number().int().positive();
 const envVarName = z.string().regex(/^[A-Z_][A-Z0-9_]*$/, "must be an environment variable name");
@@ -89,6 +90,14 @@ const cacheSchema = z.strictObject({
     .prefault({}),
 });
 
+/** PII redaction (spec 010): default mode for keys without their own, detectors, deny-list. */
+const piiSchema = z.strictObject({
+  defaultMode: z.enum(PII_MODES).default("off"),
+  detectors: z.array(z.enum(PII_TYPES)).default([...PII_TYPES]),
+  /** Literal terms (never regular expressions), matched case-insensitively on word boundaries. */
+  denyList: z.array(z.string().trim().min(1)).default([]),
+});
+
 export const configSchema = z
   .strictObject({
     server: serverSchema.prefault({}),
@@ -110,6 +119,7 @@ export const configSchema = z
     limits: limitsSchema.prefault({}),
     usage: usageSchema.prefault({}),
     cache: cacheSchema.prefault({}),
+    pii: piiSchema.prefault({}),
     pricingFile: z.string().min(1).default("config/pricing.yaml"),
   })
   .superRefine((config, ctx) => {

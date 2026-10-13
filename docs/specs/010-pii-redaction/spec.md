@@ -1,6 +1,6 @@
 # Spec 010: PII redaction (mask and block)
 
-- **Status:** Approved (2026-10-13)
+- **Status:** Done (2026-10-13)
 - **Owner:** @thisanches07
 - **Release:** v0.2
 - **Depends on:** 004 (implemented in wave A, in parallel with 006 and 014; merges **after 006** and adds `piiDetections` through 006's request-outcome hook, see `docs/specs/waves.md`)

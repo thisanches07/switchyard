@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import type {
   ApiKeyRecord,
   AuthRecord,
+  KeyPatch,
   KeyStore,
   Limits,
   LimitsPatch,
@@ -68,6 +69,7 @@ export class DrizzleKeyStore implements KeyStore {
         expiresAt: input.expiresAt,
         rpm: input.rpm ?? null,
         tpm: input.tpm ?? null,
+        piiMode: input.piiMode ?? null,
       })
       .returning();
     if (!row) throw new Error("insert returned no row");
@@ -96,9 +98,10 @@ export class DrizzleKeyStore implements KeyStore {
     return existing && toRecord(existing);
   }
 
-  async updateKeyLimits(id: string, patch: LimitsPatch): Promise<ApiKeyRecord | undefined> {
+  async updateKeyLimits(id: string, patch: KeyPatch): Promise<ApiKeyRecord | undefined> {
     if (!UUID.test(id)) return undefined;
-    const values = limitValues(patch);
+    const values: Partial<typeof apiKeys.$inferInsert> = limitValues(patch);
+    if (patch.piiMode !== undefined) values.piiMode = patch.piiMode;
     if (Object.keys(values).length === 0) {
       const [row] = await this.db.select().from(apiKeys).where(eq(apiKeys.id, id)).limit(1);
       return row && toRecord(row);
@@ -138,6 +141,7 @@ function toRecord(row: KeyRow): ApiKeyRecord {
     status: row.status,
     rpm: row.rpm,
     tpm: row.tpm,
+    piiMode: row.piiMode,
     expiresAt: row.expiresAt,
     createdAt: row.createdAt,
     revokedAt: row.revokedAt,

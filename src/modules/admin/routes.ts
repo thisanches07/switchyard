@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { ApiKeyRecord, AuthRecord, KeyStore } from "../../core/auth.js";
 import { invalidAdminToken, notFound, usageUnavailable } from "../../core/errors.js";
+import { PII_MODES } from "../../core/pii.js";
 import type { UsageReader } from "../../core/usage.js";
 import type { AuthCache } from "../auth/cache.js";
 import { displayPrefix, generateKey, hashKey, parseBearer } from "../auth/keys.js";
@@ -35,12 +36,23 @@ const limitsPatch = z
     path: ["rpm"],
   });
 
+/** A key's PII mode (spec 010); null falls back to `pii.defaultMode`. */
+const piiMode = z.enum(PII_MODES).nullable();
+
+const keyPatch = z
+  .object({ rpm: limit.optional(), tpm: limit.optional(), piiMode: piiMode.optional() })
+  .refine((p) => p.rpm !== undefined || p.tpm !== undefined || p.piiMode !== undefined, {
+    message: "set rpm, tpm and/or piiMode (null clears)",
+    path: ["piiMode"],
+  });
+
 const keyBody = z.object({
   teamId: z.uuid(),
   name: z.string().trim().min(1).max(100),
   allowedModels: z.array(z.string().min(1)).max(100).nullable().optional(),
   rpm: limit.optional(),
   tpm: limit.optional(),
+  piiMode: piiMode.optional(),
   expiresAt: z.iso
     .datetime({ offset: true })
     .refine((value) => Date.parse(value) > Date.now(), "must be in the future")
@@ -63,6 +75,7 @@ function keyView(record: ApiKeyRecord) {
     status: record.status,
     rpm: record.rpm,
     tpm: record.tpm,
+    piiMode: record.piiMode,
     expiresAt: record.expiresAt,
     createdAt: record.createdAt,
     revokedAt: record.revokedAt,
@@ -105,6 +118,7 @@ export async function adminRoutes(app: FastifyInstance, opts: AdminRoutesOptions
       expiresAt: body.expiresAt ? new Date(body.expiresAt) : null,
       rpm: body.rpm ?? null,
       tpm: body.tpm ?? null,
+      piiMode: body.piiMode ?? null,
     });
     request.log.info({ keyId: record.id, teamId: team.id }, "api key created");
     // The only time the plaintext key leaves the gateway.
@@ -127,11 +141,11 @@ export async function adminRoutes(app: FastifyInstance, opts: AdminRoutesOptions
 
   app.patch("/admin/keys/:id", { schema: docs.patchKeyLimits }, async (request) => {
     const { id } = parseWith(keyParams, request.params);
-    const patch = parseWith(limitsPatch, request.body);
+    const patch = parseWith(keyPatch, request.body);
     const record = await opts.store.updateKeyLimits(id, patch);
     if (!record) throw notFound("API key", id);
     opts.cache.invalidate((cached) => cached.key.id === id);
-    request.log.info({ keyId: id, ...patch }, "api key limits updated");
+    request.log.info({ keyId: id, ...patch }, "api key settings updated");
     return keyView(record);
   });
 

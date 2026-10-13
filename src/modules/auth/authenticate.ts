@@ -107,6 +107,7 @@ export function createAuthenticate(options: AuthenticateOptions) {
       allowedModels: key.allowedModels,
       keyLimits: { rpm: key.rpm, tpm: key.tpm },
       teamLimits: { rpm: team.rpm, tpm: team.tpm },
+      piiMode: key.piiMode,
     };
     request.log = request.log.child({ teamId: key.teamId, keyId: key.id });
     tagRequestSpan(request);

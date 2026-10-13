@@ -17,8 +17,10 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
+import { PII_MODES } from "../../core/pii.js";
 
 export const keyStatus = pgEnum("api_key_status", ["active", "revoked"]);
+export const piiMode = pgEnum("pii_mode", PII_MODES);
 
 export const teams = pgTable(
   "teams",
@@ -53,6 +55,8 @@ export const apiKeys = pgTable(
     /** Per-minute limits; NULL = use limits.defaults from the config (spec 005). */
     rpm: integer("rpm"),
     tpm: integer("tpm"),
+    /** PII redaction mode; NULL = pii.defaultMode from the config (spec 010). */
+    piiMode: piiMode("pii_mode"),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     revokedAt: timestamp("revoked_at", { withTimezone: true }),

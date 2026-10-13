@@ -24,13 +24,15 @@ export interface MockProviderOptions {
 const CONTENT = "This is a mock response.";
 const PIECES = ["This", " is", " a", " mock", " response."];
 const COMPLETION_TOKENS = 6;
+const ECHO_MODEL = "echo";
 /** Matches the embedding model fixed in ADR-0005 (nomic-embed-text). */
 const EMBEDDING_DIMENSIONS = 768;
 
 /**
  * Deterministic provider for tests and benchmarks (specs 002 and 003).
  * Models named `error-<status>` fail with that upstream status before responding;
- * `error-midstream` fails after the first streamed chunk.
+ * `error-midstream` fails after the first streamed chunk; `echo` answers with the text of the
+ * last user message (spec 010: shows what the provider received, e.g. PII placeholders).
  */
 export function createMockProvider(
   name: string,
@@ -68,6 +70,7 @@ export function createMockProvider(
     async chat(request: ChatRequest, ctx: CallContext): Promise<ChatResult> {
       await beforeResponse(request.model, ctx.signal);
       const inputTokens = Math.ceil(contentLength(request) / 4);
+      const content = request.model === ECHO_MODEL ? lastUserText(request) : CONTENT;
       counter += 1;
       return {
         body: {
@@ -78,7 +81,7 @@ export function createMockProvider(
           choices: [
             {
               index: 0,
-              message: { role: "assistant", content: CONTENT },
+              message: { role: "assistant", content },
               finish_reason: "stop",
             },
           ],
@@ -113,7 +116,9 @@ export function createMockProvider(
       return (async function* () {
         const chunks: ChatChunk[] = [
           chunk({ role: "assistant", content: "" }, null),
-          ...PIECES.map((piece) => chunk({ content: piece }, null)),
+          ...(request.model === ECHO_MODEL ? echoPieces(lastUserText(request)) : PIECES).map(
+            (piece) => chunk({ content: piece }, null),
+          ),
           chunk({}, "stop"),
         ];
         if (wantsUsage) {
@@ -168,6 +173,27 @@ function includeUsage(request: ChatRequest): boolean {
     options !== null &&
     (options as { include_usage?: unknown }).include_usage === true
   );
+}
+
+/** Text of the last user message: string content, or its `type: "text"` parts joined. */
+function lastUserText(request: ChatRequest): string {
+  const last = request.messages.findLast((m) => m.role === "user");
+  if (typeof last?.content === "string") return last.content;
+  if (!Array.isArray(last?.content)) return "";
+  return last.content
+    .map((part: unknown) => {
+      const { type, text } = (part ?? {}) as { type?: unknown; text?: unknown };
+      return type === "text" && typeof text === "string" ? text : "";
+    })
+    .join("");
+}
+
+/** Splits echoed text into about three pieces, so streams have several content chunks. */
+function echoPieces(text: string): string[] {
+  const size = Math.max(1, Math.ceil(text.length / 3));
+  const pieces: string[] = [];
+  for (let i = 0; i < text.length; i += size) pieces.push(text.slice(i, i + size));
+  return pieces;
 }
 
 function contentLength(request: ChatRequest): number {

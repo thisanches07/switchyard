@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type {
   ApiKeyRecord,
   AuthRecord,
+  KeyPatch,
   KeyStore,
   Limits,
   LimitsPatch,
@@ -9,6 +10,7 @@ import type {
   Team,
 } from "../../src/core/auth.js";
 import { conflict } from "../../src/core/errors.js";
+import type { PiiMode } from "../../src/core/pii.js";
 import { displayPrefix, generateKey, hashKey } from "../../src/modules/auth/keys.js";
 
 export const TEST_PEPPER = "test-pepper-0123456789abcdefghijklmnop";
@@ -65,6 +67,7 @@ export class MemoryKeyStore implements KeyStore {
       status: "active",
       rpm: input.rpm ?? null,
       tpm: input.tpm ?? null,
+      piiMode: input.piiMode ?? null,
       expiresAt: input.expiresAt,
       createdAt: new Date(),
       revokedAt: null,
@@ -88,11 +91,12 @@ export class MemoryKeyStore implements KeyStore {
     return strip(key);
   }
 
-  async updateKeyLimits(id: string, patch: LimitsPatch) {
+  async updateKeyLimits(id: string, patch: KeyPatch) {
     const key = this.keys.get(id);
     if (!key) return undefined;
     if (patch.rpm !== undefined) key.rpm = patch.rpm;
     if (patch.tpm !== undefined) key.tpm = patch.tpm;
+    if (patch.piiMode !== undefined) key.piiMode = patch.piiMode;
     return strip(key);
   }
 
@@ -112,6 +116,7 @@ export class MemoryKeyStore implements KeyStore {
       expiresAt?: Date | null;
       limits?: Partial<Limits>;
       teamLimits?: Partial<Limits>;
+      piiMode?: PiiMode | null;
     } = {},
   ) {
     const teamName = options.team ?? "test-team";
@@ -128,6 +133,7 @@ export class MemoryKeyStore implements KeyStore {
       expiresAt: options.expiresAt ?? null,
       rpm: options.limits?.rpm ?? null,
       tpm: options.limits?.tpm ?? null,
+      piiMode: options.piiMode ?? null,
     });
     return { key, record, team };
   }

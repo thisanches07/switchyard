@@ -253,3 +253,92 @@ describe("admin API: limits (spec 005)", () => {
     expect((await call("PATCH", `/admin/teams/${id}`, { rpm: 5 })).statusCode).toBe(404);
   });
 });
+
+describe("admin API: PII mode (spec 010)", () => {
+  const apps: { close(): Promise<unknown> }[] = [];
+  afterEach(async () => {
+    await Promise.all(apps.splice(0).map((a) => a.close()));
+  });
+
+  async function setup() {
+    const { app, store } = await testApp({ authenticated: false, adminToken: TEST_ADMIN_TOKEN });
+    apps.push(app);
+    const call = (method: "GET" | "POST" | "PATCH", url: string, payload?: object) =>
+      app.inject({ method, url, headers: admin, ...(payload ? { payload } : {}) });
+    const team = (await call("POST", "/admin/teams", { name: "t" })).json() as { id: string };
+    return { app, store, call, team };
+  }
+
+  it("creates keys with a PII mode, null (config default) when omitted, and lists it", async () => {
+    const { call, team } = await setup();
+    const masked = await call("POST", "/admin/keys", {
+      teamId: team.id,
+      name: "m",
+      piiMode: "mask",
+    });
+    expect(masked.statusCode).toBe(201);
+    expect(masked.json()).toMatchObject({ piiMode: "mask" });
+    const inherited = await call("POST", "/admin/keys", { teamId: team.id, name: "i" });
+    expect(inherited.json()).toMatchObject({ piiMode: null });
+    const explicitNull = await call("POST", "/admin/keys", {
+      teamId: team.id,
+      name: "n",
+      piiMode: null,
+    });
+    expect(explicitNull.json()).toMatchObject({ piiMode: null });
+    const listed = (await call("GET", `/admin/keys?teamId=${team.id}`)).json() as {
+      data: { name: string; piiMode: string | null }[];
+    };
+    expect(listed.data.map((k) => [k.name, k.piiMode])).toEqual([
+      ["m", "mask"],
+      ["i", null],
+      ["n", null],
+    ]);
+  });
+
+  it("patches the PII mode alone, keeps limits, null falls back, drops the cached key", async () => {
+    const { app, store, call, team } = await setup();
+    const key = (
+      await call("POST", "/admin/keys", { teamId: team.id, name: "k", rpm: 50 })
+    ).json() as { id: string; key: string };
+    const models = () =>
+      app.inject({
+        method: "GET",
+        url: "/v1/models",
+        headers: { authorization: `Bearer ${key.key}` },
+      });
+    await models();
+    const lookups = store.lookups;
+
+    const blocked = await call("PATCH", `/admin/keys/${key.id}`, { piiMode: "block" });
+    expect(blocked.statusCode).toBe(200);
+    expect(blocked.json()).toMatchObject({ piiMode: "block", rpm: 50 });
+    await models();
+    expect(store.lookups).toBe(lookups + 1);
+
+    const cleared = await call("PATCH", `/admin/keys/${key.id}`, { piiMode: null });
+    expect(cleared.json()).toMatchObject({ piiMode: null, rpm: 50 });
+  });
+
+  it.each([
+    ["POST", { name: "k", piiMode: "redact" }],
+    ["POST", { name: "k", piiMode: true }],
+    ["PATCH", { piiMode: "MASK" }],
+    ["PATCH", {}],
+  ] as const)("rejects an invalid piiMode on %s %j with 400", async (method, payload) => {
+    const { call, team, store } = await setup();
+    const { record } = await store.issueKey();
+    const res =
+      method === "POST"
+        ? await call("POST", "/admin/keys", { teamId: team.id, ...payload })
+        : await call("PATCH", `/admin/keys/${record.id}`, payload);
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.message).toContain("piiMode");
+  });
+
+  it("does not accept piiMode on teams", async () => {
+    const { call, team } = await setup();
+    const res = await call("PATCH", `/admin/teams/${team.id}`, { piiMode: "mask" });
+    expect(res.statusCode).toBe(400);
+  });
+});

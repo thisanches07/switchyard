@@ -76,7 +76,7 @@ Teams shipping LLM features hit the same walls:
 | 💰 | Monthly budgets with soft and hard limits | 🔜 007 |
 | 🛟 | Fallback, retries with jitter, circuit breakers | 🔜 008 |
 | ⚡ | Exact cache and tenant-scoped semantic cache (pgvector) | 🔜 009 |
-| 🛡️ | PII redaction with reversible masking | 🔜 010 |
+| 🛡️ | **PII redaction** per key: `mask` (placeholders such as `<CPF_1>`, restored in the answer) or `block`; e-mail, phone, card, CPF, CNPJ, IP and a deny-list | ✅ |
 
 ## 🚀 Quickstart
 
@@ -220,10 +220,11 @@ flowchart LR
     direction LR
     AUTH["API key auth<br/>teams · allow-lists"] --> V["Validate<br/>(Zod)"]
     V --> RES["Resolve model<br/>alias → provider/model"]
-    RES --> LIM --> AD["Provider adapter<br/>timeouts · error mapping"]
+    RES --> LIM --> PII --> AD["Provider adapter<br/>timeouts · error mapping"]
     LIM["Rate limits<br/>Redis token buckets"]
+    PII["PII mask / block"]
     BUD["Budgets"]:::planned
-    CACHE["Cache · PII"]:::planned
+    CACHE["Cache"]:::planned
     FB["Fallback · circuit breaker"]:::planned
   end
 
@@ -310,6 +311,7 @@ Every error, from validation to provider failures, comes back in the OpenAI shap
 | Model outside the key's allow-list | 403 | `model_not_allowed` |
 | Over a request or token limit (key, team or failed-auth address) | 429 | `rate_limit_exceeded` (`type`: `requests` or `tokens`) |
 | A single request needs more tokens than the per-minute limit | 400 | `request_too_large_for_limit` |
+| Personal data in the request of a key in PII `block` mode | 400 | `pii_detected` (types only, never values) |
 | Redis down with `limits.onRedisError: closed` | 503 | `rate_limiter_unavailable` |
 | Unknown model | 404 | `model_not_found` |
 | Body too large / not JSON | 413 / 415 | `request_too_large` / `unsupported_media_type` |
@@ -383,7 +385,7 @@ Every `/v1` request needs a Switchyard key (`Authorization: Bearer sk-sy-…`), 
 | `GET` | `/admin/teams` | List teams |
 | `POST` | `/admin/keys` | Create a key `{ teamId, name, allowedModels?, expiresAt?, rpm?, tpm? }`; the plaintext key is returned **only here** |
 | `GET` | `/admin/keys?teamId=` | List keys (prefix, status, limits; never the key or its hash) |
-| `PATCH` | `/admin/keys/:id` | Set or clear (`null`) the key's `rpm` / `tpm` |
+| `PATCH` | `/admin/keys/:id` | Set or clear (`null`) the key's `rpm` / `tpm` and `piiMode` |
 | `PATCH` | `/admin/teams/:id` | Set or clear the team's `rpm` / `tpm` caps |
 | `POST` | `/admin/keys/:id/revoke` | Revoke a key; rejected immediately on this instance, everywhere within 30 s |
 | `GET` | `/admin/usage?from=&to=&groupBy=&teamId=&keyId=` | Requests, tokens and cost per team, key, model, provider or day ([usage](#-usage-events)) |
@@ -450,6 +452,38 @@ curl -s "localhost:8080/admin/usage?groupBy=model&from=2026-10-01" -H "$ADMIN" |
 
 `groupBy` is `team`, `key`, `model`, `provider` or `day` (default; `from`/`to` default to the last 30 days, at most 366). Costs stay `null` (counted in `unknownCostRequests`) until budgets land in spec 007. Results are eventually consistent: a request shows up within seconds. Set `usage.enabled: false` to run without Kafka.
 
+## 🛡️ PII redaction
+
+Personal data in prompts can be **masked** before it reaches the provider, or the request **blocked**. Set a default in the config and override it per key (`piiMode` on `POST /admin/keys` and `PATCH /admin/keys/:id`; `null` falls back to the default):
+
+```yaml
+pii:
+  defaultMode: off            # off | mask | block
+  detectors: [email, phone, card, cpf, cnpj, ip, term]
+  denyList: ["Project Falcon"] # literal terms, case-insensitive, whole words
+```
+
+With `mask`, each value becomes a typed placeholder (`<CPF_1>`, `<EMAIL_1>`, the same value always gets the same one) and the original comes back in the answer, so the application does not notice:
+
+```text
+client → gateway   "My CPF is 529.982.247-25"
+gateway → provider "My CPF is <CPF_1>"
+provider → gateway "Got it, <CPF_1> is registered."
+gateway → client   "Got it, 529.982.247-25 is registered."     x-switchyard-pii: masked
+```
+
+With `block`, the request gets `400 pii_detected` naming only the types found (`cpf, email`); no provider is called and the reserved tokens are refunded.
+
+| `x-switchyard-pii` | Meaning |
+|---|---|
+| `masked` | Values were replaced and restored in the answer (chat and embeddings) |
+| `masked-unrestored` | **Streamed** answers keep the placeholders for now; restoring inside a stream is [spec 015](docs/specs/015-pii-streaming-restore/spec.md) |
+| `none` | The key scans but nothing was found |
+| `blocked` | On the `400 pii_detected` response of a `block` key |
+| (absent) | Mode `off`: nothing is scanned |
+
+Detectors use check digits (CPF, CNPJ including the 2026 alphanumeric format), Luhn (cards) and real address parsers (IP), so a random 11-digit number is not a CPF. **Names, addresses and other free text are not detected**, and restoring is best-effort: a model that rewrites `<CPF_1>` as `CPF 1` gets it back unrestored. Original values and the placeholder map live only in the memory of the request: never in logs, spans, metrics, Redis or Postgres. Details: [PII redaction guide](docs/pii.md).
+
 ## 🔭 Observability
 
 Every response tells you what happened:
@@ -474,6 +508,7 @@ x-switchyard-upstream-ms: 986
 | Gauge | `switchyard_usage_buffer_events` | usage events waiting in the gateway's buffer |
 | Counter | `switchyard_usage_worker_events_total` | worker results: `inserted`, `duplicate`, `dlq` |
 | Span | `switchyard.usage.consume` | one per worker batch, with message and result counts |
+| Counter | `switchyard_pii_detections_total` | PII occurrences found, by `type`; request spans carry `switchyard.pii.mode` / `.action` / `.detections` |
 | Logs | JSON (pino) | every line carries `trace_id` / `span_id`, plus `teamId` / `keyId` once authenticated; secrets redacted |
 
 > [!IMPORTANT]
@@ -581,6 +616,7 @@ Full scope and dependencies: [spec backlog](docs/specs/README.md).
 | 🧾 [Architecture Decision Records](docs/adr/README.md) | Why Fastify, why Kafka, why no retries after the first streamed byte, … |
 | 📐 [Specs](docs/specs/README.md) | Every feature with EARS acceptance criteria, design and tasks |
 | 🛡️ [Threat model](docs/threat-model.md) | STRIDE analysis and mitigations |
+| 🔐 [PII redaction guide](docs/pii.md) | Modes, detectors, placeholders, headers and limits of `mask` / `block` |
 | 📈 [Benchmarks](docs/benchmarks.md) | Method for the k6 benchmarks; numbers are published only once measured |
 
 ## 🤝 Contributing

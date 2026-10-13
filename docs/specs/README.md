@@ -24,7 +24,7 @@ Status: `planned` → `draft` → `approved` → `in progress` → `done`.
 | # | Spec | Scope | Depends on | Status |
 |---|---|---|---|---|
 | 009 | caching | Exact cache in Redis (temperature 0 or forced), semantic cache in pgvector with scoping from ADR-0009, cached responses re-chunked as streams, hit-rate and USD-saved metrics, cross-tenant isolation test | 007, 008 | approved |
-| 010 | pii-redaction | Detectors (email, phone BR/E.164, card with Luhn, CPF/CNPJ with check digits, IP, custom deny-list), modes `off/mask/block` per key, `mask` replaces values in the request (streaming included) and restores them in **non-streaming** responses; in streaming responses placeholders like `<CPF_1>` stay unrestored until spec 015; `block` is a separate opt-in, detection metrics, no raw values in logs | 004 | in progress |
+| 010 | pii-redaction | Detectors (email, phone BR/E.164, card with Luhn, CPF/CNPJ with check digits, IP, custom deny-list), modes `off/mask/block` per key, `mask` replaces values in the request (streaming included) and restores them in **non-streaming** responses; in streaming responses placeholders like `<CPF_1>` stay unrestored until spec 015; `block` is a separate opt-in, detection metrics, no raw values in logs | 004 | done |
 
 ## v0.3: proof and production
 

@@ -52,6 +52,32 @@ describe("mock provider", () => {
     expect(JSON.stringify(body)).not.toContain("hunter2");
   });
 
+  it("the echo model answers with the last user message, text parts included (spec 010)", async () => {
+    const mock = createMockProvider("mock", { latencyMs: 0, errorRate: 0 });
+    const { body } = await mock.chat(request("echo"), ctx());
+    expect(body).toMatchObject({
+      choices: [{ message: { role: "assistant", content: "Tell me a secret: hunter2" } }],
+    });
+    const parts = await mock.chat(
+      {
+        model: "echo",
+        messages: [
+          { role: "user", content: "first" },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "a " },
+              { type: "image_url", image_url: { url: "x" } },
+              { type: "text", text: "b" },
+            ],
+          },
+        ],
+      },
+      ctx(),
+    );
+    expect(parts.body).toMatchObject({ choices: [{ message: { content: "a b" } }] });
+  });
+
   it("honours latencyMs", async () => {
     const mock = createMockProvider("mock", { latencyMs: 60, errorRate: 0 });
     const started = performance.now();
@@ -114,6 +140,14 @@ describe("mock provider streaming", () => {
     expect(content(chunks)).toBe("This is a mock response.");
     expect(chunks.at(-1)).toMatchObject({ choices: [{ finish_reason: "stop" }] });
     expect(chunks.some((c) => "usage" in c)).toBe(false);
+  });
+
+  it("the echo model streams the last user message in several pieces (spec 010)", async () => {
+    const mock = createMockProvider("mock", config);
+    const chunks = await drain(await mock.chatStream(request("echo"), ctx()));
+    expect(content(chunks)).toBe("Tell me a secret: hunter2");
+    expect(chunks.filter((c) => content([c]) !== "").length).toBeGreaterThan(1);
+    expect(chunks.at(-1)).toMatchObject({ choices: [{ finish_reason: "stop" }] });
   });
 
   it("adds a usage chunk when the request asks for it", async () => {

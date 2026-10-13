@@ -19,4 +19,26 @@ describe("MemoryKeyStore (test double for KeyStore)", () => {
     expect(Object.keys((await store.listKeys())[0] ?? {})).not.toContain("hash");
     expect(await store.revokeKey("missing")).toBeUndefined();
   });
+
+  it("stores the PII mode (null by default) and patches it without touching limits", async () => {
+    const store = new MemoryKeyStore();
+    const { record } = await store.issueKey({ limits: { rpm: 5 } });
+    expect(record.piiMode).toBeNull();
+    const { record: masked } = await store.issueKey({ piiMode: "mask" });
+    expect(masked.piiMode).toBe("mask");
+
+    expect(await store.updateKeyLimits(record.id, { piiMode: "block" })).toMatchObject({
+      piiMode: "block",
+      rpm: 5,
+    });
+    expect(await store.updateKeyLimits(record.id, { rpm: 7 })).toMatchObject({
+      piiMode: "block",
+      rpm: 7,
+    });
+    expect(await store.updateKeyLimits(record.id, { piiMode: null })).toMatchObject({
+      piiMode: null,
+    });
+    const found = await store.findKeyByHash([...store.keys.values()][0]?.hash ?? "");
+    expect(found?.key.piiMode).toBeNull();
+  });
 });

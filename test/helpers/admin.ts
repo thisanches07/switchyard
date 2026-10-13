@@ -2,7 +2,13 @@
 export async function createKeyViaAdmin(
   baseUrl: string,
   adminToken: string,
-  options: { team?: string; allowedModels?: string[]; rpm?: number; tpm?: number } = {},
+  options: {
+    team?: string;
+    allowedModels?: string[];
+    rpm?: number;
+    tpm?: number;
+    piiMode?: "off" | "mask" | "block";
+  } = {},
 ): Promise<string> {
   const headers = { authorization: `Bearer ${adminToken}`, "content-type": "application/json" };
   const teamRes = await fetch(`${baseUrl}/admin/teams`, {
@@ -23,6 +29,7 @@ export async function createKeyViaAdmin(
       ...(options.allowedModels ? { allowedModels: options.allowedModels } : {}),
       ...(options.rpm ? { rpm: options.rpm } : {}),
       ...(options.tpm ? { tpm: options.tpm } : {}),
+      ...(options.piiMode ? { piiMode: options.piiMode } : {}),
     }),
   });
   if (keyRes.status !== 201) throw new Error(`create key: ${keyRes.status} ${await keyRes.text()}`);

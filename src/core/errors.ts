@@ -143,6 +143,16 @@ export const requestTooLargeForLimit = (scope: string, capacity: number) =>
 export const usageUnavailable = () =>
   new GatewayError(503, SERVER, "usage_unavailable", "Usage reporting is not configured");
 
+/** PII `block` mode (spec 010): names the detected types only, never a value or a position. */
+export const piiDetected = (types: readonly string[], headers: Record<string, string> = {}) =>
+  new GatewayError(
+    400,
+    INVALID,
+    "pii_detected",
+    `Request blocked: personal data detected (${types.join(", ")}). Remove it, or ask the operator to use PII mode "mask" for this key.`,
+    headers,
+  );
+
 export const rateLimiterUnavailable = () =>
   new GatewayError(
     503,

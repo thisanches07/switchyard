@@ -6,6 +6,8 @@ import type { UsageOperation } from "../../core/usage.js";
 import { type AuthenticateOptions, createAuthenticate } from "../auth/authenticate.js";
 import { isModelAllowed } from "../auth/models.js";
 import { docs } from "../docs.js";
+import { restoreChatResponse } from "../pii/restore.js";
+import { createPiiStage } from "../pii/stage.js";
 import type { Admission, AdmissionService } from "../ratelimit/admission.js";
 import { estimateChatTokens, estimateEmbeddingTokens } from "../ratelimit/estimate.js";
 import { listModels } from "../routing/models.js";
@@ -37,6 +39,8 @@ export async function proxyRoutes(app: FastifyInstance, opts: ProxyRoutesOptions
   app.addHook("onRequest", createAuthenticate(opts.auth));
 
   const allowedModels = (request: FastifyRequest) => request.principal?.allowedModels ?? null;
+  // PII mask/block (spec 010): after admission, before the cache and any provider.
+  const pii = createPiiStage(opts.config.pii);
 
   /** Resolves the model, checks the key may use it, picks the provider and sets headers. */
   function route(
@@ -98,7 +102,6 @@ export async function proxyRoutes(app: FastifyInstance, opts: ProxyRoutesOptions
   app.post("/v1/chat/completions", { schema: docs.chatCompletions }, async (request, reply) => {
     const body = parseChatRequest(request.body);
     const [resolved, provider] = route(body.model, request, reply);
-    const upstreamRequest = { ...body, model: resolved.model };
     const stream = body.stream === true;
     const admission = await admit(
       request,
@@ -106,6 +109,8 @@ export async function proxyRoutes(app: FastifyInstance, opts: ProxyRoutesOptions
       estimateChatTokens(body, opts.config.limits.completionReserveTokens),
       { operation: "chat", stream, model: body.model, resolved },
     );
+    const masked = await pii.chat({ request, reply, admission, stream }, body);
+    const upstreamRequest = { ...masked.body, model: resolved.model };
 
     if (stream) {
       return streamChat({
@@ -131,7 +136,7 @@ export async function proxyRoutes(app: FastifyInstance, opts: ProxyRoutesOptions
         (r) => r.usage,
         (r) => estimateChatUsage(upstreamRequest, r.body),
       );
-      return result.body;
+      return restoreChatResponse(result.body, masked.restore);
     } finally {
       reply.header("x-switchyard-upstream-ms", Math.round(performance.now() - started));
     }
@@ -147,6 +152,7 @@ export async function proxyRoutes(app: FastifyInstance, opts: ProxyRoutesOptions
       model: body.model,
       resolved,
     });
+    const masked = await pii.embeddings({ request, reply, admission }, body);
 
     const signal = abortOnClientDisconnect(reply);
     const started = performance.now();
@@ -161,7 +167,7 @@ export async function proxyRoutes(app: FastifyInstance, opts: ProxyRoutesOptions
             operation: "embeddings",
             principal: request.principal,
           },
-          () => provider.embeddings({ ...body, model: resolved.model }, { signal }),
+          () => provider.embeddings({ ...masked.body, model: resolved.model }, { signal }),
         ),
         (r) => r.usage && { inputTokens: r.usage.inputTokens, outputTokens: 0 },
         () => ({ inputTokens: inputEstimate, outputTokens: 0 }),

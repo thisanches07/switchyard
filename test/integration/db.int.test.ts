@@ -146,6 +146,43 @@ describe("Postgres: migrations and DrizzleKeyStore", () => {
     expect(await store.updateTeamLimits("nope", { rpm: 1 })).toBeUndefined();
   });
 
+  it("stores, updates and clears the key's PII mode (spec 010)", async () => {
+    const { rows } = await pool.query<{ is_nullable: string; udt_name: string }>(
+      "SELECT is_nullable, udt_name FROM information_schema.columns WHERE table_name = 'api_keys' AND column_name = 'pii_mode'",
+    );
+    expect(rows).toEqual([{ is_nullable: "YES", udt_name: "pii_mode" }]);
+
+    const team = await store.createTeam("pii");
+    const base = { teamId: team.id, name: "app", allowedModels: null, expiresAt: null };
+    const inherited = await store.createKey({
+      ...base,
+      hash: "f".repeat(64),
+      prefix: "sk-sy-ffff",
+    });
+    expect(inherited.piiMode).toBeNull();
+    const masked = await store.createKey({
+      ...base,
+      hash: "1".repeat(64),
+      prefix: "sk-sy-1111",
+      piiMode: "mask",
+      rpm: 3,
+    });
+    expect(masked.piiMode).toBe("mask");
+    expect((await store.findKeyByHash("1".repeat(64)))?.key.piiMode).toBe("mask");
+
+    expect(await store.updateKeyLimits(masked.id, { piiMode: "block" })).toMatchObject({
+      piiMode: "block",
+      rpm: 3,
+    });
+    expect(await store.updateKeyLimits(masked.id, { piiMode: null })).toMatchObject({
+      piiMode: null,
+      rpm: 3,
+    });
+    await expect(
+      pool.query("UPDATE api_keys SET pii_mode = 'redact' WHERE id = $1", [masked.id]),
+    ).rejects.toThrow();
+  });
+
   it("rejects non-positive limits at the database level", async () => {
     const team = await store.createTeam("checked");
     await expect(store.updateTeamLimits(team.id, { rpm: 0 })).rejects.toThrow();

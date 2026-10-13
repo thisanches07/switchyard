@@ -11,6 +11,13 @@ const adminAuth = [{ adminToken: [] }];
 /** Per-minute limit (spec 005): positive integer, or null to clear. */
 const limitSchema = { type: ["integer", "null"], minimum: 1 };
 
+/** PII redaction mode (spec 010); null uses pii.defaultMode from the config. */
+const piiModeSchema = {
+  type: ["string", "null"],
+  enum: ["off", "mask", "block", null],
+  description: "PII redaction: off, mask or block; null uses the config default",
+};
+
 const errorResponse = {
   description: "OpenAI-shaped error",
   type: "object",
@@ -143,15 +150,19 @@ export const docs = {
         expiresAt: { type: "string", format: "date-time" },
         rpm: limitSchema,
         tpm: limitSchema,
+        piiMode: piiModeSchema,
       },
     },
   },
   patchKeyLimits: {
     tags: ["Admin"],
-    summary: "Set or clear (null) the per-minute limits of a key",
+    summary: "Set or clear (null) the per-minute limits and the PII mode of a key",
     security: adminAuth,
     params: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
-    body: { type: "object", properties: { rpm: limitSchema, tpm: limitSchema } },
+    body: {
+      type: "object",
+      properties: { rpm: limitSchema, tpm: limitSchema, piiMode: piiModeSchema },
+    },
   },
   patchTeamLimits: {
     tags: ["Admin"],
