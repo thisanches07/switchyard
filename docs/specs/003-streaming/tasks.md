@@ -33,7 +33,7 @@ One commit per task, ending in `[spec-003]`. `pnpm verify` green after each.
   - ACs: AC-1, AC-4, AC-5, AC-7, AC-10
   - Test: `openai-compatible.test.ts` › stream body has `stream_options.include_usage`, chunks parsed, pre-stream 4xx/5xx mapped, mid-stream network/timeout → gateway errors with the right code, invalid JSON chunk → `upstream_error`; embeddings URL/body/usage/errors.
 
-- [ ] **T7. Upstream span handle and TTFB metric**
+- [x] **T7. Upstream span handle and TTFB metric**
   - ACs: AC-8, AC-11
   - Test: `telemetry.test.ts` › stream span attributes (`switchyard.stream`, ttfb, usage, estimated flag), `switchyard_ttfb_seconds`, statuses `upstream_error_midstream`/`499`, embeddings operation name; non-streaming behaviour unchanged.
   - Files: `src/modules/proxy/telemetry.ts`

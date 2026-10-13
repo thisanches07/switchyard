@@ -1,5 +1,8 @@
 import { SpanKind, SpanStatusCode } from "@opentelemetry/api";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { upstreamTimeout } from "../../../src/core/errors.js";
+import { createLogger } from "../../../src/infra/logger.js";
+import { startUpstreamSpan, tracedUpstreamCall } from "../../../src/modules/proxy/telemetry.js";
 import { testApp } from "../../helpers/app.js";
 import { installTestMetrics } from "../../helpers/metrics.js";
 import { spiedRegistry } from "../../helpers/providers.js";
@@ -89,5 +92,100 @@ describe("upstream telemetry", () => {
       model: "error-500",
       outcome: "error",
     });
+  });
+});
+
+describe("upstream span handle (streaming)", () => {
+  let tracing: ReturnType<typeof installInMemoryTracing>;
+  let meters: ReturnType<typeof installTestMetrics>;
+  const provider = { name: "mock", type: "mock" };
+
+  beforeAll(() => {
+    tracing = installInMemoryTracing();
+    meters = installTestMetrics();
+  });
+  afterAll(async () => {
+    await tracing.uninstall();
+    await meters.uninstall();
+  });
+  beforeEach(() => {
+    tracing.exporter.reset();
+  });
+
+  const logs = () => {
+    const lines: Record<string, unknown>[] = [];
+    const logger = createLogger({
+      level: "info",
+      destination: { write: (s: string) => void lines.push(JSON.parse(s)) },
+    });
+    return { logger, lines };
+  };
+  const lastSpan = () => tracing.exporter.getFinishedSpans().at(-1);
+
+  it("records TTFB, usage and the estimated flag for a completed stream", async () => {
+    const { logger } = logs();
+    const upstream = startUpstreamSpan({ provider, model: "stream-ok", logger, stream: true });
+    await new Promise((r) => setTimeout(r, 20));
+    const ttfb = upstream.firstChunk();
+    upstream.succeed({ usage: { inputTokens: 3, outputTokens: 9 }, estimated: true });
+
+    expect(ttfb).toBeGreaterThanOrEqual(15);
+    expect(lastSpan()?.attributes).toMatchObject({
+      "switchyard.stream": true,
+      "gen_ai.usage.input_tokens": 3,
+      "gen_ai.usage.output_tokens": 9,
+      "switchyard.usage.estimated": true,
+    });
+    expect(lastSpan()?.attributes["switchyard.ttfb_ms"]).toBeGreaterThanOrEqual(15);
+    const ttfbPoints = await meters.points("switchyard_ttfb_seconds");
+    expect(ttfbPoints.map((p) => p.attributes)).toContainEqual({
+      provider: "mock",
+      model: "stream-ok",
+    });
+  });
+
+  it("records mid-stream failures with their own status and a warning", async () => {
+    const { logger, lines } = logs();
+    const upstream = startUpstreamSpan({ provider, model: "stream-mid", logger, stream: true });
+    upstream.firstChunk();
+    upstream.fail(upstreamTimeout("mock"), "midstream");
+    upstream.succeed({});
+
+    expect(lastSpan()?.status).toEqual({ code: SpanStatusCode.ERROR, message: "upstream_timeout" });
+    expect(lastSpan()?.attributes["switchyard.midstream_error"]).toBe(true);
+    expect(lines.some((l) => l.msg === "upstream stream failed after first byte")).toBe(true);
+    const requests = await meters.points("switchyard_requests_total");
+    expect(requests.map((p) => p.attributes)).toContainEqual({
+      provider: "mock",
+      model: "stream-mid",
+      status: "upstream_error_midstream",
+    });
+    expect(tracing.exporter.getFinishedSpans()).toHaveLength(1);
+  });
+
+  it("records client disconnects as 499", async () => {
+    const { logger } = logs();
+    const upstream = startUpstreamSpan({ provider, model: "stream-gone", logger, stream: true });
+    upstream.clientGone();
+    expect(lastSpan()?.attributes["switchyard.client_closed"]).toBe(true);
+    const requests = await meters.points("switchyard_requests_total");
+    expect(requests.map((p) => p.attributes)).toContainEqual({
+      provider: "mock",
+      model: "stream-gone",
+      status: "499",
+    });
+  });
+
+  it("uses the embeddings operation name", async () => {
+    const { logger } = logs();
+    await tracedUpstreamCall(
+      { provider, model: "embed-model", logger, operation: "embeddings" },
+      async () => ({ usage: { inputTokens: 4 } }),
+    );
+    expect(lastSpan()?.attributes).toMatchObject({
+      "gen_ai.operation.name": "embeddings",
+      "gen_ai.usage.input_tokens": 4,
+    });
+    expect(lastSpan()?.attributes).not.toHaveProperty("gen_ai.usage.output_tokens");
   });
 });
