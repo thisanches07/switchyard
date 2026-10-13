@@ -14,7 +14,7 @@ One commit per task, ending in `[spec-005]`. `pnpm verify` exit code checked aft
   - Do: migration (`rpm`/`tpm` + checks), core types (`Limits`, `AuthRecord`, principal limits), `findKeyByHash` joined with the team, `updateKeyLimits`/`updateTeamLimits`, memory store, `AuthCache.invalidateTeam`.
   - Test: `db.int.test.ts` › columns, join, updates, check constraint; `cache.test.ts` › `invalidateTeam`; existing auth tests adapted.
 
-- [ ] **T3. Token estimation and bucket plan**
+- [x] **T3. Token estimation and bucket plan**
   - ACs: AC-5
   - Test: `test/unit/ratelimit/estimate.test.ts`, `plan.test.ts` › chat/embeddings estimates, allowance precedence, effective limits (own → defaults; team own only), oversized request detection.
 
