@@ -1,6 +1,6 @@
 # 0014. Validate with Zod; use Fastify route schemas only for OpenAPI documentation
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-13
 - **Related specs:** 004
 
