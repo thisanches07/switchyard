@@ -54,6 +54,17 @@ describe("authentication on /v1/*", () => {
     expect(Object.values(spies).every((s) => s.requests.length === 0)).toBe(true);
   });
 
+  it("accepts the key in x-api-key, alone or matching the bearer (spec 014, AC-6)", async () => {
+    const { app, store } = await setup();
+    const { key } = await store.issueKey();
+    const send = (headers: Record<string, string>) =>
+      app.inject({ method: "POST", url: "/v1/chat/completions", payload, headers });
+    expect((await send({ "x-api-key": key })).statusCode).toBe(200);
+    expect((await send({ "x-api-key": key, authorization: `Bearer ${key}` })).statusCode).toBe(200);
+    const other = (await store.issueKey()).key;
+    expect401(await send({ "x-api-key": key, authorization: `Bearer ${other}` }));
+  });
+
   it("rejects revoked keys", async () => {
     const { store, chat } = await setup();
     const { key, record } = await store.issueKey();

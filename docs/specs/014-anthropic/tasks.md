@@ -35,7 +35,7 @@ One commit per task, ending in `[spec-014]`. `pnpm verify` green after each.
   - Test: `test/unit/providers/anthropic.test.ts` › URL/headers/body, default base URL, embeddings 400 without a call, stream chunks, error mapping incl. request-id span attribute and dropped params; `registry.test.ts` › anthropic built with key, 503 without; placeholder tests removed.
   - Files: `src/modules/providers/{anthropic,registry}.ts`
 
-- [ ] **T7. x-api-key authentication**
+- [x] **T7. x-api-key authentication**
   - ACs: AC-6
   - Test: `test/unit/auth/keys.test.ts` › `extractApiKey` table; `authenticate.test.ts` › x-api-key accepted, both equal accepted, both differ → 401.
   - Files: `src/modules/auth/{keys,authenticate}.ts`
