@@ -4,6 +4,8 @@ import type { RateLimiter } from "../../../src/core/ratelimit.js";
 import type { UsageEvent } from "../../../src/core/usage.js";
 import { MemoryBudgetCounters } from "../../../src/infra/memory/budget-counters.js";
 import { MemoryRateLimiter } from "../../../src/infra/memory/rate-limiter.js";
+import { decimal } from "../../../src/modules/pricing/decimal.js";
+import { PriceTable } from "../../../src/modules/pricing/table.js";
 import { testApp } from "../../helpers/app.js";
 import { testConfig } from "../../helpers/config.js";
 import { MemoryKeyStore, TEST_ADMIN_TOKEN } from "../../helpers/memory-key-store.js";
@@ -199,6 +201,45 @@ describe("budget admission on /v1 routes (spec 007, AC-6/AC-8/AC-9/AC-11)", () =
     });
     expect(patched.statusCode).toBe(200);
     expect((await post("/v1/chat/completions", chat)).statusCode).toBe(429);
+  });
+
+  it("charges each request's cost, so spend accumulates until the budget rejects (AC-10)", async () => {
+    const store = new MemoryKeyStore();
+    const counters = new MemoryBudgetCounters({ now: () => NOW });
+    // Test-only prices: $1 per token, so a chat (2 input + 6 output tokens) costs $8.
+    const table = new PriceTable([
+      ["mock/*", { input: decimal("1000000"), output: decimal("1000000") }],
+    ]);
+    const { app } = await testApp({
+      store,
+      providers: spiedRegistry().registry,
+      budgetCounters: counters,
+      clock: () => NOW,
+      costEstimator: table,
+      authenticated: false,
+    });
+    apps.push(app);
+    const { key, record } = await store.issueKey({ team: "spender", budgetUsd: "10" });
+    const send = async () => {
+      const res = await app.inject({
+        method: "POST",
+        url: "/v1/chat/completions",
+        payload: chat,
+        headers: { authorization: `Bearer ${key}` },
+      });
+      await new Promise((resolve) => setImmediate(resolve)); // the charge is asynchronous
+      return res;
+    };
+    const first = await send();
+    expect(first.statusCode).toBe(200);
+    expect(first.headers["x-switchyard-cost-usd"]).toBe("8.0000000000");
+    expect(first.headers["x-switchyard-budget-remaining-usd"]).toBe("10");
+    const second = await send();
+    expect(second.statusCode).toBe(200);
+    expect(second.headers["x-switchyard-budget-remaining-usd"]).toBe("2");
+    expect(second.headers["x-switchyard-budget-warning"]).toBe("soft_limit_reached");
+    expect((await send()).statusCode).toBe(429);
+    expect(await counters.read("2026-10", [{ scope: "key", id: record.id }])).toEqual(["16"]);
   });
 
   it("does not check budgets on GET /v1/models", async () => {

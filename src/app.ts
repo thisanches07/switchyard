@@ -154,6 +154,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     recorder: fanOut(budgets.charger, deps.usageRecorder ?? noopRecorder),
     logger: deps.logger,
     price: priceEvent(deps.costEstimator ?? PriceTable.empty()),
+    ...(deps.clock ? { now: deps.clock } : {}),
   });
 
   await app.register(proxyRoutes, {

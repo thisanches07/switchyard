@@ -30,7 +30,12 @@ export function createBudgets(deps: {
       gauge,
       ...(deps.now ? { now: deps.now } : {}),
     }),
-    charger: createBudgetCharger(),
+    charger: createBudgetCharger({
+      counters: deps.counters,
+      logger: deps.logger,
+      gauge,
+      ...(deps.now ? { now: deps.now } : {}),
+    }),
     close: () => gauge.close(),
   };
 }

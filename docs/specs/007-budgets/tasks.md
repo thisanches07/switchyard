@@ -40,7 +40,7 @@ One commit per task, ending in `[spec-007]`. `pnpm verify` green after each (exi
   - Do: `budgets` config key; `budgetExceeded`/`budgetUnavailable` errors; `src/modules/budgets/{check,telemetry}.ts`; wired into `admit()`; `AppDeps.budgetCounters`.
   - Test: `test/unit/budgets/check.test.ts` › `evaluateBudgets` (reject at equality, lowest remaining, key wins ties, soft thresholds, headers), Redis error closed → 503 / open → admit + metric + one warning per minute, no read without budgets, span attributes, warning once per scope/id/period; `test/unit/proxy/budget-routes.test.ts` › 429 shape and headers, no provider call, no rate-limit debit, no usage event, budget `0` blocks, headers on 200 and on the stream, `/v1/messages` Anthropic shape, change applies immediately after PATCH.
 
-- [ ] **T8. Charging counters at the outcome hook and the used-ratio gauge**
+- [x] **T8. Charging counters at the outcome hook and the used-ratio gauge**
   - ACs: AC-10, AC-11, AC-13
   - Do: charger charges key and team counters for known costs (period of `occurredAt`), charge failures counted, `switchyard_budget_used_ratio`.
   - Test: `test/unit/budgets/charge.test.ts` › charged for every key/team, unknown and zero not charged, failure → metric and response unaffected, gauge set/cleared/new-period reset; `budget-routes.test.ts` › second request rejected after the first spent the budget.
