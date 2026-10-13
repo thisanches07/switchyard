@@ -23,6 +23,7 @@
     "test:coverage": "vitest run --project unit --coverage",
     "verify": "pnpm lint && pnpm typecheck && pnpm check:grafana && pnpm test:coverage && pnpm build",
     "test:smoke": "node scripts/compose-smoke.ts --down",
+    "demo:traffic": "node --import tsx scripts/demo-traffic.ts",
     "test:contract": "vitest run --project contract",
     "test:contract:py": "node --import tsx scripts/contract-python.ts",
     "db:generate": "drizzle-kit generate",

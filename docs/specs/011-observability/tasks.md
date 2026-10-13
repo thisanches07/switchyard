@@ -55,7 +55,7 @@ One commit per task, ending in `[spec-011]`. T13 and T14 are blocked on things o
   - Test: `scripts/compose-smoke.ts` step (CI); `test/unit/scripts/grafana-files.test.ts` › Overview answers the AC-6 questions (`dashboardMetrics()` lists the Overview metric names).
   - Files: `scripts/compose-smoke.ts`, `scripts/lib/grafana-check.ts`
 
-- [ ] **T10. `pnpm demo:traffic`**
+- [x] **T10. `pnpm demo:traffic`**
   - ACs: AC-10
   - Do: `scripts/lib/traffic-plan.ts` (pure mix plan), `scripts/demo-traffic.ts` (admin API team/key reuse, mock-only, prints a summary).
   - Test: `test/unit/scripts/traffic-plan.test.ts` › proportions, only `mock/*` refs, forced errors, repeats, burst, duration and rate parsing.
