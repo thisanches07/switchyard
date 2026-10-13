@@ -55,7 +55,7 @@ One commit per task, ending in `[spec-003]`. `pnpm verify` green after each.
   - ACs: AC-13
   - Test: `openai-sdk.contract.test.ts` › stream on mock (content and usage), embeddings on mock (default base64 decoding and explicit float), Ollama stream and `nomic-embed-text` embeddings when available.
 
-- [ ] **T12. Python SDK contract**
+- [x] **T12. Python SDK contract**
   - ACs: AC-13
   - Do: `scripts/contract-python.ts` starts the gateway and runs pytest; `pnpm test:contract:py`; CI job with `actions/setup-python`.
   - Test: `test/contract/python/test_openai_sdk.py` › chat, stream, embeddings on mock; Ollama cases when available.
