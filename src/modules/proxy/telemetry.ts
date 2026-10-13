@@ -12,6 +12,7 @@ import {
 import type { FastifyBaseLogger } from "fastify";
 import type { Principal } from "../../core/auth.js";
 import { GatewayError } from "../../core/errors.js";
+import type { CacheStatus } from "../../core/usage.js";
 
 interface Instruments {
   provider: MeterProvider;
@@ -54,6 +55,8 @@ export interface UpstreamCallInfo {
   principal?: Principal | undefined;
   /** Routing attempt (spec 008): candidate, attempt number and the backoff waited before it. */
   attempt?: { number: number; candidate: string; backoffMs: number } | undefined;
+  /** Cache status of the request (spec 009), the `cache` label of requests_total; default bypass. */
+  cache?: CacheStatus | undefined;
 }
 
 /** Options of a failed attempt (spec 008). */
@@ -98,7 +101,18 @@ export function countUpstreamRequest(info: UpstreamCallInfo, status: string): vo
     model: info.model,
     status,
     team: info.principal?.teamId ?? "none",
+    cache: info.cache ?? "bypass",
   });
+}
+
+/** Counts a request served from the response cache (spec 009): no upstream call, status 200. */
+export function countCachedRequest(labels: {
+  provider: string;
+  model: string;
+  team: string;
+  cache: CacheStatus;
+}): void {
+  getInstruments().requests.add(1, { ...labels, status: "200" });
 }
 
 /**
@@ -130,6 +144,7 @@ export function startUpstreamSpan(info: UpstreamCallInfo): UpstreamSpan {
   });
   // Team only on the request counter: durations stay low-cardinality.
   const team = info.principal?.teamId ?? "none";
+  const cache = info.cache ?? "bypass";
   const spanContext = trace.setSpan(context.active(), span);
   const started = performance.now();
   const labels = { provider: provider.name, model };
@@ -138,7 +153,7 @@ export function startUpstreamSpan(info: UpstreamCallInfo): UpstreamSpan {
   const finish = (status: string, outcome: string, countRequest = true) => {
     ended = true;
     const { requests, upstreamDuration } = getInstruments();
-    if (countRequest) requests.add(1, { ...labels, status, team });
+    if (countRequest) requests.add(1, { ...labels, status, team, cache });
     upstreamDuration.record((performance.now() - started) / 1000, { ...labels, outcome });
     span.end();
   };

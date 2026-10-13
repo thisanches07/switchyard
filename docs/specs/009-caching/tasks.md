@@ -32,7 +32,7 @@ One commit per task, ending in `[spec-009]`. Lint, typecheck and the task's test
   - Test: `test/unit/admin/admin-cache.test.ts` › create/patch/list, invalid type 400, principal after patch; `test/integration/db.int.test.ts` › semantic cache migration (column default, table, indexes).
   - Files: `src/infra/db/{schema,key-store}.ts`, `drizzle/0005_semantic_cache.sql`, `src/core/auth.ts`, `src/modules/admin/routes.ts`, `src/modules/docs.ts`, `src/modules/auth/authenticate.ts`, `test/helpers/{memory-key-store,admin}.ts`
 
-- [ ] **T6. Cache telemetry and request counter label**
+- [x] **T6. Cache telemetry and request counter label**
   - ACs: AC-9, AC-12 (warn limiter), AC-13 (span attributes)
   - Test: `test/unit/cache/telemetry.test.ts` › counters and labels, one warning per minute per layer on an injected clock, span attributes without content; `test/unit/proxy/telemetry.test.ts` › `cache` label on requests_total.
   - Files: `src/modules/cache/telemetry.ts`, `src/modules/proxy/{telemetry,attempts}.ts`

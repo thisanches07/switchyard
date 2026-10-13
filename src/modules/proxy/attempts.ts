@@ -13,6 +13,7 @@ import {
 } from "../../core/errors.js";
 import type { CostEstimator, TokenCounts } from "../../core/pricing.js";
 import type { ChatProvider } from "../../core/provider.js";
+import type { CacheStatus } from "../../core/usage.js";
 import { backoffDelay, type RetrySettings, retryAfterOf } from "../routing/backoff.js";
 import type { BreakerPermit } from "../routing/breaker.js";
 import { classifyFailure } from "../routing/classify.js";
@@ -60,6 +61,8 @@ export interface RunAttemptsArgs<T> {
     operation?: "chat" | "embeddings";
     stream: boolean;
     principal?: Principal | undefined;
+    /** Cache status of the request (spec 009), for requests_total. */
+    cache?: CacheStatus | undefined;
   };
   /**
    * One attempt. For streams it opens the stream and reads the first chunk, so every failure
@@ -183,6 +186,7 @@ export async function runAttempts<T>(args: RunAttemptsArgs<T>): Promise<Served<T
         principal: args.telemetry.principal,
         attempt: { number: attempts, candidate: candidate.ref, backoffMs },
         ...(args.telemetry.operation && { operation: args.telemetry.operation }),
+        ...(args.telemetry.cache && { cache: args.telemetry.cache }),
       };
       const upstream = startUpstreamSpan(info);
       const started = timers.now();
