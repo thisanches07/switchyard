@@ -15,7 +15,7 @@ One commit per task, ending in `[spec-003]`. `pnpm verify` green after each.
   - Test: `test/unit/providers/sse.test.ts` › splits events across arbitrary byte boundaries, `\r\n`, comments ignored, multi-line data joined, stops at `[DONE]`.
   - Files: `src/modules/providers/sse.ts`
 
-- [ ] **T3. Usage helpers**
+- [x] **T3. Usage helpers**
   - ACs: AC-7
   - Test: `test/unit/proxy/usage.test.ts` › extract usage from chunks, strip usage when not requested, drop usage-only chunk, estimate tokens from messages and deltas.
   - Files: `src/modules/proxy/usage.ts`
