@@ -67,6 +67,47 @@ function usageRow(withGroup: boolean) {
     },
   };
 }
+const money = { type: "string", description: "USD, decimal string" };
+
+/** GET /admin/keys|teams/:id/budget (spec 007). */
+function budgetStatusDoc(scope: "key" | "team") {
+  return {
+    tags: ["Admin"],
+    summary: `Monthly budget status of a ${scope}: limit, spend this period and flags (spec 007)`,
+    security: adminAuth,
+    params: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
+    response: {
+      200: {
+        description:
+          "Spend comes from the Redis counter (source: redis) or, if Redis is unavailable, from the usage tables (source: postgres)",
+        type: "object",
+        properties: {
+          scope: { type: "string", enum: ["key", "team"] },
+          id: { type: "string" },
+          period: {
+            type: "object",
+            properties: {
+              start: { type: "string", format: "date-time" },
+              end: { type: "string", format: "date-time" },
+            },
+          },
+          limitUsd: { ...money, type: ["string", "null"] },
+          softLimitPct: { type: "integer" },
+          spentUsd: money,
+          remainingUsd: { ...money, type: ["string", "null"] },
+          softLimitReached: { type: "boolean" },
+          hardLimitReached: { type: "boolean" },
+          unknownCostRequests: { type: "integer" },
+          source: { type: "string", enum: ["redis", "postgres"] },
+        },
+      },
+      401: errorResponse,
+      404: errorResponse,
+      503: errorResponse,
+    },
+  };
+}
+
 const anthropicErrorResponse = {
   description: "Anthropic-shaped error (spec 014)",
   type: "object",
@@ -317,5 +358,7 @@ export const docs = {
       401: errorResponse,
     },
   },
+  keyBudget: budgetStatusDoc("key"),
+  teamBudget: budgetStatusDoc("team"),
   health: { tags: ["Health"], summary: "Liveness / readiness probe" },
 };

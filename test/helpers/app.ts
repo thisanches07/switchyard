@@ -1,7 +1,7 @@
 import type { FastifyInstance, InjectOptions } from "fastify";
 import { buildApp } from "../../src/app.js";
 import type { LoadedConfig } from "../../src/config/load.js";
-import type { BudgetCounters } from "../../src/core/budget.js";
+import type { BudgetCounters, BudgetStore } from "../../src/core/budget.js";
 import type { DependencyCheck } from "../../src/core/health.js";
 import type { ChatProvider } from "../../src/core/provider.js";
 import type { RateLimiter } from "../../src/core/ratelimit.js";
@@ -32,6 +32,8 @@ export interface TestAppOptions {
   costEstimator?: PriceTable;
   /** Budget counters (spec 007); default: fresh in-memory counters. */
   budgetCounters?: BudgetCounters;
+  /** Stored spend for the budget status routes (spec 007). */
+  budgetStore?: BudgetStore;
   /** Clock for budget periods (spec 007). */
   clock?: () => number;
   /**
@@ -62,6 +64,7 @@ export async function testApp(options: TestAppOptions = {}) {
     ...(options.costEstimator === undefined ? {} : { costEstimator: options.costEstimator }),
     ...(options.budgetCounters === undefined ? {} : { budgetCounters: options.budgetCounters }),
     ...(options.clock === undefined ? {} : { clock: options.clock }),
+    ...(options.budgetStore === undefined ? {} : { budgetStore: options.budgetStore }),
     ...(options.bodyLimitBytes === undefined ? {} : { bodyLimitBytes: options.bodyLimitBytes }),
   });
 

@@ -45,7 +45,7 @@ One commit per task, ending in `[spec-007]`. `pnpm verify` green after each (exi
   - Do: charger charges key and team counters for known costs (period of `occurredAt`), charge failures counted, `switchyard_budget_used_ratio`.
   - Test: `test/unit/budgets/charge.test.ts` › charged for every key/team, unknown and zero not charged, failure → metric and response unaffected, gauge set/cleared/new-period reset; `budget-routes.test.ts` › second request rejected after the first spent the budget.
 
-- [ ] **T9. Budget status routes**
+- [x] **T9. Budget status routes**
   - ACs: AC-12
   - Do: `BudgetStore` port; `src/infra/db/budget-store.ts`; `src/modules/budgets/status.ts`; admin routes; OpenAPI.
   - Test: `test/unit/admin/admin-budget-status.test.ts` › key and team shapes, no budget → nulls, soft/hard flags, Redis down → `source: "postgres"`, 404, 503 without store, admin token; `openapi.test.ts` › routes listed; `test/integration/budget-store.int.test.ts` › period sums by key and team, unknown counts, budgets listed.

@@ -10,7 +10,7 @@ import Fastify, {
 } from "fastify";
 import type { LoadedConfig } from "./config/load.js";
 import type { AuthRecord, KeyStore } from "./core/auth.js";
-import type { BudgetCounters } from "./core/budget.js";
+import type { BudgetCounters, BudgetStore } from "./core/budget.js";
 import {
   GatewayError,
   internalError,
@@ -63,6 +63,8 @@ export interface AppDeps {
   costEstimator?: PriceTable;
   /** Budget counters (spec 007, Redis in production); defaults to in-process counters. */
   budgetCounters?: BudgetCounters;
+  /** Stored spend for GET /admin/keys|teams/:id/budget (spec 007); those routes 503 without it. */
+  budgetStore?: BudgetStore;
   /** Clock for budget periods (spec 007); tests inject one. Defaults to `Date.now`. */
   clock?: () => number;
   bodyLimitBytes?: number;
@@ -140,8 +142,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
 
   // Monthly budgets (spec 007): checked before rate limiting, charged when a request ends.
+  const budgetCounters = deps.budgetCounters ?? new MemoryBudgetCounters();
   const budgets = createBudgets({
-    counters: deps.budgetCounters ?? new MemoryBudgetCounters(),
+    counters: budgetCounters,
     config: deps.config.budgets,
     logger: deps.logger,
     ...(deps.clock ? { now: deps.clock } : {}),
@@ -185,6 +188,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       adminToken: deps.adminToken,
       cache: authCache,
       usage: deps.usageReader,
+      budgets: { counters: budgetCounters, store: deps.budgetStore, now: deps.clock ?? Date.now },
     });
   }
   return app;

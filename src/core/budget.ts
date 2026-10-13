@@ -31,3 +31,21 @@ export interface BudgetCounters {
     expireAtMs: number,
   ): Promise<number>;
 }
+
+/** Stored spend of one scope over a range of days (from `usage_daily`, exact decimals). */
+export interface StoredSpend {
+  /** Sum of known costs, decimal string ("0" when none). */
+  spentUsd: string;
+  /** Requests whose cost is unknown: not part of `spentUsd`. */
+  unknownCostRequests: number;
+}
+
+/** The source of truth for spend and the configured budgets (Postgres, spec 007). */
+export interface BudgetStore {
+  /** Spend per key and per team with usage on days in [fromDay, toDay) (`YYYY-MM-DD`, UTC). */
+  periodSpend(fromDay: string, toDay: string): Promise<(StoredSpend & { ref: BudgetRef })[]>;
+  /** One scope's spend on days in [fromDay, toDay). */
+  scopeSpend(ref: BudgetRef, fromDay: string, toDay: string): Promise<StoredSpend>;
+  /** Every key and team that has a monthly budget. */
+  listBudgets(): Promise<{ ref: BudgetRef; limitUsd: string }[]>;
+}

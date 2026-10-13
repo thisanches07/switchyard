@@ -2,6 +2,7 @@ import { buildApp } from "./app.js";
 import { loadEnv } from "./config/env.js";
 import { ConfigError, formatConfigError } from "./config/errors.js";
 import { loadConfig } from "./config/load.js";
+import { DrizzleBudgetStore } from "./infra/db/budget-store.js";
 import { createDatabase } from "./infra/db/client.js";
 import { DrizzleKeyStore } from "./infra/db/key-store.js";
 import { migrateDatabase } from "./infra/db/migrate.js";
@@ -10,6 +11,7 @@ import { DrizzleUsageStore } from "./infra/db/usage-store.js";
 import { createUndiciClient } from "./infra/http/undici-client.js";
 import { createKafkaProducer } from "./infra/kafka/producer.js";
 import { createLogger } from "./infra/logger.js";
+import { RedisBudgetCounters } from "./infra/redis/budget-counters.js";
 import { createRedisClient, redisCheck } from "./infra/redis/client.js";
 import { RedisRateLimiter } from "./infra/redis/rate-limiter.js";
 import { shutdownTelemetry } from "./infra/telemetry/sdk.js";
@@ -131,6 +133,9 @@ async function main(): Promise<void> {
     usageRecorder: usage,
     usageReader: new DrizzleUsageStore(db),
     costEstimator: pricing,
+    // Spec 007: hot spend counters in Redis, stored spend in Postgres.
+    budgetCounters: new RedisBudgetCounters(redis),
+    budgetStore: new DrizzleBudgetStore(db),
   });
 
   installShutdown({
