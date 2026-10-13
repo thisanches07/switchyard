@@ -25,7 +25,7 @@ One commit per task, ending in `[spec-014]`. `pnpm verify` green after each.
   - Test: `test/unit/anthropic/upstream-errors.test.ts` › status table (400/403/404/413/422 pass-through, 401 → 502, 429 + retry-after, 529 → 503, 500 → 502, 504), retryable flags, `error` event types.
   - Files: `src/modules/anthropic/upstream-errors.ts`
 
-- [ ] **T5. Outbound stream translation**
+- [x] **T5. Outbound stream translation**
   - ACs: AC-10, AC-12
   - Test: `test/unit/anthropic/outbound-stream.test.ts` › SSE fixtures: text, tool use, mixed, thinking (nothing emitted, role chunk deferred), `error` before and after content, usage from `message_start` + last `message_delta`, missing `message_stop` → error, ping/unknown ignored.
   - Files: `src/modules/anthropic/outbound-stream.ts`
