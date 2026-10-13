@@ -65,7 +65,7 @@ One commit per task, ending in `[spec-014]`. `pnpm verify` green after each.
   - Test: `test/unit/proxy/messages.test.ts` › cross-family via mock (message, stream), same-family via fake HTTP (response unchanged, model rewritten), blockers, rate-limit headers and 429, every error class in Anthropic shape with request-id, chat errors keep OpenAI shape, mid-stream error event, request span attributes; `openapi.test.ts` › `/v1/messages` documented.
   - Files: `src/modules/proxy/{messages,routes}.ts`, `src/app.ts`, `src/modules/docs.ts`
 
-- [ ] **T13. Mock tool calls**
+- [x] **T13. Mock tool calls**
   - ACs: AC-16 (enabler)
   - Test: `test/unit/providers/mock.test.ts` › tools present and last message not a tool result → tool call (non-stream and stream); otherwise text.
   - Files: `src/modules/providers/mock.ts`

@@ -252,3 +252,77 @@ describe("mock provider embeddings", () => {
     ).toBe(502);
   });
 });
+
+describe("mock provider tool calls (spec 014, SDK tool round trips)", () => {
+  const tools = [
+    { type: "function", function: { name: "get_weather", parameters: { type: "object" } } },
+    { type: "function", function: { name: "other" } },
+  ];
+  const withTools = (messages: { role: string; [k: string]: unknown }[], extra = {}) => ({
+    model: "fast-model",
+    messages,
+    tools,
+    ...extra,
+  });
+  const ask = [{ role: "user", content: "Weather in Paris?" }];
+
+  it("calls the first function tool when tools are offered and no result is pending", async () => {
+    const mock = createMockProvider("mock", { latencyMs: 0, errorRate: 0 });
+    const { body } = await mock.chat(withTools(ask), ctx());
+    expect(body).toMatchObject({
+      choices: [
+        {
+          message: {
+            role: "assistant",
+            content: null,
+            tool_calls: [
+              {
+                id: expect.stringMatching(/^call_mock_/),
+                type: "function",
+                function: { name: "get_weather", arguments: "{}" },
+              },
+            ],
+          },
+          finish_reason: "tool_calls",
+        },
+      ],
+    });
+  });
+
+  it("answers with text once the tool result is back, or when tool_choice is none", async () => {
+    const mock = createMockProvider("mock", { latencyMs: 0, errorRate: 0 });
+    const afterResult = await mock.chat(
+      withTools([
+        ...ask,
+        { role: "assistant", content: null, tool_calls: [] },
+        { role: "tool", tool_call_id: "call_mock_1", content: "18C" },
+      ]),
+      ctx(),
+    );
+    expect(afterResult.body).toMatchObject({ choices: [{ finish_reason: "stop" }] });
+    const none = await mock.chat(withTools(ask, { tool_choice: "none" }), ctx());
+    expect(none.body).toMatchObject({ choices: [{ finish_reason: "stop" }] });
+  });
+
+  it("streams the tool call as id/name then arguments, ending with tool_calls", async () => {
+    const mock = createMockProvider("mock", { latencyMs: 0, errorRate: 0 });
+    const chunks: Record<string, unknown>[] = [];
+    for await (const chunk of await mock.chatStream(withTools(ask), ctx())) chunks.push(chunk);
+    const deltas = chunks.map(
+      (c) => (c.choices as { delta: Record<string, unknown>; finish_reason: unknown }[])[0],
+    );
+    expect(deltas[0]?.delta).toEqual({ role: "assistant", content: null });
+    expect(deltas[1]?.delta).toEqual({
+      tool_calls: [
+        {
+          index: 0,
+          id: expect.stringMatching(/^call_mock_/),
+          type: "function",
+          function: { name: "get_weather", arguments: "" },
+        },
+      ],
+    });
+    expect(deltas[2]?.delta).toEqual({ tool_calls: [{ index: 0, function: { arguments: "{}" } }] });
+    expect(deltas.at(-1)?.finish_reason).toBe("tool_calls");
+  });
+});

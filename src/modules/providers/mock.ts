@@ -33,6 +33,8 @@ const EMBEDDING_DIMENSIONS = 768;
  * Models named `error-<status>` fail with that upstream status before responding;
  * `error-midstream` fails after the first streamed chunk; `echo` answers with the text of the
  * last user message (spec 010: shows what the provider received, e.g. PII placeholders).
+ * Requests offering function tools get a call to the first tool until a tool result comes
+ * back (spec 014, see `toolToCall`).
  */
 export function createMockProvider(
   name: string,
@@ -72,6 +74,7 @@ export function createMockProvider(
       const inputTokens = Math.ceil(contentLength(request) / 4);
       const content = request.model === ECHO_MODEL ? lastUserText(request) : CONTENT;
       counter += 1;
+      const tool = toolToCall(request);
       return {
         body: {
           id: `chatcmpl-mock-${counter}`,
@@ -79,11 +82,27 @@ export function createMockProvider(
           created: Math.floor(Date.now() / 1000),
           model: request.model,
           choices: [
-            {
-              index: 0,
-              message: { role: "assistant", content },
-              finish_reason: "stop",
-            },
+            tool
+              ? {
+                  index: 0,
+                  message: {
+                    role: "assistant",
+                    content: null,
+                    tool_calls: [
+                      {
+                        id: `call_mock_${counter}`,
+                        type: "function",
+                        function: { name: tool, arguments: "{}" },
+                      },
+                    ],
+                  },
+                  finish_reason: "tool_calls",
+                }
+              : {
+                  index: 0,
+                  message: { role: "assistant", content },
+                  finish_reason: "stop",
+                },
           ],
           usage: {
             prompt_tokens: inputTokens,
@@ -112,15 +131,29 @@ export function createMockProvider(
       const wantsUsage = includeUsage(request);
       const inputTokens = Math.ceil(contentLength(request) / 4);
       const failMidstream = request.model === "error-midstream";
+      const tool = toolToCall(request);
+      const toolCall = (call: Record<string, unknown>) => chunk({ tool_calls: [call] }, null);
 
       return (async function* () {
-        const chunks: ChatChunk[] = [
-          chunk({ role: "assistant", content: "" }, null),
-          ...(request.model === ECHO_MODEL ? echoPieces(lastUserText(request)) : PIECES).map(
-            (piece) => chunk({ content: piece }, null),
-          ),
-          chunk({}, "stop"),
-        ];
+        const chunks: ChatChunk[] = tool
+          ? [
+              chunk({ role: "assistant", content: null }, null),
+              toolCall({
+                index: 0,
+                id: `call_mock_${counter}`,
+                type: "function",
+                function: { name: tool, arguments: "" },
+              }),
+              toolCall({ index: 0, function: { arguments: "{}" } }),
+              chunk({}, "tool_calls"),
+            ]
+          : [
+              chunk({ role: "assistant", content: "" }, null),
+              ...(request.model === ECHO_MODEL ? echoPieces(lastUserText(request)) : PIECES).map(
+                (piece) => chunk({ content: piece }, null),
+              ),
+              chunk({}, "stop"),
+            ];
         if (wantsUsage) {
           chunks.push({
             ...base,
@@ -194,6 +227,21 @@ function echoPieces(text: string): string[] {
   const pieces: string[] = [];
   for (let i = 0; i < text.length; i += size) pieces.push(text.slice(i, i + size));
   return pieces;
+}
+
+/**
+ * Deterministic tool use (spec 014, SDK tool round trips): when function tools are offered,
+ * `tool_choice` is not `none` and the last message is not a tool result, call the first tool
+ * with `{}`. Returns the tool name, or undefined to answer with text.
+ */
+function toolToCall(request: ChatRequest): string | undefined {
+  if (!Array.isArray(request.tools) || request.tool_choice === "none") return undefined;
+  if (request.messages.at(-1)?.role === "tool") return undefined;
+  for (const tool of request.tools as unknown[]) {
+    const fn = (tool as { type?: unknown; function?: { name?: unknown } } | null)?.function;
+    if (typeof fn?.name === "string") return fn.name;
+  }
+  return undefined;
 }
 
 function contentLength(request: ChatRequest): number {
