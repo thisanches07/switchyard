@@ -16,7 +16,7 @@ One commit per task, ending in `[spec-009]`. Lint, typecheck and the task's test
   - Test: `test/unit/cache/eligibility.test.ts` › header values (absent, force, bypass, case, invalid → 400), temperature 0 / absent / > 0 / force, `n`, semantic temperature cap and tools, last message user text (string, text parts, image part, assistant last).
   - Files: `src/modules/cache/eligibility.ts`, `src/core/errors.ts`
 
-- [ ] **T3. Response assembly and re-chunking**
+- [x] **T3. Response assembly and re-chunking**
   - ACs: AC-4, AC-7
   - Test: `test/unit/cache/chunks.test.ts` › cacheable finish reasons, assemble content / tool_calls / usage from chunks, rechunk round trip (assemble(rechunk(x)) ≡ x), usage chunk last.
   - Files: `src/modules/cache/chunks.ts`
