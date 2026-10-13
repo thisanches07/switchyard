@@ -5,7 +5,7 @@
 
 One commit per task, ending in `[spec-015]`. Lint, typecheck and the task's tests before each commit; full `pnpm verify` at the end.
 
-- [ ] **T1. `pii.streamRestore` config**
+- [x] **T1. `pii.streamRestore` config**
   - ACs: AC-4 (limits)
   - Do: `src/config/schema.ts`, example config.
   - Test: `test/unit/config/schema.test.ts` › `pii.streamRestore` defaults (`maxHoldMs` 250, no `maxHoldChars`), non-positive values rejected.
