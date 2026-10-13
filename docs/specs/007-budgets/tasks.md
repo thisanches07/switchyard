@@ -20,7 +20,7 @@ One commit per task, ending in `[spec-007]`. `pnpm verify` green after each (exi
   - Do: outcome hook `price` dep and `tracker.event`; proxy `onSend` header; charger recorder (metrics only for now) composed with `fanOut` in `buildApp`.
   - Test: `test/unit/usage/outcome.test.ts` › cost from price, `"0"` without upstream call, contribution wins, price errors → `null`; `test/unit/proxy/cost.test.ts` › header on chat/embeddings/messages equals event `costUsd`, absent on streams and unknown prices, estimated tokens priced, `switchyard_cost_usd_total` and `switchyard_cost_unknown_requests_total`.
 
-- [ ] **T4. Budget columns in the data model (migration `0004_budgets`)**
+- [x] **T4. Budget columns in the data model (migration `0004_budgets`)**
   - ACs: AC-4
   - Do: schema + `pnpm db:generate --name budgets` (+ checks); `Team`/`ApiKeyRecord`/`KeyPatch`/`TeamPatch`/`Principal.budget`; Drizzle and memory stores (`getKey`); `authenticate` fills `principal.budget`.
   - Test: `db.int.test.ts` › columns, defaults, round trip, checks; `memory-store.test.ts` › same semantics; `authenticate.test.ts` › principal budget.

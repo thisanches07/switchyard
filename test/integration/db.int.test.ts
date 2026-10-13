@@ -183,6 +183,90 @@ describe("Postgres: migrations and DrizzleKeyStore", () => {
     ).rejects.toThrow();
   });
 
+  it("adds budget columns with their defaults and checks (spec 007, AC-4)", async () => {
+    const { rows } = await pool.query<{
+      table_name: string;
+      column_name: string;
+      data_type: string;
+      numeric_precision: number | null;
+      numeric_scale: number | null;
+      is_nullable: string;
+      column_default: string | null;
+    }>(
+      `SELECT table_name, column_name, data_type, numeric_precision, numeric_scale, is_nullable,
+              column_default
+         FROM information_schema.columns
+        WHERE column_name IN ('monthly_budget_usd', 'soft_limit_pct')
+        ORDER BY table_name, column_name`,
+    );
+    expect(rows).toEqual([
+      {
+        table_name: "api_keys",
+        column_name: "monthly_budget_usd",
+        data_type: "numeric",
+        numeric_precision: 12,
+        numeric_scale: 4,
+        is_nullable: "YES",
+        column_default: null,
+      },
+      {
+        table_name: "teams",
+        column_name: "monthly_budget_usd",
+        data_type: "numeric",
+        numeric_precision: 12,
+        numeric_scale: 4,
+        is_nullable: "YES",
+        column_default: null,
+      },
+      {
+        table_name: "teams",
+        column_name: "soft_limit_pct",
+        data_type: "integer",
+        numeric_precision: 32,
+        numeric_scale: 0,
+        is_nullable: "NO",
+        column_default: "80",
+      },
+    ]);
+
+    const team = await store.createTeam("budgeted", { monthlyBudgetUsd: "250.5" });
+    expect(team).toMatchObject({ monthlyBudgetUsd: "250.5", softLimitPct: 80 });
+    const key = await store.createKey({
+      teamId: team.id,
+      name: "app",
+      hash: "2".repeat(64),
+      prefix: "sk-sy-2222",
+      allowedModels: null,
+      expiresAt: null,
+      monthlyBudgetUsd: "0",
+    });
+    expect(key.monthlyBudgetUsd).toBe("0");
+    expect(await store.getKey(key.id)).toEqual(key);
+    expect(await store.getKey("nope")).toBeUndefined();
+    expect(await store.findKeyByHash("2".repeat(64))).toMatchObject({
+      key: { monthlyBudgetUsd: "0" },
+      team: { monthlyBudgetUsd: "250.5", softLimitPct: 80 },
+    });
+
+    expect(await store.updateKeyLimits(key.id, { monthlyBudgetUsd: "12.3456" })).toMatchObject({
+      monthlyBudgetUsd: "12.3456",
+    });
+    expect(await store.updateKeyLimits(key.id, { monthlyBudgetUsd: null })).toMatchObject({
+      monthlyBudgetUsd: null,
+    });
+    expect(await store.updateTeamLimits(team.id, { softLimitPct: 95 })).toMatchObject({
+      monthlyBudgetUsd: "250.5",
+      softLimitPct: 95,
+    });
+    expect(
+      await store.updateTeamLimits(team.id, { monthlyBudgetUsd: "99999999.9999" }),
+    ).toMatchObject({ monthlyBudgetUsd: "99999999.9999" });
+
+    await expect(store.updateTeamLimits(team.id, { softLimitPct: 0 })).rejects.toThrow();
+    await expect(store.updateTeamLimits(team.id, { softLimitPct: 101 })).rejects.toThrow();
+    await expect(store.updateTeamLimits(team.id, { monthlyBudgetUsd: "-1" })).rejects.toThrow();
+  });
+
   it("rejects non-positive limits at the database level", async () => {
     const team = await store.createTeam("checked");
     await expect(store.updateTeamLimits(team.id, { rpm: 0 })).rejects.toThrow();

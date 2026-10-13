@@ -5,9 +5,10 @@ import type {
   KeyPatch,
   KeyStore,
   Limits,
-  LimitsPatch,
   NewKey,
   Team,
+  TeamPatch,
+  TeamSettings,
 } from "../../src/core/auth.js";
 import { conflict } from "../../src/core/errors.js";
 import type { PiiMode } from "../../src/core/pii.js";
@@ -33,7 +34,7 @@ export class MemoryKeyStore implements KeyStore {
     return undefined;
   }
 
-  async createTeam(name: string, limits: Partial<Limits> = {}) {
+  async createTeam(name: string, limits: TeamSettings = {}) {
     if ([...this.teams.values()].some((t) => t.name === name)) {
       throw conflict(`Team "${name}" already exists`);
     }
@@ -42,6 +43,8 @@ export class MemoryKeyStore implements KeyStore {
       name,
       rpm: limits.rpm ?? null,
       tpm: limits.tpm ?? null,
+      monthlyBudgetUsd: limits.monthlyBudgetUsd ?? null,
+      softLimitPct: limits.softLimitPct ?? 80,
       createdAt: new Date(),
     };
     this.teams.set(team.id, team);
@@ -68,6 +71,7 @@ export class MemoryKeyStore implements KeyStore {
       rpm: input.rpm ?? null,
       tpm: input.tpm ?? null,
       piiMode: input.piiMode ?? null,
+      monthlyBudgetUsd: input.monthlyBudgetUsd ?? null,
       expiresAt: input.expiresAt,
       createdAt: new Date(),
       revokedAt: null,
@@ -75,6 +79,11 @@ export class MemoryKeyStore implements KeyStore {
     };
     this.keys.set(record.id, record);
     return strip(record);
+  }
+
+  async getKey(id: string) {
+    const key = this.keys.get(id);
+    return key && strip(key);
   }
 
   async listKeys(teamId?: string) {
@@ -97,14 +106,17 @@ export class MemoryKeyStore implements KeyStore {
     if (patch.rpm !== undefined) key.rpm = patch.rpm;
     if (patch.tpm !== undefined) key.tpm = patch.tpm;
     if (patch.piiMode !== undefined) key.piiMode = patch.piiMode;
+    if (patch.monthlyBudgetUsd !== undefined) key.monthlyBudgetUsd = patch.monthlyBudgetUsd;
     return strip(key);
   }
 
-  async updateTeamLimits(id: string, patch: LimitsPatch) {
+  async updateTeamLimits(id: string, patch: TeamPatch) {
     const team = this.teams.get(id);
     if (!team) return undefined;
     if (patch.rpm !== undefined) team.rpm = patch.rpm;
     if (patch.tpm !== undefined) team.tpm = patch.tpm;
+    if (patch.monthlyBudgetUsd !== undefined) team.monthlyBudgetUsd = patch.monthlyBudgetUsd;
+    if (patch.softLimitPct !== undefined) team.softLimitPct = patch.softLimitPct;
     return { ...team };
   }
 
@@ -115,8 +127,10 @@ export class MemoryKeyStore implements KeyStore {
       allowedModels?: string[] | null;
       expiresAt?: Date | null;
       limits?: Partial<Limits>;
-      teamLimits?: Partial<Limits>;
+      teamLimits?: TeamSettings;
       piiMode?: PiiMode | null;
+      /** The key's monthly budget (spec 007). */
+      budgetUsd?: string | null;
     } = {},
   ) {
     const teamName = options.team ?? "test-team";
@@ -134,6 +148,7 @@ export class MemoryKeyStore implements KeyStore {
       rpm: options.limits?.rpm ?? null,
       tpm: options.limits?.tpm ?? null,
       piiMode: options.piiMode ?? null,
+      monthlyBudgetUsd: options.budgetUsd ?? null,
     });
     return { key, record, team };
   }

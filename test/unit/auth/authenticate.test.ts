@@ -241,5 +241,19 @@ describe("principal (spec 010)", () => {
     const inherited = await store.issueKey();
     expect((await principalFor(blocked.key))?.piiMode).toBe("block");
     expect((await principalFor(inherited.key))?.piiMode).toBeNull();
+
+    // Spec 007: budgets of the key and its team; a key uses its team's soft limit percentage.
+    const budgeted = await store.issueKey({ team: "budgets", budgetUsd: "5" });
+    await store.updateTeamLimits(budgeted.team.id, { monthlyBudgetUsd: "50", softLimitPct: 90 });
+    expect((await principalFor(budgeted.key))?.budget).toEqual({
+      keyUsd: "5",
+      teamUsd: "50",
+      softLimitPct: 90,
+    });
+    expect((await principalFor(inherited.key))?.budget).toEqual({
+      keyUsd: null,
+      teamUsd: null,
+      softLimitPct: 80,
+    });
   });
 });

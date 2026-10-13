@@ -8,6 +8,8 @@ import type {
   LimitsPatch,
   NewKey,
   Team,
+  TeamPatch,
+  TeamSettings,
 } from "../../core/auth.js";
 import { conflict } from "../../core/errors.js";
 import type { Database } from "./client.js";
@@ -32,11 +34,17 @@ export class DrizzleKeyStore implements KeyStore {
     return row && { key: toRecord(row.key), team: toTeam(row.team) };
   }
 
-  async createTeam(name: string, limits: Partial<Limits> = {}): Promise<Team> {
+  async createTeam(name: string, settings: TeamSettings = {}): Promise<Team> {
     try {
       const [row] = await this.db
         .insert(teams)
-        .values({ name, rpm: limits.rpm ?? null, tpm: limits.tpm ?? null })
+        .values({
+          name,
+          rpm: settings.rpm ?? null,
+          tpm: settings.tpm ?? null,
+          monthlyBudgetUsd: settings.monthlyBudgetUsd ?? null,
+          ...(settings.softLimitPct === undefined ? {} : { softLimitPct: settings.softLimitPct }),
+        })
         .returning();
       if (!row) throw new Error("insert returned no row");
       return toTeam(row);
@@ -70,10 +78,17 @@ export class DrizzleKeyStore implements KeyStore {
         rpm: input.rpm ?? null,
         tpm: input.tpm ?? null,
         piiMode: input.piiMode ?? null,
+        monthlyBudgetUsd: input.monthlyBudgetUsd ?? null,
       })
       .returning();
     if (!row) throw new Error("insert returned no row");
     return toRecord(row);
+  }
+
+  async getKey(id: string): Promise<ApiKeyRecord | undefined> {
+    if (!UUID.test(id)) return undefined;
+    const [row] = await this.db.select().from(apiKeys).where(eq(apiKeys.id, id)).limit(1);
+    return row && toRecord(row);
   }
 
   async listKeys(teamId?: string): Promise<ApiKeyRecord[]> {
@@ -102,6 +117,7 @@ export class DrizzleKeyStore implements KeyStore {
     if (!UUID.test(id)) return undefined;
     const values: Partial<typeof apiKeys.$inferInsert> = limitValues(patch);
     if (patch.piiMode !== undefined) values.piiMode = patch.piiMode;
+    if (patch.monthlyBudgetUsd !== undefined) values.monthlyBudgetUsd = patch.monthlyBudgetUsd;
     if (Object.keys(values).length === 0) {
       const [row] = await this.db.select().from(apiKeys).where(eq(apiKeys.id, id)).limit(1);
       return row && toRecord(row);
@@ -110,9 +126,11 @@ export class DrizzleKeyStore implements KeyStore {
     return row && toRecord(row);
   }
 
-  async updateTeamLimits(id: string, patch: LimitsPatch): Promise<Team | undefined> {
+  async updateTeamLimits(id: string, patch: TeamPatch): Promise<Team | undefined> {
     if (!UUID.test(id)) return undefined;
-    const values = limitValues(patch);
+    const values: Partial<typeof teams.$inferInsert> = limitValues(patch);
+    if (patch.monthlyBudgetUsd !== undefined) values.monthlyBudgetUsd = patch.monthlyBudgetUsd;
+    if (patch.softLimitPct !== undefined) values.softLimitPct = patch.softLimitPct;
     if (Object.keys(values).length === 0) return this.getTeam(id);
     const [row] = await this.db.update(teams).set(values).where(eq(teams.id, id)).returning();
     return row && toTeam(row);
@@ -127,8 +145,22 @@ function limitValues(patch: LimitsPatch): Partial<Limits> {
   return values;
 }
 
+/** `numeric(12,4)` arrives as "10.5000"; budgets are exposed without trailing zeros (spec 007). */
+function money(value: string | null): string | null {
+  if (value === null || !value.includes(".")) return value;
+  return value.replace(/\.?0+$/, "");
+}
+
 function toTeam(row: TeamRow): Team {
-  return { id: row.id, name: row.name, rpm: row.rpm, tpm: row.tpm, createdAt: row.createdAt };
+  return {
+    id: row.id,
+    name: row.name,
+    rpm: row.rpm,
+    tpm: row.tpm,
+    monthlyBudgetUsd: money(row.monthlyBudgetUsd),
+    softLimitPct: row.softLimitPct,
+    createdAt: row.createdAt,
+  };
 }
 
 function toRecord(row: KeyRow): ApiKeyRecord {
@@ -142,6 +174,7 @@ function toRecord(row: KeyRow): ApiKeyRecord {
     rpm: row.rpm,
     tpm: row.tpm,
     piiMode: row.piiMode,
+    monthlyBudgetUsd: money(row.monthlyBudgetUsd),
     expiresAt: row.expiresAt,
     createdAt: row.createdAt,
     revokedAt: row.revokedAt,

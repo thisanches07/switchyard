@@ -108,6 +108,11 @@ export function createAuthenticate(options: AuthenticateOptions) {
       keyLimits: { rpm: key.rpm, tpm: key.tpm },
       teamLimits: { rpm: team.rpm, tpm: team.tpm },
       piiMode: key.piiMode,
+      budget: {
+        keyUsd: key.monthlyBudgetUsd,
+        teamUsd: team.monthlyBudgetUsd,
+        softLimitPct: team.softLimitPct,
+      },
     };
     request.log = request.log.child({ teamId: key.teamId, keyId: key.id });
     tagRequestSpan(request);

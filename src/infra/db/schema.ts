@@ -30,11 +30,17 @@ export const teams = pgTable(
     /** Per-minute caps across all keys of the team; NULL = no team cap (spec 005). */
     rpm: integer("rpm"),
     tpm: integer("tpm"),
+    /** Monthly budget in USD; NULL = no budget (spec 007). */
+    monthlyBudgetUsd: numeric("monthly_budget_usd", { precision: 12, scale: 4 }),
+    /** Soft limit, percent of the budget, for the team and its keys (spec 007). */
+    softLimitPct: integer("soft_limit_pct").notNull().default(80),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     check("teams_rpm_positive", sql`${table.rpm} > 0`),
     check("teams_tpm_positive", sql`${table.tpm} > 0`),
+    check("teams_monthly_budget_usd_non_negative", sql`${table.monthlyBudgetUsd} >= 0`),
+    check("teams_soft_limit_pct_range", sql`${table.softLimitPct} BETWEEN 1 AND 100`),
   ],
 );
 
@@ -57,6 +63,8 @@ export const apiKeys = pgTable(
     tpm: integer("tpm"),
     /** PII redaction mode; NULL = pii.defaultMode from the config (spec 010). */
     piiMode: piiMode("pii_mode"),
+    /** Monthly budget in USD; NULL = no budget (spec 007). */
+    monthlyBudgetUsd: numeric("monthly_budget_usd", { precision: 12, scale: 4 }),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
@@ -65,6 +73,7 @@ export const apiKeys = pgTable(
     index("api_keys_team_id_idx").on(table.teamId),
     check("api_keys_rpm_positive", sql`${table.rpm} > 0`),
     check("api_keys_tpm_positive", sql`${table.tpm} > 0`),
+    check("api_keys_monthly_budget_usd_non_negative", sql`${table.monthlyBudgetUsd} >= 0`),
   ],
 );
 
