@@ -55,7 +55,7 @@ One commit per task, ending in `[spec-007]`. `pnpm verify` green after each (exi
   - Do: `src/modules/budgets/reconcile.ts`; worker env `REDIS_URL`, `loadWorkerConfig`; `src/worker.ts` starts/stops it.
   - Test: `test/unit/budgets/reconcile.test.ts` › raises lower counters, never lowers, current period only, gauge replaced, failures logged and retried, stop; `env.test.ts`, `load.test.ts`.
 
-- [ ] **T11. Integration: hard limit, overshoot bound, reconciliation, Redis policies**
+- [x] **T11. Integration: hard limit, overshoot bound, reconciliation, Redis policies**
   - ACs: AC-6, AC-7, AC-10, AC-11, AC-14
   - Test: `test/integration/budgets.int.test.ts` › real Redis + Postgres: hard limit, overshoot bound under concurrent waves, Redis flush → enforcement restored by one reconciliation, dead Redis closed → 503 for budgeted / 200 for unbudgeted, open → 200 + metric.
 
