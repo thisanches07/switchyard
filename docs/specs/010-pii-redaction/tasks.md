@@ -49,7 +49,7 @@ One commit per task, ending in `[spec-010]`. `pnpm verify` green after each (exi
   - ACs: AC-14 (and AC-8 end to end)
   - Test: `test/unit/providers/mock.test.ts` › `echo` answers and streams the last user text; `openai-sdk.contract.test.ts` › `block` key → `BadRequestError` `pii_detected`; `scripts/compose-smoke.ts` › block 400, mask 200 + `masked` + restored CPF.
 
-- [ ] **T11. Docs**
+- [x] **T11. Docs**
   - ACs: AC-9 (docs part)
   - Do: README PII section (modes, headers, streaming limitation → spec 015, what is not detected), `docs/pii.md` guide, threat-model row, architecture note, verification table here.
 
@@ -57,3 +57,27 @@ One commit per task, ending in `[spec-010]`. `pnpm verify` green after each (exi
   - ACs: AC-13 (usage event part)
   - Do: in 006's outcome hook, set `piiDetections` from `request.pii?.detections ?? {}`; record blocked requests (thrown by the PII stage) as `outcome: "rejected"`, `status: 400`, `errorCode: "pii_detected"`, `provider: null`, `attempts: 0`.
   - Test: 006's hook tests › mask request event carries counts, off/clean carry `{}`, blocked chat/stream/embeddings produce exactly one `rejected` event.
+
+## Verification (2026-10-13, all tasks but T12)
+
+| AC | Proven by | Result |
+|---|---|---|
+| AC-1 | `schema.test.ts` › `pii` defaults, mode/detector/term validation, example config; `db.int.test.ts` › `pii_mode` enum column, nullable | ✅ |
+| AC-2 | `admin.test.ts` › `piiMode` on create, list, PATCH alone (limits kept), `null` clears, invalid values 400, cached key dropped; `authenticate.test.ts` › principal carries the key's mode; `db.int.test.ts` › stored, updated, cleared, enum enforced | ✅ |
+| AC-3 | `scan.test.ts` › every vector found with its type, alone and inside sentences; `validators.test.ts` | ✅ |
+| AC-4 | `scan.test.ts` › every false-positive vector (and a few more) not reported | ✅ |
+| AC-5 | `scan.test.ts` › CPF vs phone, CPF-shaped phone tie-break, CNPJ vs card, longest match, no double replacement | ✅ |
+| AC-6 | `linear.test.ts` › bounded quantifiers in every pattern; 1 MiB adversarial inputs < 500 ms CPU each; linear growth on dense real values | ✅ (see note) |
+| AC-7 | `mask.test.ts` › numbering, same string same placeholder, every role, text parts only, tool-call arguments, reserved placeholders, input not mutated; `pii-routes.test.ts` › provider receives `<CPF_1>` | ✅ |
+| AC-8 | `restore.test.ts`; `pii-routes.test.ts` › restored content and arguments, `masked`; contract › SDK gets the value back through `mock/echo`; smoke › mask step | ✅ |
+| AC-9 | `pii-routes.test.ts` › stream keeps `<CPF_1>`, `masked-unrestored`; README and `docs/pii.md` state the limitation and link spec 015 | ✅ |
+| AC-10 | `pii-routes.test.ts` › `none` when clean; header absent and original forwarded when `off`; key mode overrides the default | ✅ |
+| AC-11 | `pii-routes.test.ts` › 400 `pii_detected` `(cpf, email)` for chat, stream and embeddings, provider not called, tokens refunded, request unit kept; contract › `BadRequestError`; smoke › block step | ✅ |
+| AC-12 | `privacy.test.ts` › `trace`-level logs, all spans (attributes, events, status) and metric points of mask and block requests carrying every vector contain none of them | ✅ |
+| AC-13 | `telemetry.test.ts` › `switchyard_pii_detections_total{type}` occurrences, request-span `mode`/`action`/`detections`/`uninspected`, nothing when off; `pii-routes.test.ts` › `request.pii` shape. **`UsageEvent.piiDetections` and `rejected` events: T12, blocked until spec 006 merges** | ⏳ partial |
+| AC-14 | `openai-sdk.contract.test.ts` › `BadRequestError` with `code: "pii_detected"`; `scripts/compose-smoke.ts` › block 400 and mask 200 + `masked` + restored CPF | ✅ |
+
+Notes:
+- AC-6 timing is measured as the scan's **CPU time** (`process.cpuUsage`), equal to wall time on an idle CI runner, so a saturated shared dev machine does not make it flaky. A 1 MiB input made only of real values (~73k detections) is checked for linear growth instead of an absolute budget: its cost is per detection, not adversarial.
+- Migration generated as `0002_pii_mode` on this branch (006's `0002_usage_events` is not merged yet); it becomes `0003_pii_mode` when rebased onto 006 (`pnpm db:generate` on top of `main`, see `waves.md`).
+- Local smoke runs: every functional step passed, including both PII steps; `compose up --wait` itself reported the gateway unhealthy once while the shared host was at 100% CPU (it then served `/healthz` 200 and passed all steps).
