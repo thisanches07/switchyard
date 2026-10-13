@@ -1,6 +1,7 @@
 import type { LoadedConfig, ResolvedProvider } from "../../config/load.js";
-import { providerNotConfigured, providerNotImplemented } from "../../core/errors.js";
+import { providerNotConfigured } from "../../core/errors.js";
 import type { ChatProvider, HttpClient } from "../../core/provider.js";
+import { ANTHROPIC_BASE_URL, createAnthropicProvider } from "./anthropic.js";
 import { createMockProvider } from "./mock.js";
 import { createFailingProvider } from "./not-implemented.js";
 import { createOpenAiCompatibleProvider } from "./openai-compatible.js";
@@ -41,11 +42,24 @@ function buildProvider(
         },
         deps.random ? { random: deps.random } : {},
       );
-    case "anthropic":
-      // Adapter arrives with spec 014.
-      return createFailingProvider(name, provider.type, () =>
-        providerNotImplemented(name, provider.type),
+    case "anthropic": {
+      const { apiKeyEnv } = provider;
+      const apiKey = env[apiKeyEnv];
+      if (!apiKey) {
+        return createFailingProvider(name, provider.type, () =>
+          providerNotConfigured(name, apiKeyEnv),
+        );
+      }
+      return createAnthropicProvider(
+        {
+          name,
+          baseUrl: provider.baseUrl ?? ANTHROPIC_BASE_URL,
+          apiKey,
+          defaultMaxTokens: provider.defaultMaxTokens,
+        },
+        deps.http,
       );
+    }
     case "openai-compatible": {
       const { apiKeyEnv } = provider;
       const apiKey = apiKeyEnv ? env[apiKeyEnv] : undefined;

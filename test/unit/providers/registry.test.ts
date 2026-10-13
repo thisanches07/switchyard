@@ -37,17 +37,36 @@ describe("createProviderRegistry", () => {
     expect(registry.get("ollama")?.type).toBe("openai-compatible");
   });
 
-  it("anthropic providers return 501 until implemented", async () => {
+  it("builds the anthropic adapter with the key and default base URL (spec 014, AC-1)", async () => {
+    const message = {
+      id: "msg_1",
+      model: "claude-x",
+      content: [{ type: "text", text: "hi" }],
+      stop_reason: "end_turn",
+      usage: { input_tokens: 1, output_tokens: 1 },
+    };
+    const http = fakeHttp(() => jsonResponse(200, message));
     const registry = createProviderRegistry(
       testConfig(),
       { ANTHROPIC_API_KEY: "sk-ant" },
-      {
-        http: fakeHttp(() => jsonResponse(200, ok)).client,
-      },
+      { http: http.client },
     );
+    const claude = providerOf(registry, "claude");
+    expect(claude.type).toBe("anthropic");
+    await claude.chat(request, ctx());
+    expect(http.calls[0]?.url).toBe("https://api.anthropic.com/v1/messages");
+    expect(http.calls[0]?.headers["x-api-key"]).toBe("sk-ant");
+    expect(http.calls[0]?.body).toMatchObject({ max_tokens: 4096 });
+  });
+
+  it("anthropic without its key → 503 provider_not_configured, never called (AC-1)", async () => {
+    const http = fakeHttp(() => jsonResponse(200, ok));
+    const registry = createProviderRegistry(testConfig(), {}, { http: http.client });
     const error = await gatewayError(providerOf(registry, "claude").chat(request, ctx()));
-    expect(error.status).toBe(501);
-    expect(error.code).toBe("provider_not_implemented");
+    expect(error.status).toBe(503);
+    expect(error.code).toBe("provider_not_configured");
+    expect(error.message).toContain("ANTHROPIC_API_KEY");
+    expect(http.calls).toHaveLength(0);
   });
 
   it("missing API key → 503 naming the variable, provider never called", async () => {
@@ -79,9 +98,9 @@ describe("createProviderRegistry", () => {
       },
     );
     const claude = providerOf(registry, "claude");
-    expect((await gatewayError(claude.chatStream(request, ctx()))).status).toBe(501);
+    expect((await gatewayError(claude.chatStream(request, ctx()))).status).toBe(503);
     expect((await gatewayError(claude.embeddings({ model: "m", input: "x" }, ctx()))).status).toBe(
-      501,
+      503,
     );
     const openrouter = providerOf(registry, "openrouter");
     expect((await gatewayError(openrouter.chatStream(request, ctx()))).status).toBe(503);

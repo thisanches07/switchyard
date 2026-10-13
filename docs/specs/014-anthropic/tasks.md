@@ -30,7 +30,7 @@ One commit per task, ending in `[spec-014]`. `pnpm verify` green after each.
   - Test: `test/unit/anthropic/outbound-stream.test.ts` › SSE fixtures: text, tool use, mixed, thinking (nothing emitted, role chunk deferred), `error` before and after content, usage from `message_start` + last `message_delta`, missing `message_stop` → error, ping/unknown ignored.
   - Files: `src/modules/anthropic/outbound-stream.ts`
 
-- [ ] **T6. Anthropic adapter and registry**
+- [x] **T6. Anthropic adapter and registry**
   - ACs: AC-1, AC-2 (span), AC-5, AC-10, AC-13
   - Test: `test/unit/providers/anthropic.test.ts` › URL/headers/body, default base URL, embeddings 400 without a call, stream chunks, error mapping incl. request-id span attribute and dropped params; `registry.test.ts` › anthropic built with key, 503 without; placeholder tests removed.
   - Files: `src/modules/providers/{anthropic,registry}.ts`

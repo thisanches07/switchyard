@@ -65,14 +65,6 @@ export const unsupportedMediaType = (contentType: string) =>
 export const modelNotFound = (model: string) =>
   new GatewayError(404, INVALID, "model_not_found", `The model "${model}" does not exist`);
 
-export const providerNotImplemented = (provider: string, type: string) =>
-  new GatewayError(
-    501,
-    SERVER,
-    "provider_not_implemented",
-    `Provider "${provider}" of type "${type}" is not implemented yet`,
-  );
-
 export const providerNotConfigured = (provider: string, envVar: string) =>
   new GatewayError(
     503,
