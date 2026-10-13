@@ -21,7 +21,7 @@ One commit per task, ending in `[spec-008]`. `pnpm verify` green after each.
   - Test: `test/unit/routing/backoff.test.ts` › full jitter bounds with fixed RNG, cap, Retry-After floor and cap, seconds and HTTP-date; `test/unit/routing/classify.test.ts` › status table, explicit flag wins, timeout, non-GatewayError.
   - Files: `src/modules/routing/{backoff,classify}.ts`
 
-- [ ] **T4. Circuit breaker and candidate health**
+- [x] **T4. Circuit breaker and candidate health**
   - ACs: AC-8, AC-11, AC-12 (retention), AC-14 (gauge, logs)
   - Test: `test/unit/routing/breaker.test.ts` › threshold opens, open skips, half-open single probe, probe success closes, probe failure reopens, release, neutral outcomes; `test/unit/routing/health.test.ts` › EWMA, error window of 100, snapshot, retain on reload, gauge values, one log per transition.
   - Files: `src/modules/routing/{breaker,health,timers,telemetry}.ts`
