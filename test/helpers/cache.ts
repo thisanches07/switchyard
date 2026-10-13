@@ -1,4 +1,5 @@
 import type { LoadedConfig } from "../../src/config/load.js";
+import type { EmbeddingsRequest } from "../../src/core/chat.js";
 import type { ChatProvider, ChatResult } from "../../src/core/provider.js";
 import type { UsageEvent } from "../../src/core/usage.js";
 import { MemoryExactCache } from "../../src/infra/memory/exact-cache.js";
@@ -60,3 +61,37 @@ export const sseData = (body: string) =>
     .split("\n\n")
     .filter((block) => block.startsWith("data: ") && block !== "data: [DONE]")
     .map((block) => JSON.parse(block.slice(6)) as Record<string, unknown>);
+
+/** A 768-dimensional vector starting with `head`, zeros after. */
+export const vec = (...head: number[]) => [
+  ...head,
+  ...new Array<number>(768 - head.length).fill(0),
+];
+
+/** Deterministic fake embeddings (spec 009 tests): text → vector from a table. */
+export function fakeEmbedder(
+  table: Record<string, number[]>,
+  behaviour?: ChatProvider["embeddings"],
+) {
+  const calls: EmbeddingsRequest[] = [];
+  const provider: ChatProvider = {
+    name: "ollama",
+    type: "openai-compatible",
+    chat: async () => {
+      throw new Error("not a chat model");
+    },
+    chatStream: async () => {
+      throw new Error("not a chat model");
+    },
+    async embeddings(request, ctx) {
+      calls.push(request);
+      if (behaviour) return behaviour(request, ctx);
+      const vector = table[String(request.input)] ?? vec(0, 0, 1);
+      return {
+        body: { object: "list", data: [{ object: "embedding", index: 0, embedding: vector }] },
+        usage: { inputTokens: 1 },
+      };
+    },
+  };
+  return { provider, calls };
+}

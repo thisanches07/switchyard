@@ -1,41 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { EmbeddingsRequest } from "../../../src/core/chat.js";
-import type { ChatProvider } from "../../../src/core/provider.js";
 import { MemorySemanticCache } from "../../../src/infra/memory/semantic-cache.js";
-import { cacheApp, cacheConfig } from "../../helpers/cache.js";
+import { cacheApp, cacheConfig, fakeEmbedder, vec } from "../../helpers/cache.js";
 import { MemoryKeyStore } from "../../helpers/memory-key-store.js";
 import { installTestMetrics } from "../../helpers/metrics.js";
 import { manualTimers } from "../../helpers/routing.js";
 
 const NOW = Date.UTC(2026, 9, 13, 12);
-
-/** A 768-dimensional vector starting with `head`, zeros after. */
-const vec = (...head: number[]) => [...head, ...new Array<number>(768 - head.length).fill(0)];
-
-/** Deterministic fake embeddings (spec 009 tests): text → vector from a table. */
-function fakeEmbedder(table: Record<string, number[]>, behaviour?: ChatProvider["embeddings"]) {
-  const calls: EmbeddingsRequest[] = [];
-  const provider: ChatProvider = {
-    name: "ollama",
-    type: "openai-compatible",
-    chat: async () => {
-      throw new Error("not a chat model");
-    },
-    chatStream: async () => {
-      throw new Error("not a chat model");
-    },
-    async embeddings(request, ctx) {
-      calls.push(request);
-      if (behaviour) return behaviour(request, ctx);
-      const vector = table[String(request.input)] ?? vec(0, 0, 1);
-      return {
-        body: { object: "list", data: [{ object: "embedding", index: 0, embedding: vector }] },
-        usage: { inputTokens: 1 },
-      };
-    },
-  };
-  return { provider, calls };
-}
 
 const TEXTS = {
   "What is the capital of France?": vec(1, 0),

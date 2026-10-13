@@ -52,7 +52,7 @@ One commit per task, ending in `[spec-009]`. Lint, typecheck and the task's test
   - Test: `test/unit/proxy/semantic-cache.test.ts` › opt-in, hit above threshold, below threshold miss, params hash scope, force does not relax, write with embedding, hits incremented, timeout on manual clock, wrong dimensions, embedding error; `test/unit/cache/cleanup.test.ts`; `test/integration/semantic-cache.int.test.ts` › nearest, scope, expiry, iterative scan with many teams, deleteExpired.
   - Files: `src/modules/cache/{stage,cleanup}.ts`, `src/infra/db/semantic-cache.ts`, `src/server.ts`
 
-- [ ] **T10. Redis store and isolation**
+- [x] **T10. Redis store and isolation**
   - ACs: AC-10, AC-12
   - Test: `test/integration/cache-isolation.int.test.ts` › two teams identical prompt (exact and semantic) never share, first request miss; differing `max_tokens` / `response_format` / system prompt miss; Redis stopped → miss.
   - Files: `src/infra/redis/exact-cache.ts`, `src/server.ts`

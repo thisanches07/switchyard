@@ -14,6 +14,7 @@ import { createKafkaProducer } from "./infra/kafka/producer.js";
 import { createLogger } from "./infra/logger.js";
 import { RedisBudgetCounters } from "./infra/redis/budget-counters.js";
 import { createRedisClient, redisCheck } from "./infra/redis/client.js";
+import { RedisExactCache } from "./infra/redis/exact-cache.js";
 import { RedisRateLimiter } from "./infra/redis/rate-limiter.js";
 import { shutdownTelemetry } from "./infra/telemetry/sdk.js";
 import { installShutdown } from "./lifecycle/shutdown.js";
@@ -178,6 +179,8 @@ async function main(): Promise<void> {
     // Spec 007: hot spend counters in Redis, stored spend in Postgres.
     budgetCounters: new RedisBudgetCounters(redis),
     budgetStore: new DrizzleBudgetStore(db),
+    // Spec 009: exact cache in Redis, semantic cache in pgvector.
+    exactCache: new RedisExactCache(redis),
     semanticCache,
   });
 
