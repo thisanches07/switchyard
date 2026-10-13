@@ -91,7 +91,7 @@ One commit per task, ending in `[spec-002]`. `pnpm verify` green after each.
 | AC-8 | `test/unit/routing/models.test.ts`; `chat.test.ts` › GET /v1/models; contract › lists models | ✅ |
 | AC-9 | `test/unit/proxy/telemetry.test.ts` › span kind/attributes/usage, error status + warn log, no content in spans or logs, counter and histogram labels | ✅ |
 | AC-10 | `test/unit/providers/mock.test.ts` | ✅ |
-| AC-11 | `test/contract/openai-sdk.contract.test.ts` (mock: 4 passed; Ollama case skipped: Ollama not installed on the dev machine) | ✅ mock · ⏳ Ollama case not yet run against a real model |
+| AC-11 | `test/contract/openai-sdk.contract.test.ts`: 5/5 passed, including the Ollama case against `llama3.2` (3B, GTX 1060, NVIDIA driver 582.78) on 2026-10-13 | ✅ |
 | AC-12 | `vitest.config.ts` thresholds; `pnpm verify` fails at 101% (checked) and passes at 82.6% lines | ✅ |
 
 Also run: `pnpm test:smoke` (8/8 steps, now including a chat request through the mock provider inside Docker); `pnpm verify` + `pnpm test:contract` in a `node:24.21.0-bookworm-slim` container (132/132).
