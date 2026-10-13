@@ -30,6 +30,30 @@ describe("undici HTTP client", () => {
           res.writeHead(200);
           res.write("{");
           setTimeout(() => res.end("}"), 2_000).unref();
+        } else if (req.url === "/stream") {
+          res.writeHead(200, { "content-type": "text/event-stream" });
+          let n = 0;
+          const tick = setInterval(() => {
+            n += 1;
+            res.write(`data: ${n}\n\n`);
+            if (n === 4) {
+              clearInterval(tick);
+              res.end();
+            }
+          }, 150);
+          res.on("close", () => clearInterval(tick));
+        } else if (req.url === "/stream-stall") {
+          res.writeHead(200, { "content-type": "text/event-stream" });
+          res.write("data: 1\n\n");
+        } else if (req.url === "/stream-long") {
+          // Keeps sending for longer than totalMs (1 s) with short gaps.
+          res.writeHead(200, { "content-type": "text/event-stream" });
+          const tick = setInterval(() => res.write("data: x\n\n"), 100);
+          setTimeout(() => {
+            clearInterval(tick);
+            res.end();
+          }, 1_600).unref();
+          res.on("close", () => clearInterval(tick));
         }
       });
     });
@@ -96,5 +120,68 @@ describe("undici HTTP client", () => {
     const error = await pending.catch((e: unknown) => e);
     expect(error).not.toBeInstanceOf(UpstreamTimeoutError);
     expect(error).not.toBeInstanceOf(UpstreamNetworkError);
+  });
+
+  describe("postStream", () => {
+    const open = (path: string, signal = new AbortController().signal) =>
+      client.postStream(`${base}${path}`, { stream: true }, { headers: {}, signal });
+
+    async function readAll(body: AsyncIterable<Uint8Array>) {
+      const times: number[] = [];
+      let text = "";
+      const started = performance.now();
+      for await (const bytes of body) {
+        times.push(performance.now() - started);
+        text += new TextDecoder().decode(bytes);
+      }
+      return { times, text };
+    }
+
+    it("yields bytes as the server sends them", async () => {
+      const res = await open("/stream");
+      expect(res.status).toBe(200);
+      const { times, text } = await readAll(res.body);
+      expect(text).toBe("data: 1\n\ndata: 2\n\ndata: 3\n\ndata: 4\n\n");
+      expect(times.length).toBeGreaterThanOrEqual(2);
+      expect(times[0]).toBeLessThan((times.at(-1) ?? 0) - 200);
+    });
+
+    it("returns non-2xx bodies as text", async () => {
+      const res = await open("/fail");
+      expect(res.status).toBe(500);
+      expect(await res.text()).toBe("boom");
+    });
+
+    it("idle timeout between chunks → UpstreamTimeoutError", async () => {
+      const res = await open("/stream-stall");
+      await expect(readAll(res.body)).rejects.toBeInstanceOf(UpstreamTimeoutError);
+    });
+
+    it("a stream may outlive totalMs once data is flowing", async () => {
+      const res = await open("/stream-long");
+      const { text } = await readAll(res.body);
+      expect(text.length).toBeGreaterThan(0);
+    });
+
+    it("headers timeout before the stream opens → UpstreamTimeoutError", async () => {
+      await expect(open("/slow-headers")).rejects.toBeInstanceOf(UpstreamTimeoutError);
+    });
+
+    it("caller abort stops the body without an upstream error", async () => {
+      const controller = new AbortController();
+      const res = await open("/stream", controller.signal);
+      const iterator = res.body[Symbol.asyncIterator]();
+      await iterator.next();
+      controller.abort();
+      const error = await (async () => {
+        try {
+          while (!(await iterator.next()).done) {}
+        } catch (e) {
+          return e;
+        }
+      })();
+      expect(error).not.toBeInstanceOf(UpstreamTimeoutError);
+      expect(error).not.toBeInstanceOf(UpstreamNetworkError);
+    });
   });
 });

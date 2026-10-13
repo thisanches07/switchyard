@@ -37,7 +37,7 @@
 <br>
 
 > [!NOTE]
-> **Status: v0.1 in progress.** Non-streaming chat completions, model listing, provider adapters, error mapping, tracing and metrics are **working and tested today**. Streaming, API keys, rate limits, budgets, fallback and caching are specified and on the [roadmap](#%EF%B8%8F-roadmap).
+> **Status: v0.1 in progress.** Chat completions (including **SSE streaming**), embeddings, model listing, provider adapters, error mapping, tracing and metrics are **working and tested today**, contract-tested with the official OpenAI Node and Python SDKs. API keys, rate limits, budgets, fallback and caching are specified and on the [roadmap](#%EF%B8%8F-roadmap).
 
 > [!WARNING]
 > The `/v1` API has **no authentication yet** (arrives with [spec 004](docs/specs/README.md)). Docker Compose publishes every port on `127.0.0.1` only. Do not expose the gateway to the internet.
@@ -60,6 +60,8 @@ Teams shipping LLM features hit the same walls:
 | | Feature | Status |
 |---|---|:---:|
 | 🔌 | OpenAI-compatible `POST /v1/chat/completions` (official SDKs work unchanged) | ✅ |
+| 🌊 | **Streaming (SSE)** with no buffering, time-to-first-token metric, upstream cancelled when the client disconnects | ✅ |
+| 🧬 | `POST /v1/embeddings` (float and base64), routed through the same aliases | ✅ |
 | 📋 | `GET /v1/models` listing aliases and configured models | ✅ |
 | 🧭 | Aliases and `provider/model` routing (model ids may contain `/`) | ✅ |
 | 🧱 | Provider adapters: any OpenAI-compatible endpoint + deterministic **mock** for tests | ✅ |
@@ -67,7 +69,6 @@ Teams shipping LLM features hit the same walls:
 | ⏱️ | Connect, time-to-first-byte and total timeouts on every upstream call | ✅ |
 | 🔭 | `switchyard.upstream` spans with GenAI attributes, request and latency metrics, `x-switchyard-*` headers | ✅ |
 | ❤️ | `/healthz`, `/readyz` with time-bounded dependency checks, graceful shutdown | ✅ |
-| 🌊 | Streaming (SSE) and `/v1/embeddings` | 🔜 003 |
 | 🔑 | Virtual API keys and teams | 🔜 004 |
 | 🚥 | Rate limits (RPM/TPM) with Redis Lua | 🔜 005 |
 | 📨 | Usage events through Kafka (Redpanda), idempotent worker, DLQ | 🔜 006 |
@@ -162,6 +163,26 @@ print(res.choices[0].message.content)
 </tr>
 </table>
 
+**Streaming and embeddings** work the same way:
+
+```ts
+const stream = await client.chat.completions.create({
+  model: "local",
+  messages: [{ role: "user", content: "Write a haiku about trains." }],
+  stream: true, // tokens arrive as they are generated
+});
+for await (const chunk of stream) process.stdout.write(chunk.choices[0]?.delta?.content ?? "");
+
+const { data } = await client.embeddings.create({ model: "embed", input: ["hello", "world"] });
+console.log(data[0].embedding.length); // 768 with nomic-embed-text
+```
+
+```bash
+# -N disables curl's buffering so you can watch the SSE events arrive
+curl -N localhost:8080/v1/chat/completions -H "content-type: application/json" \
+  -d '{"model":"local","stream":true,"messages":[{"role":"user","content":"Count to 5"}]}'
+```
+
 Any OpenAI-compatible client works the same way (LangChain, LlamaIndex, Vercel AI SDK, …).
 
 ## 🏗 How it works
@@ -250,7 +271,6 @@ Every error, from validation to provider failures, comes back in the OpenAI shap
 | Situation | Status | `code` |
 |---|:---:|---|
 | Invalid JSON or body | 400 | `invalid_json` / `invalid_request` |
-| `stream: true` (until spec 003) | 400 | `stream_not_supported` |
 | Unknown model | 404 | `model_not_found` |
 | Body too large / not JSON | 413 / 415 | `request_too_large` / `unsupported_media_type` |
 | Provider 4xx (e.g. 429) | same | passed through |
@@ -326,6 +346,7 @@ x-switchyard-upstream-ms: 1436
 | Span | `switchyard.upstream` | `gen_ai.system`, `gen_ai.request.model`, `gen_ai.response.model`, `gen_ai.usage.input_tokens` / `output_tokens` |
 | Counter | `switchyard_requests_total` | by `provider`, `model`, `status` |
 | Histogram | `switchyard_upstream_duration_seconds` | by `provider`, `model`, `outcome` |
+| Histogram | `switchyard_ttfb_seconds` | time to first streamed token, by `provider`, `model` |
 | Logs | JSON (pino) | every line carries `trace_id` / `span_id`; secrets redacted |
 
 > [!IMPORTANT]
@@ -354,7 +375,8 @@ pnpm dev             # gateway in watch mode
 |---|---|
 | `pnpm verify` | Biome lint · strict typecheck · unit tests with **≥ 80% line coverage** on core and modules · build |
 | `pnpm test:int` | Real Postgres and Redis (Testcontainers), real HTTP timeouts and connection failures |
-| `pnpm test:contract` | The **official OpenAI SDK** against the gateway (mock always; Ollama when running) |
+| `pnpm test:contract` | The **official OpenAI Node SDK** against the gateway: chat, streaming, embeddings (mock always; Ollama when running) |
+| `pnpm test:contract:py` | The same with the **official OpenAI Python SDK** (needs `pip install -r test/contract/python/requirements.txt`) |
 | `pnpm test:smoke` | Boots the Compose stack: health, readiness, a chat request, bad config, memory budget, graceful SIGTERM |
 
 ```mermaid
@@ -407,7 +429,7 @@ Each spec ends with a verification table, for example [spec 002](docs/specs/002-
 **v0.1: a working gateway**
 - [x] [001](docs/specs/001-bootstrap/spec.md) Bootstrap: validated config, health/readiness, traces + correlated logs, graceful shutdown, Compose, CI
 - [x] [002](docs/specs/002-chat-proxy/spec.md) Chat proxy: `/v1/chat/completions`, `/v1/models`, adapters, error mapping, upstream telemetry, SDK contract tests
-- [ ] 003 Streaming (SSE) and `/v1/embeddings`
+- [x] [003](docs/specs/003-streaming/spec.md) Streaming (SSE) and `/v1/embeddings`, Node + Python SDK contract tests
 - [ ] 004 Virtual keys, teams and admin API
 - [ ] 005 Rate limiting (RPM / TPM)
 - [ ] 006 Usage events pipeline (Kafka, idempotent worker, DLQ)

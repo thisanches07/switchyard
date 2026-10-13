@@ -40,6 +40,23 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm test:int
 
+  contract-python:
+    name: Contract tests (OpenAI Python SDK)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: pip install -r test/contract/python/requirements.txt
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:contract:py
+
   compose-smoke:
     name: Docker Compose smoke test
     runs-on: ubuntu-latest

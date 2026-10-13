@@ -1,22 +1,22 @@
 import {
   type Counter,
+  context,
   type Histogram,
   type MeterProvider,
   metrics,
+  type Span,
   SpanKind,
   SpanStatusCode,
   trace,
 } from "@opentelemetry/api";
 import type { FastifyBaseLogger } from "fastify";
 import { GatewayError } from "../../core/errors.js";
-import type { ChatProvider, ChatResult } from "../../core/provider.js";
-
-const tracer = trace.getTracer("switchyard");
 
 interface Instruments {
   provider: MeterProvider;
   requests: Counter;
   upstreamDuration: Histogram;
+  ttfb: Histogram;
 }
 let instruments: Instruments | undefined;
 
@@ -28,10 +28,14 @@ function getInstruments(): Instruments {
     instruments = {
       provider,
       requests: meter.createCounter("switchyard_requests_total", {
-        description: "Chat requests by provider, resolved model and HTTP status returned",
+        description: "Requests by provider, resolved model and status returned",
       }),
       upstreamDuration: meter.createHistogram("switchyard_upstream_duration_seconds", {
-        description: "Time spent waiting for the provider",
+        description: "Time spent waiting for the provider (whole stream for streaming calls)",
+        unit: "s",
+      }),
+      ttfb: meter.createHistogram("switchyard_ttfb_seconds", {
+        description: "Time from the upstream request to the first streamed chunk",
         unit: "s",
       }),
     };
@@ -40,68 +44,130 @@ function getInstruments(): Instruments {
 }
 
 export interface UpstreamCallInfo {
-  provider: ChatProvider;
+  provider: { name: string; type: string };
   model: string;
   logger: FastifyBaseLogger;
+  operation?: "chat" | "embeddings";
+  stream?: boolean;
+}
+
+export interface UpstreamUsage {
+  inputTokens: number;
+  outputTokens?: number;
+}
+
+export interface UpstreamOutcome {
+  usage?: UpstreamUsage | undefined;
+  responseModel?: string | undefined;
+  /** True when usage was estimated because the provider reported none. */
+  estimated?: boolean;
+}
+
+/** Lifecycle of one upstream call; exactly one terminal method takes effect. */
+export interface UpstreamSpan {
+  /** Runs `fn` with the span active so HTTP client spans nest under it. */
+  run<T>(fn: () => Promise<T>): Promise<T>;
+  /** Marks the first streamed chunk (records TTFB); returns TTFB in ms. */
+  firstChunk(): number;
+  succeed(outcome: UpstreamOutcome): void;
+  fail(error: unknown, phase: "before_first_byte" | "midstream"): void;
+  clientGone(): void;
 }
 
 /**
- * Wraps a provider call in a `switchyard.upstream` span and records metrics (spec 002, AC-9).
+ * Starts a `switchyard.upstream` span (spec 002 AC-9, spec 003 AC-8).
  * Only metadata is recorded: never message content (ADR-0010).
  */
-export function tracedUpstreamCall(
-  info: UpstreamCallInfo,
-  call: () => Promise<ChatResult>,
-): Promise<ChatResult> {
+export function startUpstreamSpan(info: UpstreamCallInfo): UpstreamSpan {
   const { provider, model, logger } = info;
-  return tracer.startActiveSpan(
-    "switchyard.upstream",
-    {
-      kind: SpanKind.CLIENT,
-      attributes: {
-        "gen_ai.operation.name": "chat",
-        "gen_ai.system": provider.name,
-        "gen_ai.request.model": model,
-        "switchyard.provider.type": provider.type,
-      },
+  const operation = info.operation ?? "chat";
+  // Looked up per call so a swapped global provider (tests) is always honoured.
+  const span: Span = trace.getTracer("switchyard").startSpan("switchyard.upstream", {
+    kind: SpanKind.CLIENT,
+    attributes: {
+      "gen_ai.operation.name": operation,
+      "gen_ai.system": provider.name,
+      "gen_ai.request.model": model,
+      "switchyard.provider.type": provider.type,
+      "switchyard.stream": info.stream ?? false,
     },
-    async (span) => {
-      const started = performance.now();
-      const labels = { provider: provider.name, model };
-      try {
-        const result = await call();
-        if (result.responseModel) span.setAttribute("gen_ai.response.model", result.responseModel);
-        if (result.usage) {
-          span.setAttribute("gen_ai.usage.input_tokens", result.usage.inputTokens);
-          span.setAttribute("gen_ai.usage.output_tokens", result.usage.outputTokens);
+  });
+  const spanContext = trace.setSpan(context.active(), span);
+  const started = performance.now();
+  const labels = { provider: provider.name, model };
+  let ended = false;
+
+  const finish = (status: string, outcome: string) => {
+    ended = true;
+    const { requests, upstreamDuration } = getInstruments();
+    requests.add(1, { ...labels, status });
+    upstreamDuration.record((performance.now() - started) / 1000, { ...labels, outcome });
+    span.end();
+  };
+
+  return {
+    run: (fn) => context.with(spanContext, fn),
+
+    firstChunk() {
+      const ttfbMs = performance.now() - started;
+      span.setAttribute("switchyard.ttfb_ms", Math.round(ttfbMs));
+      getInstruments().ttfb.record(ttfbMs / 1000, labels);
+      return ttfbMs;
+    },
+
+    succeed(outcome) {
+      if (ended) return;
+      if (outcome.responseModel) span.setAttribute("gen_ai.response.model", outcome.responseModel);
+      if (outcome.usage) {
+        span.setAttribute("gen_ai.usage.input_tokens", outcome.usage.inputTokens);
+        if (outcome.usage.outputTokens !== undefined) {
+          span.setAttribute("gen_ai.usage.output_tokens", outcome.usage.outputTokens);
         }
-        span.setAttribute("http.response.status_code", 200);
-        record(labels, 200, "ok", started);
-        return result;
-      } catch (error) {
-        const status = error instanceof GatewayError ? error.status : 500;
-        const code = error instanceof GatewayError ? error.code : "internal_error";
-        span.setStatus({ code: SpanStatusCode.ERROR, message: code });
-        span.setAttribute("http.response.status_code", status);
-        record(labels, status, code === "upstream_timeout" ? "timeout" : "error", started);
-        if (status >= 500) {
-          logger.warn({ ...labels, code, status }, "upstream request failed");
-        }
-        throw error;
-      } finally {
-        span.end();
       }
+      if (outcome.estimated) span.setAttribute("switchyard.usage.estimated", true);
+      span.setAttribute("http.response.status_code", 200);
+      finish("200", "ok");
     },
-  );
+
+    fail(error, phase) {
+      if (ended) return;
+      const status = error instanceof GatewayError ? error.status : 500;
+      const code = error instanceof GatewayError ? error.code : "internal_error";
+      const outcome = code === "upstream_timeout" ? "timeout" : "error";
+      span.setStatus({ code: SpanStatusCode.ERROR, message: code });
+      if (phase === "midstream") {
+        // Headers (200) were already sent; ADR-0008 forbids retrying from here.
+        span.setAttribute("switchyard.midstream_error", true);
+        span.setAttribute("http.response.status_code", 200);
+        logger.warn({ ...labels, code }, "upstream stream failed after first byte");
+        finish("upstream_error_midstream", outcome);
+        return;
+      }
+      span.setAttribute("http.response.status_code", status);
+      if (status >= 500) logger.warn({ ...labels, code, status }, "upstream request failed");
+      finish(String(status), outcome);
+    },
+
+    clientGone() {
+      if (ended) return;
+      span.setAttribute("switchyard.client_closed", true);
+      finish("499", "client_closed");
+    },
+  };
 }
 
-function record(
-  labels: { provider: string; model: string },
-  status: number,
-  outcome: "ok" | "error" | "timeout",
-  started: number,
-): void {
-  const { requests, upstreamDuration } = getInstruments();
-  requests.add(1, { ...labels, status: String(status) });
-  upstreamDuration.record((performance.now() - started) / 1000, { ...labels, outcome });
+/** Wraps a non-streaming provider call (chat or embeddings) in an upstream span. */
+export async function tracedUpstreamCall<T extends UpstreamOutcome>(
+  info: UpstreamCallInfo,
+  call: () => Promise<T>,
+): Promise<T> {
+  const upstream = startUpstreamSpan(info);
+  try {
+    const result = await upstream.run(call);
+    upstream.succeed(result);
+    return result;
+  } catch (error) {
+    upstream.fail(error, "before_first_byte");
+    throw error;
+  }
 }

@@ -69,4 +69,24 @@ describe("createProviderRegistry", () => {
     await providerOf(registry, "openrouter").chat(request, ctx());
     expect(http.calls[0]?.headers.authorization).toBe("Bearer sk-or-secret");
   });
+
+  it("placeholder providers also reject streaming and embeddings", async () => {
+    const registry = createProviderRegistry(
+      testConfig(),
+      {},
+      {
+        http: fakeHttp(() => jsonResponse(200, ok)).client,
+      },
+    );
+    const claude = providerOf(registry, "claude");
+    expect((await gatewayError(claude.chatStream(request, ctx()))).status).toBe(501);
+    expect((await gatewayError(claude.embeddings({ model: "m", input: "x" }, ctx()))).status).toBe(
+      501,
+    );
+    const openrouter = providerOf(registry, "openrouter");
+    expect((await gatewayError(openrouter.chatStream(request, ctx()))).status).toBe(503);
+    expect(
+      (await gatewayError(openrouter.embeddings({ model: "m", input: "x" }, ctx()))).status,
+    ).toBe(503);
+  });
 });

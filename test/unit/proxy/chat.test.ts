@@ -66,13 +66,6 @@ describe("POST /v1/chat/completions", () => {
     expect(res.json().error.message).toContain(field);
   });
 
-  it("stream: true → 400 stream_not_supported", async () => {
-    const { post } = await setup();
-    const res = await post({ model: "fast", messages, stream: true });
-    expect(res.statusCode).toBe(400);
-    expect(res.json().error.code).toBe("stream_not_supported");
-  });
-
   it("upstream failure keeps provider headers and maps the error", async () => {
     const { post } = await setup();
     const res = await post({ model: "mock/error-500", messages });

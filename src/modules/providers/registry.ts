@@ -34,7 +34,11 @@ function buildProvider(
     case "mock":
       return createMockProvider(
         name,
-        { latencyMs: provider.latencyMs, errorRate: provider.errorRate },
+        {
+          latencyMs: provider.latencyMs,
+          errorRate: provider.errorRate,
+          chunkDelayMs: provider.chunkDelayMs,
+        },
         deps.random ? { random: deps.random } : {},
       );
     case "anthropic":

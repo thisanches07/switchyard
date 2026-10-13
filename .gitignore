@@ -34,3 +34,7 @@ PLANO_DO_PROJETO.md
 
 # Claude Code local settings
 .claude/settings.local.json
+
+# Python contract tests
+__pycache__/
+.pytest_cache/

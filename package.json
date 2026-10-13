@@ -21,7 +21,8 @@
     "test:coverage": "vitest run --project unit --coverage",
     "verify": "pnpm lint && pnpm typecheck && pnpm test:coverage && pnpm build",
     "test:smoke": "node scripts/compose-smoke.ts --down",
-    "test:contract": "vitest run --project contract"
+    "test:contract": "vitest run --project contract",
+    "test:contract:py": "node --import tsx scripts/contract-python.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.15",
