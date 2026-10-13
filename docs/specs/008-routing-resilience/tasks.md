@@ -16,7 +16,7 @@ One commit per task, ending in `[spec-008]`. `pnpm verify` green after each.
   - Test: `test/unit/routing/resolve.test.ts` › planRoute (alias, plain ref, unknown); `test/unit/routing/select.test.ts` › priority, lowest-cost (priced, unknown last, ties, no estimator), lowest-latency (cold first, EWMA order).
   - Files: `src/modules/routing/{resolve,select}.ts`
 
-- [ ] **T3. Backoff, Retry-After and failure classification**
+- [x] **T3. Backoff, Retry-After and failure classification**
   - ACs: AC-3, AC-4
   - Test: `test/unit/routing/backoff.test.ts` › full jitter bounds with fixed RNG, cap, Retry-After floor and cap, seconds and HTTP-date; `test/unit/routing/classify.test.ts` › status table, explicit flag wins, timeout, non-GatewayError.
   - Files: `src/modules/routing/{backoff,classify}.ts`
