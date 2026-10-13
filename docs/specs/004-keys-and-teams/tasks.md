@@ -5,7 +5,7 @@
 
 One commit per task, ending in `[spec-004]`. `pnpm verify` green after each (exit code checked, not grepped).
 
-- [ ] **T1. Environment: `KEY_PEPPER`, `ADMIN_TOKEN`, `MIGRATE_ON_BOOT`**
+- [x] **T1. Environment: `KEY_PEPPER`, `ADMIN_TOKEN`, `MIGRATE_ON_BOOT`**
   - ACs: AC-9
   - Test: `env.test.ts` › pepper required and ≥ 32 chars, admin token optional and ≥ 16 chars, `MIGRATE_ON_BOOT` parsing; `.env.example` and test helpers updated.
 

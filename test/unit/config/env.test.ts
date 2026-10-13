@@ -5,6 +5,7 @@ import { ConfigError } from "../../../src/config/errors.js";
 const base = {
   DATABASE_URL: "postgres://u:p@localhost:5432/db",
   REDIS_URL: "redis://localhost:6379",
+  KEY_PEPPER: "test-pepper-0123456789abcdefghijklmnop",
 };
 
 function issuesOf(fn: () => unknown) {
@@ -52,5 +53,41 @@ describe("loadEnv", () => {
 
   it("reports the environment as the error source", () => {
     expect(() => loadEnv({})).toThrowError(/Invalid configuration in environment/);
+  });
+});
+
+describe("loadEnv: auth settings (spec 004)", () => {
+  const pepper = "p".repeat(32);
+
+  it("requires KEY_PEPPER of at least 32 characters", () => {
+    const { KEY_PEPPER: _omit, ...withoutPepper } = { ...base, KEY_PEPPER: pepper };
+    expect(issuesOf(() => loadEnv(withoutPepper)).map((i) => i.path)).toContain("KEY_PEPPER");
+    expect(issuesOf(() => loadEnv({ ...base, KEY_PEPPER: "short" })).map((i) => i.path)).toContain(
+      "KEY_PEPPER",
+    );
+  });
+
+  it("accepts an optional ADMIN_TOKEN of at least 16 characters", () => {
+    expect(loadEnv({ ...base, KEY_PEPPER: pepper }).ADMIN_TOKEN).toBeUndefined();
+    expect(loadEnv({ ...base, KEY_PEPPER: pepper, ADMIN_TOKEN: "a".repeat(16) }).ADMIN_TOKEN).toBe(
+      "a".repeat(16),
+    );
+    expect(
+      issuesOf(() => loadEnv({ ...base, KEY_PEPPER: pepper, ADMIN_TOKEN: "tiny" })).map(
+        (i) => i.path,
+      ),
+    ).toContain("ADMIN_TOKEN");
+  });
+
+  it("parses MIGRATE_ON_BOOT with a false default", () => {
+    expect(loadEnv({ ...base, KEY_PEPPER: pepper }).MIGRATE_ON_BOOT).toBe(false);
+    expect(loadEnv({ ...base, KEY_PEPPER: pepper, MIGRATE_ON_BOOT: "true" }).MIGRATE_ON_BOOT).toBe(
+      true,
+    );
+    expect(
+      issuesOf(() => loadEnv({ ...base, KEY_PEPPER: pepper, MIGRATE_ON_BOOT: "yes" })).map(
+        (i) => i.path,
+      ),
+    ).toContain("MIGRATE_ON_BOOT");
   });
 });

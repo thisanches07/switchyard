@@ -11,6 +11,7 @@ const baseEnv = {
   SWITCHYARD_CONFIG: resolve(root, "config/switchyard.example.yaml"),
   OLLAMA_BASE_URL: "http://127.0.0.1:11434/v1",
   OTEL_SDK_DISABLED: "true",
+  KEY_PEPPER: "test-pepper-0123456789abcdefghijklmnop",
   HOST: "127.0.0.1",
   PORT: "0",
 };
