@@ -87,7 +87,7 @@ One commit per task, ending in `[spec-008]`. `pnpm verify` green after each. T7â
 
 ## Verification (2026-10-13)
 
-`pnpm verify` green (1026 unit tests, lines 85.7 %); `pnpm test:int` green (11 files, 66 tests, chaos test included); `pnpm test:contract` green (Node SDK suites; live Anthropic suite skipped without a key). The Compose smoke step (AC-16) runs in CI.
+After rebasing on spec 007: `pnpm verify` green (1154 unit tests, lines 85.8 %); `pnpm test:int` green (14 files, 81 tests, chaos test with default breaker settings included). Contract tests were green before the rebase (Node SDK suites; live Anthropic suite skipped without a key). The Compose smoke step (AC-16) runs in CI.
 
 | AC | Test(s) |
 |---|---|
