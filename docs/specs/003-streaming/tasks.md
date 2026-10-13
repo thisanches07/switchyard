@@ -47,7 +47,7 @@ One commit per task, ending in `[spec-003]`. `pnpm verify` green after each.
   - ACs: AC-2, AC-6
   - Test: `test/integration/streaming.int.test.ts` › first chunk arrives before the provider finishes; client abort → upstream aborted < 1 s and status 499.
 
-- [ ] **T10. Embeddings route**
+- [x] **T10. Embeddings route**
   - ACs: AC-10
   - Test: `test/unit/proxy/embeddings.test.ts` › alias resolution, string and array input, invalid input 400, unknown model 404, headers, upstream errors.
 
