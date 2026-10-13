@@ -27,6 +27,8 @@ const mockProvider = z.strictObject({
   type: z.literal("mock"),
   latencyMs: z.number().int().nonnegative().default(0),
   errorRate: z.number().min(0).max(1).default(0),
+  /** Delay between streamed chunks. */
+  chunkDelayMs: z.number().int().nonnegative().default(0),
 });
 
 const providerSchema = z.discriminatedUnion("type", [

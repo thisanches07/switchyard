@@ -1,6 +1,11 @@
 import { z } from "zod";
 import type { ChatRequest } from "../../core/chat.js";
-import { upstreamClientError, upstreamError, upstreamTimeout } from "../../core/errors.js";
+import {
+  providerNotImplemented,
+  upstreamClientError,
+  upstreamError,
+  upstreamTimeout,
+} from "../../core/errors.js";
 import {
   type CallContext,
   type ChatProvider,
@@ -79,6 +84,12 @@ export function createOpenAiCompatibleProvider(
 
       // 5xx and anything unexpected: do not forward the upstream body (may leak internals).
       throw upstreamError(config.name);
+    },
+    async chatStream() {
+      throw providerNotImplemented(config.name, "streaming");
+    },
+    async embeddings() {
+      throw providerNotImplemented(config.name, "embeddings");
     },
   };
 }

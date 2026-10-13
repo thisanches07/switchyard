@@ -1,6 +1,6 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import type { ChatRequest } from "../../core/chat.js";
-import { upstreamClientError, upstreamError } from "../../core/errors.js";
+import { providerNotImplemented, upstreamClientError, upstreamError } from "../../core/errors.js";
 import type { CallContext, ChatProvider, ChatResult } from "../../core/provider.js";
 import { abortedCallError } from "./abort.js";
 
@@ -68,6 +68,12 @@ export function createMockProvider(
         usage: { inputTokens, outputTokens: COMPLETION_TOKENS },
         responseModel: request.model,
       };
+    },
+    async chatStream() {
+      throw providerNotImplemented(name, "streaming");
+    },
+    async embeddings() {
+      throw providerNotImplemented(name, "embeddings");
     },
   };
 }

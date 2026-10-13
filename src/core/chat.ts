@@ -18,3 +18,14 @@ export interface Usage {
   inputTokens: number;
   outputTokens: number;
 }
+
+/** One parsed `chat.completion.chunk` event, forwarded to the client as-is (minus usage rules). */
+export type ChatChunk = Record<string, unknown>;
+
+export interface EmbeddingsRequest {
+  model: string;
+  /** A string, an array of strings, or token arrays; passed through untouched. */
+  input: unknown;
+  encoding_format?: string | undefined;
+  [key: string]: unknown;
+}

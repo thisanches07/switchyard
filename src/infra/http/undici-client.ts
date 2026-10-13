@@ -61,6 +61,9 @@ export function createUndiciClient(timeouts: UpstreamTimeouts): HttpClient & {
         throw error;
       }
     },
+    async postStream() {
+      throw new Error("postStream is implemented in spec 003 task T5");
+    },
     close: () => agent.close(),
   };
 }

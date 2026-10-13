@@ -72,4 +72,18 @@ describe("configSchema", () => {
     server.timeouts.ttfbMs = 0;
     expect(issues(config)[0]?.path).toBe("server.timeouts.ttfbMs");
   });
+
+  it("example config defines the embed alias", () => {
+    const config = configSchema.parse(example());
+    expect(config.aliases.embed?.candidates).toEqual(["ollama/nomic-embed-text"]);
+  });
+
+  it("mock providers accept chunkDelayMs", () => {
+    const config = example();
+    config.providers = { mock: { type: "mock", chunkDelayMs: 25 } };
+    config.aliases = {};
+    config.cache = { exact: { enabled: false, ttlSeconds: 1 } };
+    const parsed = configSchema.parse(config);
+    expect(parsed.providers.mock).toMatchObject({ type: "mock", chunkDelayMs: 25 });
+  });
 });

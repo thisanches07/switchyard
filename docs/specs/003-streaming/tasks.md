@@ -5,7 +5,7 @@
 
 One commit per task, ending in `[spec-003]`. `pnpm verify` green after each.
 
-- [ ] **T1. Port and type changes**
+- [x] **T1. Port and type changes**
   - ACs: foundation for all
   - Do: `ChatChunk`, `ChatStream`, `EmbeddingsRequest/Result`, `HttpStreamResponse`; `chatStream`/`embeddings` on `ChatProvider`; failing provider implements them; mock `chunkDelayMs` in config schema; `embed` alias in the example config.
   - Test: `test/unit/providers/registry.test.ts` › failing providers reject `chatStream`/`embeddings` with 501/503; `schema.test.ts` › example config has `embed` alias and accepts `chunkDelayMs`.

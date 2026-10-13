@@ -13,5 +13,11 @@ export function createFailingProvider(
     async chat() {
       throw error();
     },
+    async chatStream() {
+      throw error();
+    },
+    async embeddings() {
+      throw error();
+    },
   };
 }
