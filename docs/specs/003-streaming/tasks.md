@@ -20,7 +20,7 @@ One commit per task, ending in `[spec-003]`. `pnpm verify` green after each.
   - Test: `test/unit/proxy/usage.test.ts` › extract usage from chunks, strip usage when not requested, drop usage-only chunk, estimate tokens from messages and deltas.
   - Files: `src/modules/proxy/usage.ts`
 
-- [ ] **T4. Mock streaming and embeddings**
+- [x] **T4. Mock streaming and embeddings**
   - ACs: AC-9, AC-11
   - Test: `mock.test.ts` › chunk sequence, delay honoured, usage chunk when requested, `error-midstream` fails after a chunk, `error-500` rejects before streaming; embeddings deterministic 768-dim, normalised, base64 round-trip.
 
