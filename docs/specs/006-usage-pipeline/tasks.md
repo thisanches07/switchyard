@@ -10,7 +10,7 @@ One commit per task, ending in `[spec-006]`. `pnpm verify` exit code checked aft
   - Do: `usage` schema with defaults; `KAFKA_BROKERS` (optional, parsed list) in the gateway env; `loadWorkerEnv`; `loadUsageConfig` (reads only the `usage` section); example config.
   - Test: `schema.test.ts` › `usage` defaults and validation; `env.test.ts` › `KAFKA_BROKERS` parsing, worker env requires `DATABASE_URL` and `KAFKA_BROKERS`; `load.test.ts` › `loadUsageConfig` ignores provider env.
 
-- [ ] **T2. `UsageEvent` v1 schema, UUIDv7 and ports in core**
+- [x] **T2. `UsageEvent` v1 schema, UUIDv7 and ports in core**
   - ACs: AC-1, AC-2
   - Do: `src/core/usage.ts` (schema, types, `OutcomeRecorder`, `MessageProducer`, `UsageStore`, `UsageReader`), `src/core/uuid.ts`.
   - Test: `test/unit/usage/schema.test.ts` › accepts a full event; rejects unknown fields, `schemaVersion: 2`, a v4 id, negative tokens, `costUsd` with exponent or sign; `uuid.test.ts` › version/variant bits, time ordering.
