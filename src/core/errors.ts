@@ -14,6 +14,11 @@ export class GatewayError extends Error {
   readonly code: string;
   /** Extra response headers (e.g. retry-after and x-ratelimit-* on 429). */
   readonly headers: Readonly<Record<string, string>>;
+  /**
+   * Explicit retry classification set by provider adapters (ADR-0004); undefined means
+   * "classify by status" (spec 008).
+   */
+  readonly retryable: boolean | undefined;
 
   constructor(
     status: number,
@@ -21,6 +26,7 @@ export class GatewayError extends Error {
     code: string,
     message: string,
     headers: Record<string, string> = {},
+    options: { retryable?: boolean | undefined } = {},
   ) {
     super(message);
     this.name = "GatewayError";
@@ -28,6 +34,7 @@ export class GatewayError extends Error {
     this.type = type;
     this.code = code;
     this.headers = headers;
+    this.retryable = options.retryable;
   }
 
   toBody(): OpenAiErrorBody {
@@ -93,6 +100,58 @@ export const upstreamClientError = (status: number, fields: UpstreamErrorFields)
     fields.type ?? INVALID,
     fields.code ?? `upstream_${status}`,
     fields.message ?? `Provider rejected the request with status ${status}`,
+  );
+
+/** Embeddings sent to a provider family that has no embeddings API (spec 014, AC-5). */
+export const embeddingsNotSupported = (provider: string) =>
+  new GatewayError(
+    400,
+    INVALID,
+    "embeddings_not_supported",
+    `Provider "${provider}" does not support embeddings`,
+  );
+
+/** A request parameter the target provider cannot honour (ADR-0016). */
+export const unsupportedParameter = (param: string, detail: string) =>
+  new GatewayError(
+    400,
+    INVALID,
+    "unsupported_parameter",
+    `Unsupported parameter "${param}" for this provider: ${detail}`,
+  );
+
+export const invalidToolArguments = (detail: string) =>
+  new GatewayError(400, INVALID, "invalid_tool_arguments", detail);
+
+/** The operator's provider key was rejected: a gateway problem, not the client's (spec 014). */
+export const upstreamAuthError = (provider: string) =>
+  new GatewayError(
+    502,
+    SERVER,
+    "upstream_auth_error",
+    `Provider "${provider}" rejected the gateway's credentials`,
+    {},
+    { retryable: false },
+  );
+
+export const upstreamRateLimited = (provider: string, headers: Record<string, string>) =>
+  new GatewayError(
+    429,
+    "rate_limit_error",
+    "upstream_rate_limited",
+    `Provider "${provider}" is rate limiting requests`,
+    headers,
+    { retryable: true },
+  );
+
+export const upstreamOverloaded = (provider: string) =>
+  new GatewayError(
+    503,
+    SERVER,
+    "upstream_overloaded",
+    `Provider "${provider}" is overloaded`,
+    {},
+    { retryable: true },
   );
 
 export const internalError = () =>

@@ -63,7 +63,11 @@ export function createUndiciClient(timeouts: UpstreamTimeouts): HttpClient & {
           signal,
           dispatcher: agent,
         });
-        return { status: res.statusCode, text: await res.body.text() };
+        return {
+          status: res.statusCode,
+          text: await res.body.text(),
+          headers: flattenHeaders(res.headers),
+        };
       } catch (error) {
         throw mapError(error, total, options.signal);
       }
@@ -115,6 +119,7 @@ export function createUndiciClient(timeouts: UpstreamTimeouts): HttpClient & {
 
       return {
         status: res.statusCode,
+        headers: flattenHeaders(res.headers),
         text: async () => {
           clearTimeout(timer);
           try {
@@ -129,6 +134,18 @@ export function createUndiciClient(timeouts: UpstreamTimeouts): HttpClient & {
 
     close: () => agent.close(),
   };
+}
+
+/** Lower-cased header names, first value of repeated headers. */
+function flattenHeaders(
+  headers: Record<string, string | string[] | undefined>,
+): Record<string, string> {
+  const flat: Record<string, string> = {};
+  for (const [name, value] of Object.entries(headers)) {
+    const first = Array.isArray(value) ? value[0] : value;
+    if (first !== undefined) flat[name.toLowerCase()] = first;
+  }
+  return flat;
 }
 
 function errorCode(error: unknown): string | undefined {

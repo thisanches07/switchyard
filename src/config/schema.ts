@@ -22,6 +22,8 @@ const anthropicProvider = z.strictObject({
   type: z.literal("anthropic"),
   baseUrl: z.url().optional(),
   apiKeyEnv: envVarName,
+  /** `max_tokens` sent when an OpenAI request sets none; Anthropic requires it (spec 014). */
+  defaultMaxTokens: positiveInt.default(4096),
 });
 
 const mockProvider = z.strictObject({

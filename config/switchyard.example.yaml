@@ -23,8 +23,9 @@ providers:
     baseUrl: https://generativelanguage.googleapis.com/v1beta/openai
     apiKeyEnv: GEMINI_API_KEY
   claude:
-    type: anthropic
+    type: anthropic                      # also serves POST /v1/messages natively (spec 014)
     apiKeyEnv: ANTHROPIC_API_KEY
+    defaultMaxTokens: 4096               # max_tokens when an OpenAI request sets none
   mock:
     type: mock                           # tests and benchmarks only
     latencyMs: 50

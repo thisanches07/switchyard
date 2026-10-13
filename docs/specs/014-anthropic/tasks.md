@@ -5,7 +5,7 @@
 
 One commit per task, ending in `[spec-014]`. `pnpm verify` green after each.
 
-- [ ] **T1. Core, config and transport groundwork**
+- [x] **T1. Core, config and transport groundwork**
   - ACs: foundation (AC-1, AC-4, AC-5, AC-13)
   - Do: `src/core/anthropic.ts` (extension and native-event symbols, accessors); `Usage.cachedInputTokens?`; `ChatResult.native?`; optional `headers` on HTTP responses (undici returns them); `GatewayError` `retryable` option and new factories; `defaultMaxTokens` on `anthropic` providers; `@anthropic-ai/sdk` devDependency.
   - Test: `test/unit/core/errors.test.ts` › new factories and retryable flag; `test/unit/config/schema.test.ts` › `defaultMaxTokens` default 4096; `test/integration/upstream-http.int.test.ts` › response headers returned.
