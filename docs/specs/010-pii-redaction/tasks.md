@@ -41,7 +41,7 @@ One commit per task, ending in `[spec-010]`. `pnpm verify` green after each (exi
   - Do: `src/modules/pii/stage.ts`, `piiDetected` error, route wiring after admission, `request.pii`.
   - Test: `test/unit/proxy/pii-routes.test.ts` › provider receives placeholders; restored body + `masked`; stream keeps placeholders + `masked-unrestored`; embeddings masked; `none` when clean; no header and no scan when `off`; key mode overrides default; block 400 for chat, stream and embeddings with types only, provider not called, tokens refunded and request unit kept.
 
-- [ ] **T9. Telemetry and the privacy proof**
+- [x] **T9. Telemetry and the privacy proof**
   - ACs: AC-12, AC-13 (metric and span)
   - Test: `test/unit/pii/telemetry.test.ts` › `switchyard_pii_detections_total{type}` counts occurrences, span attributes for mask/block/none, `uninspected`; `test/unit/pii/privacy.test.ts` › trace-level logs, spans and metric points of mask and block requests with every AC-3 vector contain none of them.
 

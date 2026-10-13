@@ -8,6 +8,7 @@ import type { Admission } from "../ratelimit/admission.js";
 import { type MaskResult, maskChatRequest, maskEmbeddingsRequest } from "./mask.js";
 import type { RestoreMap } from "./placeholder.js";
 import { createScanner, type Scanner } from "./scan.js";
+import { recordPiiScan } from "./telemetry.js";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -65,12 +66,14 @@ export function createPiiStage(config: AppConfig["pii"]) {
     const masked = mask(body, scan);
     const found = PII_TYPES.filter((type) => (masked.detections[type] ?? 0) > 0);
     const action = found.length === 0 ? "none" : mode === "block" ? "blocked" : "masked";
-    ctx.request.pii = {
+    const result: PiiRequestResult = {
       mode,
       action,
       detections: masked.detections,
       ...(masked.uninspected && { uninspected: true }),
     };
+    ctx.request.pii = result;
+    recordPiiScan(ctx.request, result);
 
     if (action === "blocked") {
       // Nothing will be generated: give the tokens back, keep the request unit.
