@@ -15,7 +15,7 @@ One commit per task, ending in `[spec-010]`. `pnpm verify` green after each (exi
   - Do: enum + column, migration via `pnpm db:generate --name pii_mode`; `ApiKeyRecord`/`NewKey`/`Principal`/`KeyPatch`; Drizzle and memory stores; principal carries the key's mode.
   - Test: `db.int.test.ts` › column nullable, stored on create, updated and cleared; `memory-store.test.ts` › same semantics; `authenticate.test.ts` › principal `piiMode`.
 
-- [ ] **T3. Admin API: `piiMode`**
+- [x] **T3. Admin API: `piiMode`**
   - ACs: AC-2
   - Do: create and PATCH accept `piiMode` (PATCH may set it alone), key views return it, cache invalidated, OpenAPI bodies.
   - Test: `test/unit/admin/admin.test.ts` › create with/without `piiMode`, PATCH set/`null`, invalid value 400, listing, cache invalidation.

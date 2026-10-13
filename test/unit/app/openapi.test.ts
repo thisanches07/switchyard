@@ -32,6 +32,9 @@ describe("OpenAPI documentation", () => {
       ]),
     );
     expect(JSON.stringify(doc.components)).toContain("bearer");
+    // Spec 010: the key's PII mode is documented on create and PATCH.
+    expect(JSON.stringify(doc.paths["/admin/keys"])).toContain("piiMode");
+    expect(JSON.stringify(doc.paths["/admin/keys/{id}"])).toContain("piiMode");
   });
 
   it("serves the interactive UI", async () => {
