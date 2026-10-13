@@ -46,17 +46,27 @@ describe("RedisRateLimiter (Lua token buckets on real Redis)", () => {
     expect(await limiter.peek("r", 10)).toBe(10);
   });
 
+  // Redis refills with its own clock, so upper bounds use the time this test actually took:
+  // a slow CI runner must not turn a correct refill into a failure.
   it("refills continuously", async () => {
+    const started = performance.now();
     await limiter.take([req(600, 600)]); // 10 per second
     await new Promise((r) => setTimeout(r, 350));
     const level = await limiter.peek("sy:rl:key:k:req", 600);
+    const elapsedS = (performance.now() - started) / 1_000;
     expect(level).toBeGreaterThanOrEqual(3);
-    expect(level).toBeLessThan(6);
+    expect(level).toBeLessThanOrEqual(10 * elapsedS + 0.5);
   });
 
   it("keeps fractional balances (floats survive the Lua boundary)", async () => {
+    const started = performance.now();
     await limiter.take([req(60, 59.5)]);
-    expect(await limiter.peek("sy:rl:key:k:req", 60)).toBeCloseTo(0.5, 1);
+    const level = await limiter.peek("sy:rl:key:k:req", 60);
+    const elapsedS = (performance.now() - started) / 1_000;
+    // 0.5 left, plus at most one unit per second of refill while the test ran.
+    expect(level).toBeGreaterThanOrEqual(0.5);
+    expect(level).toBeLessThanOrEqual(0.5 + elapsedS + 0.01);
+    expect(Number.isInteger(level)).toBe(false);
   });
 
   it("adjust refunds up to capacity and charges below zero", async () => {
@@ -64,8 +74,12 @@ describe("RedisRateLimiter (Lua token buckets on real Redis)", () => {
     await limiter.take([req(1_000, 600, key)]);
     await limiter.adjust([{ key, capacity: 1_000, delta: 900 }]);
     expect(await limiter.peek(key, 1_000)).toBe(1_000);
+    const charged = performance.now();
     await limiter.adjust([{ key, capacity: 1_000, delta: -1_500 }]);
-    expect(await limiter.peek(key, 1_000)).toBeLessThan(-490);
+    const level = await limiter.peek(key, 1_000);
+    const elapsedS = (performance.now() - charged) / 1_000;
+    expect(level).toBeLessThan(0);
+    expect(level).toBeLessThanOrEqual(-500 + (1_000 / 60) * elapsedS + 0.5);
     expect((await limiter.take([req(1_000, 1, key)])).allowed).toBe(false);
   });
 
