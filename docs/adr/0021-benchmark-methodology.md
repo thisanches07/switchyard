@@ -27,6 +27,19 @@ We will use **option 1** on the reference machine for published numbers:
 - **Runs:** published numbers come from a clean tree; a run is repeated at least three times and the report shows every run's values (the median run is highlighted, none are dropped).
 - **CI:** runs a short smoke variant for correctness only (option 3 is rejected for publication).
 
+### Parameters (amended 2026-10-13, spec 012 design, before any published run)
+The values live in `bench/bench.config.json` (profile `full`), are hashed into every run's `environment.json`, and change only by amending this section first:
+
+| Scenario | Arrival rate | Warm-up | Steady | Notes |
+|---|---|---|---|---|
+| `no-cache` | 50 req/s | 30 s | 120 s | gateway and direct baseline |
+| `exact-cache` | 50 req/s | 30 s | 120 s | identical `temperature: 0` requests, cache-enabled gateway |
+| `streaming` | 20 req/s | 30 s | 120 s | gateway and direct baseline |
+| `rate-limited` | 5 req/s | 30 s | 120 s | key limited to 60 rpm |
+| `chaos` | 20 req/s | 30 s | 120 s | primary fails 30 % of requests |
+
+The mock upstream answers after 50 ms and spaces streamed chunks by 20 ms. These are initial choices, not measurements: if the first reference run shows the direct baseline saturating (k6 dropped iterations), the rate is lowered here before any run is published. The `smoke` profile (CI, correctness only) uses short phases and low rates and is never published.
+
 ## Consequences
 - ✅ Free, reproducible with one command on Windows and Linux, and honest about its limits.
 - ✅ The open model avoids coordinated omission; the paired baseline isolates gateway cost from mock latency and host noise.

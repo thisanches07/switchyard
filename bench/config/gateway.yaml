@@ -1,0 +1,70 @@
+# Gateway config for the benchmark stack (spec 012): both caches OFF.
+# bench/config/gateway-cache.yaml must stay identical except cache.exact.enabled (a unit test checks).
+# Providers are the benchmark mock upstreams, reached through the openai-compatible adapter.
+
+server:
+  bodyLimitBytes: 1048576
+  trustProxy: false
+  timeouts:
+    connectMs: 5000
+    ttfbMs: 30000
+    totalMs: 120000
+
+providers:
+  upstream:
+    type: openai-compatible
+    baseUrl: http://mock-upstream:9100/v1
+  flaky:
+    type: openai-compatible
+    baseUrl: http://mock-flaky:9100/v1     # fails MOCK_FLAKY_ERROR_RATE of requests (503)
+
+aliases:
+  bench-chaos:                             # chaos scenario: primary fails 30 %, secondary healthy
+    strategy: priority
+    candidates: [flaky/bench, upstream/bench]
+
+limits:                        # no defaults: benchmark keys carry their own rpm/tpm
+  completionReserveTokens: 512
+  onRedisError: open
+  authFailuresPerMinutePerIp: 30
+
+usage:
+  enabled: true
+  topic: usage.events.v1
+  dlqTopic: usage.events.dlq
+  bufferSize: 10000
+  flushIntervalMs: 200
+
+budgets:
+  onRedisError: closed
+  reconcileIntervalSeconds: 60
+
+pii:
+  defaultMode: off
+  detectors: [email, phone, card, cpf, cnpj, ip, term]
+  denyList: []
+
+retry:
+  maxAttempts: 3
+  baseDelayMs: 200
+  maxDelayMs: 2000
+
+circuitBreaker:
+  failureThreshold: 10
+  openMs: 10000
+
+routing:
+  ewmaAlpha: 0.3
+  hotReload: false
+
+cache:
+  exact:
+    enabled: false
+    ttlSeconds: 3600
+  semantic:
+    enabled: false
+    embeddingModel: upstream/embed
+    similarityThreshold: 0.95
+    ttlSeconds: 86400
+
+pricingFile: config/pricing.yaml

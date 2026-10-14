@@ -10,7 +10,7 @@ One commit per task, ending in `[spec-012]`. Lint, typecheck and the task's test
   - Do: `bench/mock-upstream/server.ts`, `main.ts`, `tsconfig.json`, `Dockerfile`; root `tsconfig.json` includes `bench`.
   - Test: `mock-upstream.test.ts` › config from env and flags; latency honoured; errors injected at the configured rate within tolerance (seeded random, and through the real `openai-compatible` provider); chunks spaced by the delay; SSE parsed by the gateway's adapter; `error-<status>` and `error-midstream`; embeddings and health.
 
-- [ ] **T2. Benchmark config and bench stack**
+- [x] **T2. Benchmark config and bench stack**
   - ACs: AC-2, AC-3
   - Do: `bench/bench.config.json`, `bench/config/gateway.yaml`, `gateway-cache.yaml`, `bench/compose.bench.yml`, `bench/lib/config.ts`; ADR-0021 parameters section.
   - Test: `bench-config.test.ts` › both gateway configs parse with `parseConfig` and differ only in `cache.exact.enabled`; every scenario has full and smoke parameters; k6 image pinned by tag and digest; config hash stable and sensitive to changes.

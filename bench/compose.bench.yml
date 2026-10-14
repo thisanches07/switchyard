@@ -1,0 +1,97 @@
+# Benchmark stack (spec 012), merged over docker-compose.yml by `pnpm bench`:
+#   docker compose -p switchyard-bench -f docker-compose.yml -f bench/compose.bench.yml ...
+# Relative paths resolve against the repository root (the first file's directory).
+# MOCK_* and K6_IMAGE come from bench/bench.config.json through bench/run.ts.
+
+services:
+  gateway:
+    environment:
+      SWITCHYARD_CONFIG: /app/bench-config/gateway.yaml
+      LOG_LEVEL: warn
+    volumes:
+      - ./bench/config:/app/bench-config:ro
+    depends_on:
+      mock-upstream:
+        condition: service_healthy
+      mock-flaky:
+        condition: service_healthy
+
+  # Same image and database as `gateway`, with the exact cache enabled (exact-cache scenario).
+  gateway-cache:
+    build: .
+    image: switchyard-gateway:dev
+    init: true
+    environment:
+      PORT: "8080"
+      LOG_LEVEL: warn
+      SWITCHYARD_CONFIG: /app/bench-config/gateway-cache.yaml
+      DATABASE_URL: postgres://switchyard:switchyard@postgres:5432/switchyard
+      REDIS_URL: redis://redis:6379
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-only-admin-token-change-me}
+      KEY_PEPPER: ${KEY_PEPPER:-dev-only-pepper-change-me-0123456789abcdef}
+      # `gateway` runs the migrations; this instance waits for it.
+      MIGRATE_ON_BOOT: "false"
+      KAFKA_BROKERS: redpanda:9092
+      OTEL_SERVICE_NAME: switchyard-gateway-cache
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://lgtm:4318
+    volumes:
+      - ./config:/app/config:ro
+      - ./bench/config:/app/bench-config:ro
+    depends_on:
+      gateway:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  mock-upstream:
+    build:
+      context: .
+      dockerfile: bench/mock-upstream/Dockerfile
+    image: switchyard-mock-upstream:bench
+    init: true
+    environment:
+      PORT: "9100"
+      MOCK_LATENCY_MS: ${MOCK_LATENCY_MS:-50}
+      MOCK_CHUNK_DELAY_MS: ${MOCK_CHUNK_DELAY_MS:-20}
+      MOCK_ERROR_RATE: "0"
+    healthcheck: &mock-health
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:9100/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  mock-flaky:
+    build:
+      context: .
+      dockerfile: bench/mock-upstream/Dockerfile
+    image: switchyard-mock-upstream:bench
+    init: true
+    environment:
+      PORT: "9100"
+      MOCK_LATENCY_MS: ${MOCK_LATENCY_MS:-50}
+      MOCK_CHUNK_DELAY_MS: ${MOCK_CHUNK_DELAY_MS:-20}
+      MOCK_ERROR_RATE: ${MOCK_FLAKY_ERROR_RATE:-0.3}
+    healthcheck: *mock-health
+
+  lgtm:
+    ports:
+      # Prometheus, for the server-side overhead collector.
+      - "127.0.0.1:${BENCH_PROMETHEUS_PORT:-9090}:9090"
+
+  # Load generator, started only by `docker compose run` (profile tools).
+  k6:
+    image: ${K6_IMAGE:?K6_IMAGE is set by bench/run.ts from bench/bench.config.json}
+    profiles: [tools]
+    volumes:
+      - ./bench/k6:/scripts:ro
