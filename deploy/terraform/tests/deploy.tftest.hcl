@@ -38,7 +38,7 @@ run "defaults_stay_within_always_free" {
   }
 
   assert {
-    condition     = oci_core_instance.demo.source_details[0].boot_volume_size_in_gbs == 50
+    condition     = tonumber(oci_core_instance.demo.source_details[0].boot_volume_size_in_gbs) == 50
     error_message = "the boot volume must default to 50 GB"
   }
 }
@@ -64,7 +64,7 @@ run "only_http_https_and_operator_ssh_are_open" {
   }
 
   assert {
-    condition     = oci_core_route_table.public.route_rules[0].destination == "0.0.0.0/0"
+    condition     = [for rule in oci_core_route_table.public.route_rules : rule.destination] == ["0.0.0.0/0"]
     error_message = "the public subnet routes to the internet gateway"
   }
 }

@@ -27,10 +27,10 @@ the full `pnpm verify` runs once at the end. Docker- and Terraform-heavy checks 
 - [x] **T8. Release workflow** — AC-1, AC-3
   - Test: review + `workflow_dispatch` dry run; `test/unit/deploy/workflows.test.ts` ("release triggers on v* tags", "preflight runs before images", "push only on tags", "both platforms", "pinned actions").
   - Files: `.github/workflows/release.yml`.
-- [ ] **T9. Terraform for Oracle Always Free** — AC-7, AC-8
+- [x] **T9. Terraform for Oracle Always Free** — AC-7, AC-8
   - Test: `deploy/terraform/tests/deploy.tftest.hcl` (mocked provider); CI `terraform` job; lock file for 5 platforms.
   - Files: `deploy/terraform/*.tf`, `.terraform.lock.hcl`, `terraform.tfvars.example`.
-- [ ] **T10. cloud-init + renderer** — AC-9
+- [x] **T10. cloud-init + renderer** — AC-9
   - Test: `test/unit/deploy/cloud-init.test.ts` ("renders only switchyard_version", "rejects unknown placeholders", "docker, unattended-upgrades, ssh hardening, systemd units"); CI `cloud-init` job (`cloud-init schema`).
   - Files: `deploy/terraform/cloud-init.yaml.tftpl`, `scripts/lib/cloud-init.ts`, `scripts/render-cloud-init.ts`.
 - [ ] **T11. Runbook, README, CHANGELOG, threat model** — AC-11, AC-12
