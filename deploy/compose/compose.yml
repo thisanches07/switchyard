@@ -152,6 +152,10 @@ services:
     image: grafana/otel-lgtm:0.36.0
     volumes:
       - lgtm-data:/data
+      # Dashboards and alert rules as code (spec 011, ADR-0020), from deploy/grafana.
+      - ../grafana/provisioning/dashboards/switchyard.yaml:/otel-lgtm/grafana/conf/provisioning/dashboards/switchyard.yaml:ro
+      - ../grafana/dashboards:/otel-lgtm/switchyard/dashboards:ro
+      - ../grafana/alerting:/otel-lgtm/grafana/conf/provisioning/alerting:ro
     networks:
       default:
         ipv4_address: 172.30.0.20

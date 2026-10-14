@@ -46,8 +46,9 @@ write_files:
       APT::Periodic::Unattended-Upgrade "1";
       APT::Periodic::AutocleanInterval "7";
 
-  # Installs deploy/compose/ from the repository at tag v<version> into /opt/switchyard.
-  # Keeps an existing config/ so operator edits survive upgrades.
+  # Installs deploy/compose/ and deploy/grafana/ (spec 011 dashboards) from the repository at
+  # tag v<version> into /opt/switchyard/deploy. Keeps an existing compose/config/ so operator
+  # edits survive upgrades.
   - path: /usr/local/bin/switchyard-fetch
     permissions: "0755"
     content: |
@@ -58,21 +59,22 @@ write_files:
         exit 2
       fi
       version="$1"
-      base="https://raw.githubusercontent.com/thisanches07/switchyard/v$version/deploy/compose"
-      dir=/opt/switchyard
+      url="https://codeload.github.com/thisanches07/switchyard/tar.gz/refs/tags/v$version"
+      dir=/opt/switchyard/deploy
       tmp="$(mktemp -d)"
       trap 'rm -rf "$tmp"' EXIT
-      mkdir -p "$tmp/config" "$dir/config"
-      for file in compose.yml Caddyfile switchyard.env.example config/switchyard.yaml config/pricing.yaml; do
-        curl -fsSL --retry 5 -o "$tmp/$file" "$base/$file"
-      done
-      install -m 0644 "$tmp/compose.yml" "$tmp/Caddyfile" "$tmp/switchyard.env.example" "$dir/"
+      curl -fsSL --retry 5 "$url" | tar -xz -C "$tmp" --strip-components=1 --wildcards '*/deploy/compose' '*/deploy/grafana'
+      mkdir -p "$dir/compose/config"
+      install -m 0644 "$tmp/deploy/compose/compose.yml" "$tmp/deploy/compose/Caddyfile" "$tmp/deploy/compose/switchyard.env.example" "$dir/compose/"
       for file in switchyard.yaml pricing.yaml; do
-        if [ ! -e "$dir/config/$file" ]; then
-          install -m 0644 "$tmp/config/$file" "$dir/config/$file"
+        if [ ! -e "$dir/compose/config/$file" ]; then
+          install -m 0644 "$tmp/deploy/compose/config/$file" "$dir/compose/config/$file"
         fi
       done
-      echo "Switchyard compose bundle v$version installed in $dir"
+      rm -rf "$dir/grafana"
+      cp -R "$tmp/deploy/grafana" "$dir/grafana"
+      chmod -R a+rX "$dir"
+      echo "Switchyard deploy bundle v$version installed in $dir"
 
   - path: /etc/systemd/system/switchyard.service
     permissions: "0644"
@@ -87,7 +89,7 @@ write_files:
       [Service]
       Type=oneshot
       RemainAfterExit=yes
-      WorkingDirectory=/opt/switchyard
+      WorkingDirectory=/opt/switchyard/deploy/compose
       ExecStart=/usr/bin/docker compose --env-file /etc/switchyard/switchyard.env -f compose.yml up -d --wait --wait-timeout 600
       ExecStop=/usr/bin/docker compose --env-file /etc/switchyard/switchyard.env -f compose.yml down
       TimeoutStartSec=900
@@ -115,6 +117,8 @@ runcmd:
   - iptables -I INPUT -p tcp -m multiport --dports 80,443 -m conntrack --ctstate NEW -j ACCEPT
   - if command -v netfilter-persistent >/dev/null 2>&1; then netfilter-persistent save; fi
   - install -d -m 0700 -o root -g root /etc/switchyard
-  - /usr/local/bin/switchyard-fetch ${switchyard_version}
+  # Units first: if the download fails (e.g. the tag is not published yet), rerun
+  # `sudo switchyard-fetch <version>` by hand and the path unit still starts the stack.
   - systemctl daemon-reload
   - systemctl enable --now docker.service switchyard.path
+  - /usr/local/bin/switchyard-fetch ${switchyard_version}

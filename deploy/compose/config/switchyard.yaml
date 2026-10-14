@@ -1,6 +1,6 @@
 # Public demo configuration (spec 013). Free models only: the mock provider, and optionally a
 # small Ollama model on the VM's CPU (docs/deploy.md, "Serving a local model").
-# Hot-reloaded on change (spec 008): edit on the VM in /opt/switchyard/config/.
+# Hot-reloaded on change (spec 008): edit on the VM in /opt/switchyard/deploy/compose/config/.
 
 server:
   bodyLimitBytes: 65536        # demo prompts are small

@@ -96,6 +96,12 @@ describe("production Compose file (spec 013, AC-4)", () => {
     expect(text).toContain("ipv4_address: 172.30.0.20");
   });
 
+  it("provisions the spec 011 dashboards and alert rules in Grafana", () => {
+    expect(text).toContain("../grafana/dashboards:/otel-lgtm/switchyard/dashboards:ro");
+    expect(text).toContain("../grafana/alerting:/otel-lgtm/grafana/conf/provisioning/alerting:ro");
+    expect(text).toContain("../grafana/provisioning/dashboards/switchyard.yaml:");
+  });
+
   it("keeps Ollama optional", () => {
     expect(services.ollama?.profiles).toEqual(["ollama"]);
   });

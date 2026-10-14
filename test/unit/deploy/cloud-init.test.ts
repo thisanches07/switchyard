@@ -68,20 +68,24 @@ describe("VM cloud-init (spec 013, AC-9)", () => {
     expect(sshd).toContain("PermitRootLogin no");
   });
 
-  it("installs the production Compose bundle of the given version", () => {
+  it("installs the production Compose bundle and Grafana provisioning of the given version", () => {
     expect(config.runcmd).toContain("/usr/local/bin/switchyard-fetch 0.1.0");
     const fetch = file("/usr/local/bin/switchyard-fetch");
     expect(fetch).toContain(
-      "https://raw.githubusercontent.com/thisanches07/switchyard/v$version/deploy/compose",
+      "https://codeload.github.com/thisanches07/switchyard/tar.gz/refs/tags/v$version",
     );
-    for (const name of [
-      "compose.yml",
-      "Caddyfile",
-      "config/switchyard.yaml",
-      "config/pricing.yaml",
-    ]) {
-      expect(fetch).toContain(name);
-    }
+    expect(fetch).toContain("'*/deploy/compose' '*/deploy/grafana'");
+    expect(fetch).toContain("dir=/opt/switchyard/deploy");
+    expect(file("/etc/systemd/system/switchyard.service")).toContain(
+      "WorkingDirectory=/opt/switchyard/deploy/compose",
+    );
+  });
+
+  it("enables the units before downloading, so a failed download can be retried by hand", () => {
+    const enable = config.runcmd.findIndex((c) => c.includes("enable --now"));
+    const fetch = config.runcmd.findIndex((c) => c.includes("switchyard-fetch"));
+    expect(enable).toBeGreaterThan(-1);
+    expect(enable).toBeLessThan(fetch);
   });
 
   it("starts the stack through systemd once the operator has provided the env file", () => {

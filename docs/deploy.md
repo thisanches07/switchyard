@@ -23,7 +23,7 @@ operator_cidr ──► 22 (SSH, key only) ────┘   admin API and Grafa
   security list allowing only TCP 80/443 from anywhere and TCP 22 from your `operator_cidr`, and
   one `VM.Standard.A1.Flex` instance (2 OCPUs, 12 GB, 50 GB boot volume by default).
 - **cloud-init** (`deploy/terraform/cloud-init.yaml.tftpl`): Docker Engine + Compose plugin,
-  automatic security updates, key-only SSH, the production Compose bundle in `/opt/switchyard`
+  automatic security updates, key-only SSH, the production Compose bundle and the Grafana dashboards (spec 011) in `/opt/switchyard/deploy`
   and a systemd unit that starts the stack once `/etc/switchyard/switchyard.env` exists.
 - **Production Compose** (`deploy/compose/`): published images
   `ghcr.io/thisanches07/switchyard-{gateway,worker}:<version>`, Caddy terminating TLS, and the
@@ -68,6 +68,11 @@ Edit `terraform.tfvars`: `region` (your home region), `compartment_ocid` (the te
 the root compartment, or a compartment you created), `operator_cidr` (your IP as a `/32`;
 `0.0.0.0/0` is rejected), `ssh_public_key`. `switchyard_version` selects the Compose bundle the
 VM downloads on first boot (default: the current release).
+
+> **Release first.** `switchyard_version` must be a published release: the VM downloads
+> `deploy/compose` and `deploy/grafana` from the `v<version>` tag and pulls the GHCR images of
+> that version, so push the tag and make the GHCR packages public ([Releases](#releases-maintainers))
+> before `terraform apply`. If the download fails, run `sudo switchyard-fetch <version>` on the VM.
 
 ## 3. `terraform init`, `plan`, `apply`
 
@@ -123,7 +128,7 @@ pulls the images, a few minutes). Missing secrets stop Compose; the dev defaults
 every API key.
 
 ```sh
-ssh ubuntu@<public_ip> 'sudo systemctl status switchyard --no-pager; cd /opt/switchyard && sudo docker compose ps'
+ssh ubuntu@<public_ip> 'sudo systemctl status switchyard --no-pager; cd /opt/switchyard/deploy/compose && sudo docker compose --env-file /etc/switchyard/switchyard.env ps'
 ```
 
 ## 6. Check health
@@ -174,7 +179,7 @@ and prints the key **once** on stdout. Running it again keeps the key and update
 
 ```sh
 ssh ubuntu@<public_ip>
-cd /opt/switchyard
+cd /opt/switchyard/deploy/compose
 echo 'COMPOSE_PROFILES=ollama' | sudo tee -a /etc/switchyard/switchyard.env
 sudo systemctl restart switchyard
 sudo docker compose --env-file /etc/switchyard/switchyard.env exec ollama ollama pull llama3.2:1b
@@ -192,7 +197,7 @@ provider-side spending limits; never put a paid key on the public demo without a
 
 ```sh
 ssh ubuntu@<public_ip>
-sudo switchyard-fetch 0.2.0                                  # new compose.yml and Caddyfile
+sudo switchyard-fetch 0.2.0                                  # new compose.yml, Caddyfile, dashboards
 sudo sed -i 's/^SWITCHYARD_VERSION=.*/SWITCHYARD_VERSION=0.2.0/' /etc/switchyard/switchyard.env
 sudo systemctl restart switchyard                            # pulls the new images, migrates
 ```
