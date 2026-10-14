@@ -25,7 +25,7 @@ One commit per task, ending in `[spec-012]`. Lint, typecheck and the task's test
   - Do: `bench/lib/k6-summary.ts`, `bench/lib/evaluate.ts`.
   - Test: `evaluate.test.ts` › summary extracted between markers; percentiles and achieved rate; client overhead as a difference of percentiles; T1/T2 met, missed and not evaluated; rate-limit bound; dropped iterations flagged.
 
-- [ ] **T5. Environment and run folder**
+- [x] **T5. Environment and run folder**
   - ACs: AC-5
   - Do: `bench/lib/environment.ts`, `bench/lib/args.ts`.
   - Test: `environment.test.ts` › run id; dirty and smoke runs not publishable and routed to `results/local`; Docker info and image digests shaped. `args.test.ts` › `--scenario`, `--smoke`, `--keep`, bare `--`, unknown scenario.
