@@ -1,0 +1,190 @@
+# Deploy checks (spec 013): images, production Compose, Terraform and cloud-init, all without
+# cloud credentials and without pushing anything. Runs when deployment-related files change.
+name: Deploy
+
+on:
+  pull_request:
+    paths:
+      - Dockerfile
+      - .dockerignore
+      - docker-compose.yml
+      - deploy/**
+      - .github/workflows/deploy.yml
+      - .github/workflows/release.yml
+      - scripts/compose-smoke.ts
+      - scripts/deploy-smoke.ts
+      - scripts/demo-key.ts
+      - scripts/release-check.ts
+      - scripts/render-cloud-init.ts
+      - scripts/lib/**
+      - test/deploy/**
+      - package.json
+      - pnpm-lock.yaml
+      - CHANGELOG.md
+  push:
+    branches: [main]
+    paths:
+      - Dockerfile
+      - .dockerignore
+      - docker-compose.yml
+      - deploy/**
+      - .github/workflows/deploy.yml
+      - .github/workflows/release.yml
+      - scripts/compose-smoke.ts
+      - scripts/deploy-smoke.ts
+      - scripts/demo-key.ts
+      - scripts/release-check.ts
+      - scripts/render-cloud-init.ts
+      - scripts/lib/**
+      - test/deploy/**
+      - package.json
+      - pnpm-lock.yaml
+      - CHANGELOG.md
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  GATEWAY_IMAGE: ghcr.io/thisanches07/switchyard-gateway
+  WORKER_IMAGE: ghcr.io/thisanches07/switchyard-worker
+
+jobs:
+  release-preflight:
+    name: Release preflight (version and changelog)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      # The tag the next release needs (v<package.json version>) would pass the release workflow.
+      - run: node scripts/release-check.ts
+
+  images-multiarch:
+    name: Build ${{ matrix.target }} image (amd64 + arm64, no push)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [gateway, worker]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+        with:
+          platforms: arm64
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: ${{ matrix.target }}
+          platforms: linux/amd64,linux/arm64
+          push: false
+          provenance: false
+          cache-from: type=gha,scope=${{ matrix.target }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.target }}
+
+  images-compose:
+    name: amd64 images in the dev Compose stack
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: gateway
+          platforms: linux/amd64
+          load: true
+          tags: switchyard-gateway:ci
+          cache-from: type=gha,scope=gateway
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: worker
+          platforms: linux/amd64
+          load: true
+          tags: switchyard-worker:ci
+          cache-from: type=gha,scope=worker
+      # The full Compose smoke test (healthz, readyz, worker topics, usage counted) on these images.
+      - run: node scripts/compose-smoke.ts --down
+        env:
+          SMOKE_NO_BUILD: "1"
+          SWITCHYARD_GATEWAY_IMAGE: switchyard-gateway:ci
+          SWITCHYARD_WORKER_IMAGE: switchyard-worker:ci
+
+  prod-compose:
+    name: Production Compose behind Caddy (HTTPS, ports, demo key)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - id: version
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      # Tagged like the published images, so the production file runs them without pulling.
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: gateway
+          platforms: linux/amd64
+          load: true
+          tags: ${{ env.GATEWAY_IMAGE }}:${{ steps.version.outputs.version }}
+          cache-from: type=gha,scope=gateway
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: worker
+          platforms: linux/amd64
+          load: true
+          tags: ${{ env.WORKER_IMAGE }}:${{ steps.version.outputs.version }}
+          cache-from: type=gha,scope=worker
+      - run: node scripts/deploy-smoke.ts --down
+
+  terraform:
+    name: Terraform fmt, validate and test (no credentials)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: deploy/terraform
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.16.5
+          terraform_wrapper: false
+      - run: terraform fmt -check -recursive
+      - run: terraform init -backend=false -input=false -lockfile=readonly
+      - run: terraform validate
+      # Plans against a mocked OCI provider only: proves the variable validations and the
+      # Always Free defaults without an account. No real plan or apply runs in CI.
+      - run: terraform test
+
+  cloud-init:
+    name: cloud-init schema
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - run: node scripts/render-cloud-init.ts --out "$RUNNER_TEMP/cloud-init.yaml"
+      - run: sudo apt-get update && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y cloud-init
+      - run: cloud-init schema --config-file "$RUNNER_TEMP/cloud-init.yaml" --annotate

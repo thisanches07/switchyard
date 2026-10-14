@@ -1,6 +1,6 @@
 # Spec 013: Deploy (multi-arch images, release workflow, Terraform for Oracle Always Free)
 
-- **Status:** Approved (2026-10-13)
+- **Status:** Done (2026-10-13). Docker- and cloud-init-based checks (AC-2, AC-5, AC-6, AC-9 schema) first run in the PR's CI; the publish path of AC-1/AC-3 runs at the first `v0.1.0` tag.
 - **Owner:** @thisanches07
 - **Release:** v0.3
 - **Depends on:** 012

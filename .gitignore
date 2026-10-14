@@ -22,12 +22,21 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 
-# Terraform
-deploy/terraform/.terraform/
+# Terraform (spec 013): state, working dirs and real variable values never get committed.
+# The provider lock file (.terraform.lock.hcl) and *.tfvars.example are tracked.
+**/.terraform/
 *.tfstate
 *.tfstate.*
+.terraform.tfstate.lock.info
+*.tfplan
 *.tfvars
+*.tfvars.json
 !*.tfvars.example
+crash.log
+
+# Production environment files (spec 013); only *.env.example is tracked.
+*.env
+!*.env.example
 
 # Personal planning notes (pt-BR), kept local only
 PLANO_DO_PROJETO.md

@@ -1,6 +1,6 @@
 {
   "name": "switchyard",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "Self-hosted, OpenAI-compatible LLM gateway",
   "license": "MIT",
@@ -28,6 +28,7 @@
     "test:contract:py": "node --import tsx scripts/contract-python.ts",
     "bench": "node bench/run.ts",
     "bench:report": "node bench/report.ts",
+    "demo:key": "node scripts/demo-key.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node --env-file-if-exists=.env --import tsx scripts/db-migrate.ts"
   },

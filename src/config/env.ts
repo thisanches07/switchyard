@@ -55,6 +55,11 @@ const envSchema = z.object({
     .transform((value) => value === "true"),
   /** Required when `usage.enabled` is true (checked at boot, spec 006). */
   KAFKA_BROKERS: kafkaBrokers.optional(),
+  /** Production (spec 013, AC-4): refuse to start with the dev defaults of docker-compose.yml. */
+  SWITCHYARD_REQUIRE_SECRETS: z
+    .enum(["true", "false"], { error: 'must be "true" or "false"' })
+    .default("false")
+    .transform((value) => value === "true"),
   OTEL_SERVICE_NAME: z.string().min(1).default("switchyard-gateway"),
   SHUTDOWN_TIMEOUT_MS: shutdownTimeoutMs,
 });

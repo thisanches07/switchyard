@@ -1,0 +1,126 @@
+# Release (spec 013, AC-1 and AC-3): a vX.Y.Z[-suffix] tag builds the gateway and worker images
+# for linux/amd64 and linux/arm64, pushes them to GHCR and creates a GitHub Release whose notes
+# are the matching CHANGELOG.md section. Run it by hand (workflow_dispatch) for a dry run: it
+# checks and builds everything for v<package.json version> but pushes and releases nothing.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    name: Tag, version and changelog
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      tag: ${{ steps.check.outputs.tag }}
+      version: ${{ steps.check.outputs.version }}
+      prerelease: ${{ steps.check.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      # Fails before anything is built or pushed when the tag does not match package.json or the
+      # CHANGELOG.md section is missing. A manual run checks v<package.json version>.
+      - id: check
+        run: |
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            node scripts/release-check.ts --tag "$GITHUB_REF_NAME" --notes release-notes.md
+          else
+            node scripts/release-check.ts --notes release-notes.md
+          fi
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-notes
+          path: release-notes.md
+          if-no-files-found: error
+
+  images:
+    name: Publish ${{ matrix.target }} image
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: true
+      matrix:
+        target: [gateway, worker]
+    env:
+      PUSH: ${{ github.event_name == 'push' && github.ref_type == 'tag' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+        with:
+          platforms: arm64
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - if: env.PUSH == 'true'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # Tags: X.Y.Z always; X.Y and latest only for releases without a pre-release suffix
+      # (metadata-action skips both for pre-releases). Labels and annotations carry the OCI
+      # source, revision and version.
+      - id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        env:
+          DOCKER_METADATA_ANNOTATIONS_LEVELS: manifest,index
+        with:
+          images: ghcr.io/thisanches07/switchyard-${{ matrix.target }}
+          flavor: latest=auto
+          tags: |
+            type=semver,pattern={{version}},value=${{ needs.preflight.outputs.tag }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.preflight.outputs.tag }}
+          labels: |
+            org.opencontainers.image.title=switchyard-${{ matrix.target }}
+            org.opencontainers.image.description=Switchyard ${{ matrix.target }}: self-hosted, OpenAI-compatible LLM gateway
+            org.opencontainers.image.licenses=MIT
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: ${{ matrix.target }}
+          platforms: linux/amd64,linux/arm64
+          push: ${{ env.PUSH == 'true' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          # Optional attestations (AC-3): attached when the registry accepts them.
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha,scope=${{ matrix.target }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.target }}
+
+  github-release:
+    name: GitHub Release
+    needs: [preflight, images]
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-notes
+      - env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.preflight.outputs.tag }}
+          PRERELEASE: ${{ needs.preflight.outputs.prerelease }}
+        run: |
+          flags=()
+          if [ "$PRERELEASE" = "true" ]; then flags+=(--prerelease); fi
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag \
+            --title "$TAG" --notes-file release-notes.md "${flags[@]}"

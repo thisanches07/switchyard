@@ -1,0 +1,187 @@
+# Production Compose profile (spec 013): published images by version, Caddy terminating TLS.
+# Only Caddy publishes host ports (80 and 443). Everything else stays on the compose network;
+# the admin API and Grafana are reached through an SSH tunnel to the fixed addresses below
+# (see docs/deploy.md).
+#
+#   docker compose --env-file /etc/switchyard/switchyard.env -f compose.yml up -d --wait
+#
+# Every secret comes from that env file (template: switchyard.env.example, never committed with
+# real values). Unset values stop Compose; dev or placeholder values stop the gateway
+# (SWITCHYARD_REQUIRE_SECRETS).
+name: switchyard
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  caddy:
+    image: caddy:2.11.7-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      # A public name gets a Let's Encrypt certificate (default: <a-b-c-d>.sslip.io);
+      # `localhost` gets a certificate from Caddy's internal CA (CI).
+      SWITCHYARD_HOSTNAME: ${SWITCHYARD_HOSTNAME:?set SWITCHYARD_HOSTNAME in the env file}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      gateway:
+        condition: service_healthy
+    restart: unless-stopped
+    logging: *logging
+
+  gateway:
+    image: ghcr.io/thisanches07/switchyard-gateway:${SWITCHYARD_VERSION:?set SWITCHYARD_VERSION in the env file}
+    init: true
+    environment:
+      PORT: "8080"
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      SWITCHYARD_CONFIG: /config/switchyard.yaml
+      SWITCHYARD_REQUIRE_SECRETS: "true"
+      DATABASE_URL: postgres://switchyard:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in the env file}@postgres:5432/switchyard
+      REDIS_URL: redis://redis:6379
+      ADMIN_TOKEN: ${ADMIN_TOKEN:?set ADMIN_TOKEN in the env file}
+      KEY_PEPPER: ${KEY_PEPPER:?set KEY_PEPPER in the env file}
+      MIGRATE_ON_BOOT: "true"
+      KAFKA_BROKERS: redpanda:9092
+      OTEL_SERVICE_NAME: switchyard-gateway
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://lgtm:4318
+      # Optional hosted providers: add them to config/switchyard.yaml and set provider-side limits.
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+    volumes:
+      - ./config:/config:ro
+    networks:
+      default:
+        ipv4_address: 172.30.0.10
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    logging: *logging
+
+  usage-worker:
+    image: ghcr.io/thisanches07/switchyard-worker:${SWITCHYARD_VERSION:?set SWITCHYARD_VERSION in the env file}
+    init: true
+    environment:
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      SWITCHYARD_CONFIG: /config/switchyard.yaml
+      DATABASE_URL: postgres://switchyard:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in the env file}@postgres:5432/switchyard
+      KAFKA_BROKERS: redpanda:9092
+      REDIS_URL: redis://redis:6379
+      OTEL_SERVICE_NAME: switchyard-usage-worker
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://lgtm:4318
+    volumes:
+      - ./config:/config:ro
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      # Healthy once its migrations (usage tables included) have run.
+      gateway:
+        condition: service_healthy
+    restart: unless-stopped
+    logging: *logging
+
+  postgres:
+    image: pgvector/pgvector:0.8.7-pg17
+    environment:
+      POSTGRES_USER: switchyard
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in the env file}
+      POSTGRES_DB: switchyard
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U switchyard -d switchyard"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+    logging: *logging
+
+  redis:
+    image: redis:7.4.11-alpine
+    # Counters only (ADR-0006): rate limits refill, budget counters are reconciled from Postgres.
+    command: ["redis-server", "--appendonly", "no", "--save", ""]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+    logging: *logging
+
+  redpanda:
+    image: redpandadata/redpanda:v26.2.4
+    # Single node, small footprint; dev-container mode relaxes fsync, acceptable for best-effort
+    # usage events (ADR-0007). Internal listener only.
+    command:
+      - redpanda
+      - start
+      - --mode=dev-container
+      - --smp=1
+      - --memory=1G
+      - --overprovisioned
+      - --default-log-level=warn
+      - --kafka-addr=internal://0.0.0.0:9092
+      - --advertise-kafka-addr=internal://redpanda:9092
+    volumes:
+      - redpanda-data:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true' || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+    logging: *logging
+
+  # Grafana (3000) and OTLP; reach Grafana with `ssh -L 3000:172.30.0.20:3000 ubuntu@<host>`.
+  lgtm:
+    image: grafana/otel-lgtm:0.36.0
+    volumes:
+      - lgtm-data:/data
+      # Dashboards and alert rules as code (spec 011, ADR-0020), from deploy/grafana.
+      - ../grafana/provisioning/dashboards/switchyard.yaml:/otel-lgtm/grafana/conf/provisioning/dashboards/switchyard.yaml:ro
+      - ../grafana/dashboards:/otel-lgtm/switchyard/dashboards:ro
+      - ../grafana/alerting:/otel-lgtm/grafana/conf/provisioning/alerting:ro
+    networks:
+      default:
+        ipv4_address: 172.30.0.20
+    restart: unless-stopped
+    logging: *logging
+
+  # Optional local model on the VM's CPU: `--profile ollama` (see docs/deploy.md).
+  ollama:
+    image: ollama/ollama:0.40.2
+    profiles: [ollama]
+    volumes:
+      - ollama-data:/root/.ollama
+    restart: unless-stopped
+    logging: *logging
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+
+volumes:
+  caddy-data:
+  caddy-config:
+  pg-data:
+  redis-data:
+  redpanda-data:
+  lgtm-data:
+  ollama-data:

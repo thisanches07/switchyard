@@ -1,0 +1,6 @@
+# Test-only prices (spec 013, AC-6): synthetic and deliberately high, so the demo key's hard
+# budget is spent after a few mock requests in CI. Never use outside tests.
+
+models:
+  ollama/llama3.2:1b:  { input: 0, output: 0, verifiedAt: 2026-10-13 }
+  mock/*:              { input: 20000, output: 20000, note: "test-only synthetic prices" }

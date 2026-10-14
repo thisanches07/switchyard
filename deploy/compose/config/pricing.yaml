@@ -1,0 +1,6 @@
+# USD per 1M tokens for the public demo (spec 007 format). Local models cost nothing to the
+# operator; mock prices are synthetic so the demo key's budget visibly accrues spend.
+
+models:
+  ollama/llama3.2:1b:  { input: 0, output: 0, verifiedAt: 2026-10-13 }
+  mock/*:              { input: 1.0, output: 2.0, note: "synthetic prices for the demo" }
