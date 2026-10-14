@@ -85,6 +85,23 @@ describe("statistics and overhead (AC-7)", () => {
     expect(evaluation.invalidReasons).toHaveLength(1);
   });
 
+  it("compares a stream's server-side overhead with the client TTFB difference, not the total", () => {
+    const run = makeRun({
+      id: "fixture-s",
+      summaries: {
+        ...passing,
+        "streaming.direct": { latency: [170, 176, 184], ttfb: [50, 52, 56] },
+        "streaming.gateway": { latency: [196, 215, 232], ttfb: [53, 57, 80] },
+      },
+      // Server-side p95 5 ms: the TTFB difference (5 ms) agrees; the total difference (39 ms) would not.
+      server: { streaming: [0.002, 0.005, 0.017] },
+    });
+    const streaming = evaluateRun(run).scenarios.find((s) => s.name === "streaming");
+    expect(streaming?.clientOverhead?.p95).toBe(39);
+    expect(streaming?.clientTtfbOverhead?.p95).toBe(5);
+    expect(streaming?.notes.join("\n")).not.toMatch(/differ by/);
+  });
+
   it("computes the cache hit ratio only from labelled responses", () => {
     const labelled = makeRun({
       id: "fixture-c",
