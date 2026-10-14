@@ -1,0 +1,53 @@
+{
+  "metrics": {
+    "bench_requests": {
+      "type": "counter",
+      "values": {
+        "count": 2400,
+        "rate": 240
+      }
+    },
+    "bench_ok": {
+      "type": "counter",
+      "values": {
+        "count": 2398,
+        "rate": 239.8
+      }
+    },
+    "bench_failed": {
+      "type": "counter",
+      "values": {
+        "count": 2,
+        "rate": 0.2
+      }
+    },
+    "bench_rejected": {
+      "type": "counter",
+      "values": {
+        "count": 0,
+        "rate": 0
+      }
+    },
+    "correctness_errors": {
+      "type": "counter",
+      "values": {
+        "count": 0,
+        "rate": 0
+      }
+    },
+    "bench_latency": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "avg": 55,
+        "min": 27.5,
+        "med": 55,
+        "max": 600,
+        "p(50)": 55,
+        "p(95)": 70,
+        "p(99)": 300,
+        "count": 2400
+      }
+    }
+  }
+}

@@ -1,0 +1,110 @@
+{
+  "$comment": "Benchmark parameters (spec 012, ADR-0021). Configuration, not results: changing a full-profile value is a methodology change and needs an ADR-0021 amendment first.",
+  "k6Image": "grafana/k6:1.8.1@sha256:23f2279054c3e01535455c4d92914a625df12aeb631ea0e3ea7a43f96bcbc843",
+  "mock": {
+    "latencyMs": 50,
+    "chunkDelayMs": 20,
+    "flakyErrorRate": 0.3
+  },
+  "targets": {
+    "t1MaxOverheadP95Ms": 15,
+    "t2MinSuccessPct": 99
+  },
+  "serverMetrics": {
+    "metric": "switchyard_gateway_overhead_seconds",
+    "selectors": {
+      "no-cache": "operation=\"chat\",stream=\"false\"",
+      "exact-cache": "operation=\"chat\",stream=\"false\",cache=\"hit\"",
+      "streaming": "operation=\"chat\",stream=\"true\"",
+      "rate-limited": "operation=\"chat\",stream=\"false\",status=\"2xx\"",
+      "chaos": "operation=\"chat\",stream=\"false\""
+    },
+    "$comment": "Labels of spec 011 (operation, stream, status class, cache). Scenarios run one at a time, so the time window separates them; the cache-enabled gateway only serves exact-cache."
+  },
+  "profiles": {
+    "full": {
+      "serverMetricsLagSeconds": 35,
+      "scenarios": {
+        "no-cache": {
+          "rate": 50,
+          "warmupSeconds": 30,
+          "steadySeconds": 120,
+          "preAllocatedVUs": 20,
+          "maxVUs": 200
+        },
+        "exact-cache": {
+          "rate": 50,
+          "warmupSeconds": 30,
+          "steadySeconds": 120,
+          "preAllocatedVUs": 20,
+          "maxVUs": 200,
+          "requireCacheHeader": true
+        },
+        "streaming": {
+          "rate": 20,
+          "warmupSeconds": 30,
+          "steadySeconds": 120,
+          "preAllocatedVUs": 20,
+          "maxVUs": 200
+        },
+        "rate-limited": {
+          "rate": 5,
+          "warmupSeconds": 30,
+          "steadySeconds": 120,
+          "preAllocatedVUs": 10,
+          "maxVUs": 50,
+          "rpm": 60
+        },
+        "chaos": {
+          "rate": 20,
+          "warmupSeconds": 30,
+          "steadySeconds": 120,
+          "preAllocatedVUs": 20,
+          "maxVUs": 200
+        }
+      }
+    },
+    "smoke": {
+      "serverMetricsLagSeconds": 20,
+      "scenarios": {
+        "no-cache": {
+          "rate": 5,
+          "warmupSeconds": 2,
+          "steadySeconds": 5,
+          "preAllocatedVUs": 5,
+          "maxVUs": 20
+        },
+        "exact-cache": {
+          "rate": 5,
+          "warmupSeconds": 2,
+          "steadySeconds": 5,
+          "preAllocatedVUs": 5,
+          "maxVUs": 20,
+          "requireCacheHeader": true
+        },
+        "streaming": {
+          "rate": 5,
+          "warmupSeconds": 2,
+          "steadySeconds": 5,
+          "preAllocatedVUs": 5,
+          "maxVUs": 20
+        },
+        "rate-limited": {
+          "rate": 3,
+          "warmupSeconds": 2,
+          "steadySeconds": 5,
+          "preAllocatedVUs": 5,
+          "maxVUs": 20,
+          "rpm": 6
+        },
+        "chaos": {
+          "rate": 5,
+          "warmupSeconds": 2,
+          "steadySeconds": 5,
+          "preAllocatedVUs": 5,
+          "maxVUs": 20
+        }
+      }
+    }
+  }
+}

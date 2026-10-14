@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "runId": "fixture-20260103T000000Z-ccccccc-dirty",
+  "profile": "full",
+  "scenarios": [
+    {
+      "name": "no-cache",
+      "status": "passed",
+      "problems": [],
+      "passes": []
+    },
+    {
+      "name": "exact-cache",
+      "status": "passed",
+      "problems": [],
+      "passes": []
+    },
+    {
+      "name": "streaming",
+      "status": "passed",
+      "problems": [],
+      "passes": []
+    },
+    {
+      "name": "rate-limited",
+      "status": "passed",
+      "problems": [],
+      "passes": []
+    },
+    {
+      "name": "chaos",
+      "status": "passed",
+      "problems": [],
+      "passes": []
+    }
+  ]
+}

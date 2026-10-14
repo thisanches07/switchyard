@@ -1,0 +1,67 @@
+{
+  "metrics": {
+    "bench_requests": {
+      "type": "counter",
+      "values": {
+        "count": 2400,
+        "rate": 240
+      }
+    },
+    "bench_ok": {
+      "type": "counter",
+      "values": {
+        "count": 2400,
+        "rate": 240
+      }
+    },
+    "bench_failed": {
+      "type": "counter",
+      "values": {
+        "count": 0,
+        "rate": 0
+      }
+    },
+    "bench_rejected": {
+      "type": "counter",
+      "values": {
+        "count": 0,
+        "rate": 0
+      }
+    },
+    "correctness_errors": {
+      "type": "counter",
+      "values": {
+        "count": 0,
+        "rate": 0
+      }
+    },
+    "bench_latency": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "avg": 195,
+        "min": 97.5,
+        "med": 195,
+        "max": 460,
+        "p(50)": 195,
+        "p(95)": 206,
+        "p(99)": 230,
+        "count": 2400
+      }
+    },
+    "bench_ttfb": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "avg": 55,
+        "min": 27.5,
+        "med": 55,
+        "max": 150,
+        "p(50)": 55,
+        "p(95)": 60,
+        "p(99)": 75,
+        "count": 2400
+      }
+    }
+  }
+}

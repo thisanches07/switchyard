@@ -12,8 +12,8 @@ coverage/
 # Local config (copy from config/switchyard.example.yaml)
 config/switchyard.yaml
 
-# Benchmark raw output (curated results live in docs/benchmarks.md)
-bench/results/raw/
+# Benchmark smoke and dirty-tree runs (spec 012); clean full runs in bench/results/ are committed
+bench/results/local/
 
 # OS / editors
 .DS_Store

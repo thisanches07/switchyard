@@ -1,0 +1,35 @@
+# Benchmark smoke (spec 012, AC-10): a short variant of every k6 scenario against the Docker
+# stack, failing only on correctness and harness errors, never on latency. Its numbers are not
+# published or committed (they stay in the job log; the run folder is git-ignored).
+# A separate workflow because `paths` filters a whole workflow, and CI must run on every PR.
+name: Benchmark smoke
+
+on:
+  pull_request:
+    paths:
+      - "bench/**"
+      - "src/**"
+      - "Dockerfile"
+      - "docker-compose.yml"
+      - ".github/workflows/bench-smoke.yml"
+
+concurrency:
+  group: bench-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  bench-smoke:
+    name: Benchmark smoke (correctness only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm bench -- --smoke

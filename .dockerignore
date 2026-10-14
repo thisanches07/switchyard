@@ -5,6 +5,8 @@ coverage
 test
 docs
 bench
+# The benchmark mock upstream image (spec 012) builds from this folder.
+!bench/mock-upstream
 deploy
 .github
 .vscode

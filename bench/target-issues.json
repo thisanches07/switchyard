@@ -1,0 +1,4 @@
+{
+  "$comment": "AC-9: the GitHub issue (label performance) opened for each missed target, by run id, e.g. {\"20261020T101500Z-abc1234\": {\"T1\": \"https://github.com/thisanches07/switchyard/issues/42\"}}.",
+  "runs": {}
+}
