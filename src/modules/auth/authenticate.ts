@@ -108,6 +108,7 @@ export function createAuthenticate(options: AuthenticateOptions) {
       keyLimits: { rpm: key.rpm, tpm: key.tpm },
       teamLimits: { rpm: team.rpm, tpm: team.tpm },
       piiMode: key.piiMode,
+      semanticCacheEnabled: key.semanticCacheEnabled === true,
       budget: {
         keyUsd: key.monthlyBudgetUsd,
         teamUsd: team.monthlyBudgetUsd,

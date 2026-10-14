@@ -255,5 +255,10 @@ describe("principal (spec 010)", () => {
       teamUsd: null,
       softLimitPct: 80,
     });
+
+    // Spec 009: the semantic cache opt-in, false by default.
+    const optedIn = await store.issueKey({ semanticCache: true });
+    expect((await principalFor(optedIn.key))?.semanticCacheEnabled).toBe(true);
+    expect((await principalFor(inherited.key))?.semanticCacheEnabled).toBe(false);
   });
 });

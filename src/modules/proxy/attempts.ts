@@ -13,6 +13,7 @@ import {
 } from "../../core/errors.js";
 import type { CostEstimator, TokenCounts } from "../../core/pricing.js";
 import type { ChatProvider } from "../../core/provider.js";
+import type { CacheStatus } from "../../core/usage.js";
 import { backoffDelay, type RetrySettings, retryAfterOf } from "../routing/backoff.js";
 import type { BreakerPermit } from "../routing/breaker.js";
 import { classifyFailure } from "../routing/classify.js";
@@ -60,6 +61,8 @@ export interface RunAttemptsArgs<T> {
     operation?: "chat" | "embeddings";
     stream: boolean;
     principal?: Principal | undefined;
+    /** Cache status of the request (spec 009), for requests_total. */
+    cache?: CacheStatus | undefined;
   };
   /**
    * One attempt. For streams it opens the stream and reads the first chunk, so every failure
@@ -113,17 +116,28 @@ function secondsUntilHalfOpen(order: Candidate[], deps: RoutingDeps): number {
   return (Math.min(...times) - now) / 1_000;
 }
 
+/**
+ * A plan's candidates in the order its strategy tries them now (spec 008, AC-2); also the order
+ * in which the cache looks them up (spec 009, AC-3).
+ */
+export function orderForPlan(
+  plan: Pick<RoutePlan, "strategy" | "candidates">,
+  deps: Pick<RoutingDeps, "health" | "costEstimator">,
+  estimate: TokenCounts | undefined,
+): Candidate[] {
+  const estimator = deps.costEstimator;
+  return orderCandidates(plan.strategy, plan.candidates, {
+    cost: estimator && estimate ? (c) => estimator.estimateUsd(c.ref, estimate) : undefined,
+    latency: (c) => deps.health.peek(c.ref)?.ewma,
+  });
+}
+
 const statusOf = (error: unknown) => String(error instanceof GatewayError ? error.status : 500);
 
 export async function runAttempts<T>(args: RunAttemptsArgs<T>): Promise<Served<T>> {
   const { deps, settings } = args;
   const { timers } = deps;
-  const { estimate } = args;
-  const estimator = deps.costEstimator;
-  const order = orderCandidates(args.plan.strategy, args.plan.candidates, {
-    cost: estimator && estimate ? (c) => estimator.estimateUsd(c.ref, estimate) : undefined,
-    latency: (c) => deps.health.peek(c.ref)?.ewma,
-  });
+  const order = orderForPlan(args.plan, deps, args.estimate);
 
   const deadline = timers.deadline(settings.totalMs);
   const signal = AbortSignal.any([args.signal, deadline.signal]);
@@ -183,6 +197,7 @@ export async function runAttempts<T>(args: RunAttemptsArgs<T>): Promise<Served<T
         principal: args.telemetry.principal,
         attempt: { number: attempts, candidate: candidate.ref, backoffMs },
         ...(args.telemetry.operation && { operation: args.telemetry.operation }),
+        ...(args.telemetry.cache && { cache: args.telemetry.cache }),
       };
       const upstream = startUpstreamSpan(info);
       const started = timers.now();

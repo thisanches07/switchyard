@@ -7,15 +7,18 @@ import { createDatabase } from "./infra/db/client.js";
 import { DrizzleKeyStore } from "./infra/db/key-store.js";
 import { migrateDatabase } from "./infra/db/migrate.js";
 import { createPostgresPool, postgresCheck } from "./infra/db/postgres.js";
+import { DrizzleSemanticCache } from "./infra/db/semantic-cache.js";
 import { DrizzleUsageStore } from "./infra/db/usage-store.js";
 import { createUndiciClient } from "./infra/http/undici-client.js";
 import { createKafkaProducer } from "./infra/kafka/producer.js";
 import { createLogger } from "./infra/logger.js";
 import { RedisBudgetCounters } from "./infra/redis/budget-counters.js";
 import { createRedisClient, redisCheck } from "./infra/redis/client.js";
+import { RedisExactCache } from "./infra/redis/exact-cache.js";
 import { RedisRateLimiter } from "./infra/redis/rate-limiter.js";
 import { shutdownTelemetry } from "./infra/telemetry/sdk.js";
 import { installShutdown } from "./lifecycle/shutdown.js";
+import { scheduleSemanticCleanup } from "./modules/cache/cleanup.js";
 import { type ConfigRuntime, createConfigRuntime } from "./modules/config/runtime.js";
 import { installReloadSignal, watchConfigFile } from "./modules/config/watch.js";
 import { loadPricing } from "./modules/pricing/load.js";
@@ -147,6 +150,19 @@ async function main(): Promise<void> {
   });
   usage.start();
 
+  // Spec 009: semantic cache on pgvector; expired entries are deleted hourly while it is enabled.
+  const semanticCache = new DrizzleSemanticCache(db);
+  const cleanup = scheduleSemanticCleanup({
+    store: {
+      deleteExpired: (now) =>
+        live.current().config.cache.semantic.enabled
+          ? semanticCache.deleteExpired(now)
+          : Promise.resolve(0),
+    },
+    clock: Date.now,
+    logger,
+  });
+
   const app = await buildApp({
     logger,
     checks: [postgresCheck(pool), redisCheck(redis)],
@@ -163,6 +179,9 @@ async function main(): Promise<void> {
     // Spec 007: hot spend counters in Redis, stored spend in Postgres.
     budgetCounters: new RedisBudgetCounters(redis),
     budgetStore: new DrizzleBudgetStore(db),
+    // Spec 009: exact cache in Redis, semantic cache in pgvector.
+    exactCache: new RedisExactCache(redis),
+    semanticCache,
   });
 
   installShutdown({
@@ -173,6 +192,7 @@ async function main(): Promise<void> {
         close: async () => {
           watcher.stop();
           removeSighup();
+          cleanup.stop();
         },
       },
       // After app.close(): in-flight requests have recorded their events. Leave 1 s for the rest.

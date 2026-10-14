@@ -1,6 +1,6 @@
 # Spec 009: Exact and semantic response caching
 
-- **Status:** Approved (2026-10-13)
+- **Status:** Done (2026-10-13)
 - **Owner:** @thisanches07
 - **Release:** v0.2
 - **Depends on:** 007, 008 (also uses 006 usage events and 010 PII masking, both merged earlier)

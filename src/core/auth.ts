@@ -13,6 +13,8 @@ export type LimitsPatch = { [K in keyof Limits]?: Limits[K] | undefined };
 export type KeyPatch = LimitsPatch & {
   piiMode?: PiiMode | null | undefined;
   monthlyBudgetUsd?: string | null | undefined;
+  /** Semantic cache opt-in (spec 009). */
+  semanticCacheEnabled?: boolean | undefined;
 };
 
 /** Monthly budget settings of a team (spec 007). */
@@ -54,6 +56,8 @@ export interface ApiKeyRecord extends Limits {
   piiMode: PiiMode | null;
   /** Monthly budget in USD (spec 007), decimal string; null = no budget. */
   monthlyBudgetUsd: string | null;
+  /** Semantic cache opt-in (spec 009, ADR-0009); false by default. */
+  semanticCacheEnabled: boolean;
   expiresAt: Date | null;
   createdAt: Date;
   revokedAt: Date | null;
@@ -76,6 +80,7 @@ export interface NewKey {
   tpm?: number | null;
   piiMode?: PiiMode | null;
   monthlyBudgetUsd?: string | null;
+  semanticCacheEnabled?: boolean;
 }
 
 /** Who is calling, attached to authenticated `/v1` requests. */
@@ -89,6 +94,8 @@ export interface Principal {
   piiMode?: PiiMode | null;
   /** Monthly budgets of the key and its team (spec 007); absent = none. */
   budget?: PrincipalBudget;
+  /** The key opted in to the semantic cache (spec 009); absent = false. */
+  semanticCacheEnabled?: boolean;
 }
 
 /** Budgets that apply to a request (spec 007): USD decimal strings, null = no budget. */

@@ -11,6 +11,7 @@ import Fastify, {
 import type { LoadedConfig } from "./config/load.js";
 import type { AuthRecord, KeyStore } from "./core/auth.js";
 import type { BudgetCounters, BudgetStore } from "./core/budget.js";
+import type { ExactCacheStore, SemanticCacheStore } from "./core/cache.js";
 import {
   GatewayError,
   internalError,
@@ -26,6 +27,7 @@ import type { ChatProvider } from "./core/provider.js";
 import type { RateLimiter } from "./core/ratelimit.js";
 import type { OutcomeRecorder, UsageReader } from "./core/usage.js";
 import { MemoryBudgetCounters } from "./infra/memory/budget-counters.js";
+import { MemoryExactCache } from "./infra/memory/exact-cache.js";
 import { adminRoutes } from "./modules/admin/routes.js";
 import {
   anthropicRateLimitHeaders,
@@ -72,6 +74,10 @@ export interface AppDeps {
   budgetStore?: BudgetStore;
   /** Clock for budget periods (spec 007); tests inject one. Defaults to `Date.now`. */
   clock?: () => number;
+  /** Exact response cache (spec 009, Redis in production); defaults to an in-process cache. */
+  exactCache?: ExactCacheStore;
+  /** Semantic response cache (spec 009, pgvector); without it the semantic layer is off. */
+  semanticCache?: SemanticCacheStore;
   bodyLimitBytes?: number;
   readinessTimeoutMs?: number;
   /**
@@ -223,6 +229,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       },
     },
     startedAt: Math.floor(Date.now() / 1000),
+    // Spec 009: used only when `cache.*.enabled` (config) allows it.
+    cache: {
+      exact: deps.exactCache ?? new MemoryExactCache(deps.clock ? { now: deps.clock } : {}),
+      semantic: deps.semanticCache,
+      clock: deps.clock,
+    },
   });
 
   // Not registered at all without ADMIN_TOKEN: the routes 404 (spec 004, AC-8).

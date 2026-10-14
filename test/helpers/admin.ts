@@ -10,6 +10,8 @@ export async function createKeyViaAdmin(
     piiMode?: "off" | "mask" | "block";
     /** Monthly budget of the key (spec 007). */
     monthlyBudgetUsd?: number | string;
+    /** Semantic cache opt-in (spec 009). */
+    semanticCacheEnabled?: boolean;
   } = {},
 ): Promise<string> {
   const headers = { authorization: `Bearer ${adminToken}`, "content-type": "application/json" };
@@ -35,6 +37,9 @@ export async function createKeyViaAdmin(
       ...(options.monthlyBudgetUsd === undefined
         ? {}
         : { monthlyBudgetUsd: options.monthlyBudgetUsd }),
+      ...(options.semanticCacheEnabled === undefined
+        ? {}
+        : { semanticCacheEnabled: options.semanticCacheEnabled }),
     }),
   });
   if (keyRes.status !== 201) throw new Error(`create key: ${keyRes.status} ${await keyRes.text()}`);

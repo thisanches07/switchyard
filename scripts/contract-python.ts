@@ -51,6 +51,8 @@ const config = configSchema.parse({
     local: { strategy: "priority", candidates: [`ollama/${OLLAMA_MODEL}`] },
     embed: { strategy: "priority", candidates: [`ollama/${OLLAMA_EMBED_MODEL}`] },
   },
+  // Spec 009: exact cache for temperature-0 requests (in-process store).
+  cache: { exact: { enabled: true } },
 }) as LoadedConfig;
 
 const http = createUndiciClient(config.server.timeouts);

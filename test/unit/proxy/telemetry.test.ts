@@ -85,6 +85,7 @@ describe("upstream telemetry", () => {
           model: "fast-model",
           status: "200",
           team: expect.any(String),
+          cache: "bypass",
         },
       }),
     );
@@ -95,6 +96,7 @@ describe("upstream telemetry", () => {
           model: "error-500",
           status: "502",
           team: expect.any(String),
+          cache: "bypass",
         },
       }),
     );
@@ -173,6 +175,7 @@ describe("upstream span handle (streaming)", () => {
       model: "stream-mid",
       status: "upstream_error_midstream",
       team: "none",
+      cache: "bypass",
     });
     expect(tracing.exporter.getFinishedSpans()).toHaveLength(1);
   });
@@ -188,6 +191,7 @@ describe("upstream span handle (streaming)", () => {
       model: "stream-gone",
       status: "499",
       team: "none",
+      cache: "bypass",
     });
   });
 
@@ -245,6 +249,7 @@ describe("team and key telemetry (spec 004)", () => {
       model: "fast-model",
       status: "200",
       team: team.id,
+      cache: "bypass",
     });
   });
 

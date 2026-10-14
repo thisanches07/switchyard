@@ -46,6 +46,8 @@ const config = configSchema.parse({
     local: { strategy: "priority", candidates: [`ollama/${OLLAMA_MODEL}`] },
     embed: { strategy: "priority", candidates: [`ollama/${OLLAMA_EMBED_MODEL}`] },
   },
+  // Spec 009: exact cache for temperature-0 requests (in-process store).
+  cache: { exact: { enabled: true } },
 }) as LoadedConfig;
 
 describe("official OpenAI Node SDK against Switchyard", () => {
@@ -54,6 +56,7 @@ describe("official OpenAI Node SDK against Switchyard", () => {
   const http = createUndiciClient(config.server.timeouts);
   const store = new MemoryKeyStore();
   let baseUrl: string;
+  let apiKey: string;
 
   beforeAll(async () => {
     app = await buildApp({
@@ -70,10 +73,10 @@ describe("official OpenAI Node SDK against Switchyard", () => {
     const { port } = app.server.address() as AddressInfo;
     baseUrl = `http://127.0.0.1:${port}`;
     // AC-11: the SDK authenticates with a key issued through the admin API.
-    const key = await createKeyViaAdmin(baseUrl, TEST_ADMIN_TOKEN);
+    apiKey = await createKeyViaAdmin(baseUrl, TEST_ADMIN_TOKEN);
     client = new OpenAI({
       baseURL: `http://127.0.0.1:${port}/v1`,
-      apiKey: key,
+      apiKey,
       maxRetries: 0,
     });
   });
@@ -304,6 +307,48 @@ describe("official OpenAI Node SDK against Switchyard", () => {
       expect(usage?.completion_tokens ?? 0).toBeGreaterThan(0);
     },
     180_000,
+  );
+
+  it.each([
+    ["text", {}],
+    [
+      "tool calls",
+      { tools: [{ type: "function" as const, function: { name: "lookup", parameters: {} } }] },
+    ],
+  ])(
+    "reads a streamed cache hit of %s like any stream (spec 009, AC-7, AC-13)",
+    async (name, extra) => {
+      const seen: (string | null)[] = [];
+      const cached = new OpenAI({
+        baseURL: `${baseUrl}/v1`,
+        apiKey,
+        maxRetries: 0,
+        fetch: async (input, init) => {
+          const res = await fetch(input, init);
+          seen.push(res.headers.get("x-switchyard-cache"));
+          return res;
+        },
+      });
+      const params = {
+        model: "fast",
+        temperature: 0,
+        messages: [{ role: "user" as const, content: `cache me: ${name}` }],
+        ...extra,
+      };
+      const stored = await cached.chat.completions.create(params);
+      const final = await cached.chat.completions
+        .stream({ ...params, stream_options: { include_usage: true } })
+        .finalChatCompletion();
+      expect(seen).toEqual(["miss", "hit"]);
+      const [want, got] = [stored.choices[0], final.choices[0]];
+      expect(got?.message.content ?? null).toEqual(want?.message.content ?? null);
+      expect(got?.message.tool_calls ?? []).toEqual(want?.message.tool_calls ?? []);
+      expect(got?.finish_reason).toBe(want?.finish_reason);
+      expect(final.usage).toMatchObject({
+        prompt_tokens: stored.usage?.prompt_tokens,
+        completion_tokens: stored.usage?.completion_tokens,
+      });
+    },
   );
 
   it.skipIf(!ollamaEmbed)(

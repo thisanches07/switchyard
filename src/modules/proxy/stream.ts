@@ -3,6 +3,7 @@ import type { FastifyReply } from "fastify";
 import type { ChatChunk, ChatRequest, Usage } from "../../core/chat.js";
 import { GatewayError, upstreamError } from "../../core/errors.js";
 import type { ChatProvider } from "../../core/provider.js";
+import type { StreamTap } from "../cache/stage.js";
 import type { StreamRestore } from "../pii/stage.js";
 import type { StreamStep } from "../pii/stream-restore.js";
 import type { Admission } from "../ratelimit/admission.js";
@@ -36,6 +37,8 @@ export interface StreamChatArgs {
   encoder?: StreamEncoder | undefined;
   /** PII placeholders to restore in the forwarded chunks (spec 015). */
   restore?: StreamRestore | undefined;
+  /** Sees every upstream chunk and the clean end of the stream (spec 009 response cache). */
+  tap?: StreamTap | undefined;
 }
 
 /** Turns canonical chunks into the SSE format of the route the client called (spec 014). */
@@ -77,6 +80,7 @@ export async function streamChat({
   outcome,
   encoder: customEncoder,
   restore,
+  tap,
 }: StreamChatArgs) {
   const controller = new AbortController();
   let clientClosed = false;
@@ -140,6 +144,7 @@ export async function streamChat({
         if (step.upstream) {
           usage = usageFromChunk(step.upstream) ?? usage;
           outputChars += deltaText(step.upstream).length;
+          tap?.chunk(step.upstream);
         }
         for (const chunk of step.out) yield* encoder.chunk(chunk);
       }
@@ -149,6 +154,7 @@ export async function streamChat({
       served.completed();
       await admission?.reconcile(final.usage.inputTokens + final.usage.outputTokens);
       outcome?.succeed(final);
+      tap?.done(served.candidate, final.usage, final.estimated);
       yield* encoder.end(final.usage);
     } catch (error) {
       settled = true;
@@ -196,7 +202,8 @@ async function* upstreamSteps(
   }
 }
 
-function includeUsage(request: ChatRequest): boolean {
+/** The client asked for a usage chunk (`stream_options.include_usage`, spec 003 AC-7). */
+export function includeUsage(request: ChatRequest): boolean {
   const options = request.stream_options;
   return (
     typeof options === "object" &&

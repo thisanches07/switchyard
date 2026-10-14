@@ -72,6 +72,7 @@ export class MemoryKeyStore implements KeyStore {
       tpm: input.tpm ?? null,
       piiMode: input.piiMode ?? null,
       monthlyBudgetUsd: input.monthlyBudgetUsd ?? null,
+      semanticCacheEnabled: input.semanticCacheEnabled ?? false,
       expiresAt: input.expiresAt,
       createdAt: new Date(),
       revokedAt: null,
@@ -107,6 +108,9 @@ export class MemoryKeyStore implements KeyStore {
     if (patch.tpm !== undefined) key.tpm = patch.tpm;
     if (patch.piiMode !== undefined) key.piiMode = patch.piiMode;
     if (patch.monthlyBudgetUsd !== undefined) key.monthlyBudgetUsd = patch.monthlyBudgetUsd;
+    if (patch.semanticCacheEnabled !== undefined) {
+      key.semanticCacheEnabled = patch.semanticCacheEnabled;
+    }
     return strip(key);
   }
 
@@ -131,6 +135,8 @@ export class MemoryKeyStore implements KeyStore {
       piiMode?: PiiMode | null;
       /** The key's monthly budget (spec 007). */
       budgetUsd?: string | null;
+      /** Semantic cache opt-in (spec 009). */
+      semanticCache?: boolean;
     } = {},
   ) {
     const teamName = options.team ?? "test-team";
@@ -149,6 +155,7 @@ export class MemoryKeyStore implements KeyStore {
       tpm: options.limits?.tpm ?? null,
       piiMode: options.piiMode ?? null,
       monthlyBudgetUsd: options.budgetUsd ?? null,
+      semanticCacheEnabled: options.semanticCache ?? false,
     });
     return { key, record, team };
   }

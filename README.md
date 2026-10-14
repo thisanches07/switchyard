@@ -77,7 +77,7 @@ Teams shipping LLM features hit the same walls:
 | 🪞 | Anthropic-compatible `POST /v1/messages` for the official Anthropic SDKs, routed to Claude natively or to any other provider | ✅ |
 | 💰 | **Cost per request** from a versioned price table (unknown prices stay unknown, never `$0`) and **monthly budgets** per key and team: soft-limit warning, hard `429`, enforced across instances in Redis, reconciled with Postgres | ✅ |
 | 🛟 | **Fallback, retries with full jitter and circuit breakers** before the first byte; `priority`, `lowest-cost` and `lowest-latency` aliases; config **hot reload** | ✅ |
-| ⚡ | Exact cache and tenant-scoped semantic cache (pgvector) | 🔜 009 |
+| ⚡ | **Response cache**: exact (Redis) for deterministic requests and an opt-in, team-scoped **semantic** cache (pgvector); hits cost $0, savings are measured, streams are replayed as SSE | ✅ |
 | 🛡️ | **PII redaction** per key: `mask` (placeholders such as `<CPF_1>`, restored in the answer) or `block`; e-mail, phone, card, CPF, CNPJ, IP and a deny-list | ✅ |
 
 ## 🚀 Quickstart
@@ -226,7 +226,7 @@ flowchart LR
     LIM["Rate limits<br/>Redis token buckets"]
     PII["PII mask / block"]
     BUD["Budgets<br/>Redis spend counters"]
-    CACHE["Cache"]:::planned
+    CACHE["Exact + semantic cache<br/>Redis · pgvector"]
     FB["Fallback · circuit breaker"]:::planned
   end
 
@@ -517,6 +517,29 @@ curl -s -X PATCH localhost:8080/admin/teams/$TEAM -H "$ADMIN" -H 'content-type: 
 
 There is no cost reservation: requests already in flight when a budget runs out still finish, so a month can overshoot by at most their cost. Details: [budgets guide](docs/budgets.md).
 
+## ⚡ Response caching
+
+Repeated requests can be answered without calling a provider (spec 009). Only `/v1/chat/completions` uses the cache; `/v1/embeddings` and `/v1/messages` never do.
+
+| Layer | Store | When a request uses it |
+|---|---|---|
+| **Exact** | Redis, `cache.exact.ttlSeconds` | `cache.exact.enabled`, `temperature: 0` present (or `x-switchyard-cache: force`), `n` absent or 1 |
+| **Semantic** | Postgres + pgvector, `cache.semantic.ttlSeconds` | `cache.semantic.enabled` **and** the key's `semanticCacheEnabled`; `temperature` present and ≤ `maxTemperature` (0.3); no tools; the last message is user text. Served when a stored final user message is similar enough (cosine ≥ `similarityThreshold`, 0.95) and the earlier turns and parameters are identical |
+
+```bash
+# Opt a key in to the semantic cache
+curl -s -X PATCH localhost:8080/admin/keys/$KEY_ID -H "$ADMIN" -H 'content-type: application/json' \
+  -d '{"semanticCacheEnabled": true}'
+```
+
+- Responses carry `x-switchyard-cache: hit | semantic-hit | miss | bypass`. Send `x-switchyard-cache: bypass` to skip the cache (no read, no write) or `force` to use the exact cache at any temperature; any other value gets `400 invalid_cache_header`.
+- A hit has a new `id` and `created`, the provider/model that originally answered in `x-switchyard-provider`/`x-switchyard-model`, and `x-switchyard-attempts: 0`. Asked for as a stream, it arrives as normal SSE chunks ending in `data: [DONE]` (with a usage chunk only if `stream_options.include_usage`).
+- **Accounting:** a hit passes the same rate-limit and budget admission (one request unit; TPM reconciled to the stored usage), costs `0` and adds nothing to budgets. `switchyard_cache_savings_usd_total` adds what it would have cost at current prices; hits with an unknown price are counted in `switchyard_cache_savings_unknown_total` instead.
+- **Isolation:** entries are scoped by team, candidate model and every output-affecting parameter ([ADR-0019](docs/adr/0019-exact-cache-key-normalisation.md), [ADR-0009](docs/adr/0009-semantic-cache-scoping.md)); one team never receives another team's answer.
+- **What is stored:** the provider's response to the request as sent upstream. With PII `mask` the cache holds placeholders, never the original values, and each request restores its own. Exact entries live in Redis memory (persistence is off in the Compose stack) until their TTL; semantic entries are rows of `semantic_cache_entries`, deleted hourly once expired. Cache keys, embeddings and content are never logged or traced.
+- **Failures:** if Redis, Postgres or the embedding model fails, times out (`lookupTimeoutMs`, 300 ms) or returns a vector that is not 768-dimensional, that layer is skipped and the request is served as a `miss`.
+- The semantic layer embeds the final user message with `cache.semantic.embeddingModel` (default `ollama/nomic-embed-text`, 768 dims) through the configured provider: one call, not charged to the key.
+
 ## 🛡️ PII redaction
 
 Personal data in prompts can be **masked** before it reaches the provider, or the request **blocked**. Set a default in the config and override it per key (`piiMode` on `POST /admin/keys` and `PATCH /admin/keys/:id`; `null` falls back to the default):
@@ -733,6 +756,7 @@ Each spec ends with a verification table, for example [spec 002](docs/specs/002-
 - [x] [014](docs/specs/014-anthropic/spec.md) Anthropic adapter and `/v1/messages`: Claude behind the OpenAI API, the Anthropic SDKs in front of any provider
 
 **v0.2: savings and safety:** exact and semantic cache, PII redaction
+- [x] [009](docs/specs/009-caching/spec.md) Exact and semantic response caching: Redis and pgvector, team-scoped, SSE replay of hits, savings metrics
 
 **v0.3: proof and production:** Grafana dashboards as code, published k6 benchmarks, Terraform deploy
 

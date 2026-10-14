@@ -94,6 +94,10 @@ const cacheSchema = z.strictObject({
       embeddingModel: modelRef.default("ollama/nomic-embed-text"),
       similarityThreshold: z.number().gt(0).lte(1).default(0.95),
       ttlSeconds: positiveInt.default(86_400),
+      /** Spec 009: `temperature` must be present and at most this (ADR-0009). */
+      maxTemperature: z.number().min(0).max(2).default(0.3),
+      /** Spec 009: embedding call and search together; the layer is skipped when exceeded. */
+      lookupTimeoutMs: positiveInt.default(300),
     })
     .prefault({}),
 });

@@ -1,12 +1,16 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { LoadedConfig } from "../../config/load.js";
+import type { ExactCacheStore, SemanticCacheStore } from "../../core/cache.js";
 import { modelNotAllowed, modelNotFound } from "../../core/errors.js";
 import type { TokenCounts } from "../../core/pricing.js";
 import type { ChatProvider } from "../../core/provider.js";
-import type { UsageOperation } from "../../core/usage.js";
+import type { CacheStatus, UsageOperation } from "../../core/usage.js";
 import { type AuthenticateOptions, createAuthenticate } from "../auth/authenticate.js";
 import { isModelAllowed } from "../auth/models.js";
 import type { BudgetCheck } from "../budgets/check.js";
+import { CACHE_HEADER, parseCacheHeader } from "../cache/eligibility.js";
+import { createCacheStage } from "../cache/stage.js";
+import { tagCacheSpan } from "../cache/telemetry.js";
 import type { ConfigRuntime, ConfigSnapshot } from "../config/runtime.js";
 import { docs } from "../docs.js";
 import { restoreChatResponse } from "../pii/restore.js";
@@ -25,7 +29,8 @@ import {
   registerOutcomeFallback,
   type TokenUsage,
 } from "../usage/outcome.js";
-import { type RoutingDeps, runAttempts, type Served } from "./attempts.js";
+import { orderForPlan, type RoutingDeps, runAttempts, type Served } from "./attempts.js";
+import { serveCachedChat } from "./cached.js";
 import { registerMessagesRoute } from "./messages.js";
 import { parseChatRequest, parseEmbeddingsRequest } from "./schema.js";
 import { streamChat } from "./stream.js";
@@ -52,6 +57,13 @@ export interface ProxyRoutesOptions {
   routing: RoutingDeps;
   /** Gateway start time in seconds, reported as `created` in /v1/models. */
   startedAt: number;
+  /** Response cache stores (spec 009); a missing store turns its layer off. */
+  cache?: {
+    exact?: ExactCacheStore | undefined;
+    semantic?: SemanticCacheStore | undefined;
+    /** Clock for `created` of hits and semantic expiry; defaults to `Date.now`. */
+    clock?: (() => number) | undefined;
+  };
 }
 
 /** One routed call: the attempt loop for a planned request (spec 008). */
@@ -64,6 +76,8 @@ export interface AttemptOptions<T> {
   signal: AbortSignal;
   call(provider: ChatProvider, candidate: Candidate, ctx: { signal: AbortSignal }): Promise<T>;
   describe?: ((value: T) => UpstreamOutcome) | undefined;
+  /** Cache status of the request (spec 009), for the `cache` label of requests_total. */
+  cache?: CacheStatus | undefined;
 }
 
 export type AttemptFn = <T>(
@@ -128,6 +142,7 @@ export async function proxyRoutes(app: FastifyInstance, opts: ProxyRoutesOptions
         stream: options.stream,
         principal: request.principal,
         ...(options.operation && { operation: options.operation }),
+        ...(options.cache && { cache: options.cache }),
       },
       call: options.call,
       describe: options.describe,
@@ -178,8 +193,19 @@ export async function proxyRoutes(app: FastifyInstance, opts: ProxyRoutesOptions
       servedModel: usage.resolved.model,
       elapsedMs: () => reply.elapsedTime,
     });
+    // Spec 009: no cache lookup unless a route says otherwise (only chat completions look up).
+    request.outcome?.set({ cacheStatus: "bypass" });
     return admission;
   }
+
+  // Response cache (spec 009): exact (Redis) and semantic (pgvector) layers for chat completions.
+  const clock = opts.cache?.clock ?? Date.now;
+  const caches = createCacheStage({
+    exact: opts.cache?.exact,
+    semantic: opts.cache?.semantic,
+    timers: opts.routing.timers,
+    clock,
+  });
 
   // Records any admitted request whose route did not end its tracker (spec 006).
   registerOutcomeFallback(app);
@@ -207,6 +233,8 @@ export async function proxyRoutes(app: FastifyInstance, opts: ProxyRoutesOptions
 
   app.post("/v1/chat/completions", { schema: docs.chatCompletions }, async (request, reply) => {
     const body = parseChatRequest(request.body);
+    // Spec 009, AC-2: an invalid cache header is a 400 before admission.
+    const cacheMode = parseCacheHeader(request.headers[CACHE_HEADER]);
     const plan = route(body.model, request);
     const stream = body.stream === true;
     const reserve = snapshot(request).config.limits.completionReserveTokens;
@@ -219,14 +247,50 @@ export async function proxyRoutes(app: FastifyInstance, opts: ProxyRoutesOptions
     const masked = await pii(request).chat({ request, reply, admission, stream }, body);
     const estimate = estimateChatTokenCounts(body, reserve);
 
+    // Spec 009: on the masked request (AC-11), candidates in strategy order (AC-3).
+    const { config, providers } = snapshot(request);
+    const cached = await caches.lookup({
+      config: config.cache,
+      providers,
+      principal: request.principal,
+      candidates: () => orderForPlan(plan, opts.routing, estimate),
+      request: masked.body,
+      mode: cacheMode,
+      logger: request.log,
+    });
+    if (cached.hit) {
+      return serveCachedChat({
+        request,
+        reply,
+        hit: cached.hit,
+        body: masked.body,
+        admission,
+        restore: masked.restore,
+        streamRestore: masked.stream,
+        clock,
+        costEstimator: opts.routing.costEstimator,
+      });
+    }
+    const cacheStatus = cached.status;
+    reply.header(CACHE_HEADER, cacheStatus);
+    request.outcome?.set({ cacheStatus });
+    tagCacheSpan(request, { result: cacheStatus });
+
     if (stream) {
       return streamChat({
         reply,
         request: masked.body,
         admission,
         outcome: request.outcome,
+        tap: cached.tap,
         attempt: (call, signal) =>
-          attempt(request, reply, plan, { stream: true, estimate, signal, call }),
+          attempt(request, reply, plan, {
+            stream: true,
+            estimate,
+            signal,
+            call,
+            cache: cacheStatus,
+          }),
         restore: masked.stream,
       });
     }
@@ -240,12 +304,21 @@ export async function proxyRoutes(app: FastifyInstance, opts: ProxyRoutesOptions
           stream: false,
           estimate,
           signal,
+          cache: cacheStatus,
           call: (provider, candidate, ctx) =>
             provider.chat({ ...masked.body, model: candidate.model }, ctx),
           describe: (result) => result,
         }),
         (s) => s.value.usage,
         (s) => estimateChatUsage(masked.body, s.value.body),
+      );
+      // Spec 009, AC-4: the upstream (masked) response, stored in the background.
+      const reported = served.value.usage;
+      cached.remember(
+        served.candidate,
+        served.value.body,
+        reported ?? estimateChatUsage(masked.body, served.value.body),
+        reported === undefined,
       );
       return restoreChatResponse(served.value.body, masked.restore);
     } finally {

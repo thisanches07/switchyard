@@ -16,7 +16,9 @@ import {
   text,
   timestamp,
   uuid,
+  vector,
 } from "drizzle-orm/pg-core";
+import { EMBEDDING_DIMENSIONS } from "../../core/cache.js";
 import { PII_MODES } from "../../core/pii.js";
 
 export const keyStatus = pgEnum("api_key_status", ["active", "revoked"]);
@@ -65,6 +67,8 @@ export const apiKeys = pgTable(
     piiMode: piiMode("pii_mode"),
     /** Monthly budget in USD; NULL = no budget (spec 007). */
     monthlyBudgetUsd: numeric("monthly_budget_usd", { precision: 12, scale: 4 }),
+    /** Opt-in to the semantic cache (spec 009, ADR-0009). */
+    semanticCacheEnabled: boolean("semantic_cache_enabled").notNull().default(false),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
@@ -139,4 +143,34 @@ export const usageDaily = pgTable(
     unknownCostRequests: bigint("unknown_cost_requests", { mode: "number" }).notNull().default(0),
   },
   (table) => [primaryKey({ columns: [table.day, table.teamId, table.keyId, table.model] })],
+);
+
+/**
+ * Semantic cache entries (spec 009, ADR-0009): a stored chat completion (the masked upstream
+ * response, spec 010) found by the embedding of the request's final user message, within its team,
+ * candidate `provider/model` and parameter hash. No foreign key: entries expire on their own.
+ */
+export const semanticCacheEntries = pgTable(
+  "semantic_cache_entries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    teamId: uuid("team_id").notNull(),
+    /** Candidate `provider/model` that produced the response. */
+    model: text("model").notNull(),
+    /** ADR-0019 hash of the request without its final user message. */
+    paramsHash: char("params_hash", { length: 64 }).notNull(),
+    embedding: vector("embedding", { dimensions: EMBEDDING_DIMENSIONS }).notNull(),
+    response: jsonb("response").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    hits: integer("hits").notNull().default(0),
+  },
+  (table) => [
+    index("semantic_cache_entries_embedding_idx").using(
+      "hnsw",
+      table.embedding.op("vector_cosine_ops"),
+    ),
+    index("semantic_cache_entries_expires_at_idx").on(table.expiresAt),
+    index("semantic_cache_entries_scope_idx").on(table.teamId, table.paramsHash),
+  ],
 );

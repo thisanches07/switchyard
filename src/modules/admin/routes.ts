@@ -92,9 +92,10 @@ const keyPatch = z
     tpm: limit.optional(),
     piiMode: piiMode.optional(),
     monthlyBudgetUsd: budgetUsd.optional(),
+    semanticCacheEnabled: z.boolean().optional(),
   })
   .refine((patch) => Object.values(patch).some((value) => value !== undefined), {
-    message: "set rpm, tpm, piiMode and/or monthlyBudgetUsd (null clears)",
+    message: "set rpm, tpm, piiMode, monthlyBudgetUsd and/or semanticCacheEnabled (null clears)",
     path: ["piiMode"],
   });
 
@@ -106,6 +107,8 @@ const keyBody = z.object({
   tpm: limit.optional(),
   piiMode: piiMode.optional(),
   monthlyBudgetUsd: budgetUsd.optional(),
+  /** Semantic cache opt-in (spec 009, ADR-0009). */
+  semanticCacheEnabled: z.boolean().optional(),
   expiresAt: z.iso
     .datetime({ offset: true })
     .refine((value) => Date.parse(value) > Date.now(), "must be in the future")
@@ -130,6 +133,7 @@ function keyView(record: ApiKeyRecord) {
     tpm: record.tpm,
     piiMode: record.piiMode,
     monthlyBudgetUsd: record.monthlyBudgetUsd,
+    semanticCacheEnabled: record.semanticCacheEnabled,
     expiresAt: record.expiresAt,
     createdAt: record.createdAt,
     revokedAt: record.revokedAt,
@@ -179,6 +183,7 @@ export async function adminRoutes(app: FastifyInstance, opts: AdminRoutesOptions
       tpm: body.tpm ?? null,
       piiMode: body.piiMode ?? null,
       monthlyBudgetUsd: body.monthlyBudgetUsd ?? null,
+      semanticCacheEnabled: body.semanticCacheEnabled ?? false,
     });
     request.log.info({ keyId: record.id, teamId: team.id }, "api key created");
     // The only time the plaintext key leaves the gateway.

@@ -84,6 +84,38 @@ def test_stream_with_usage(client: OpenAI) -> None:
     assert usage is not None and usage.completion_tokens == 6
 
 
+def test_streamed_cache_hit(client: OpenAI) -> None:
+    """Spec 009, AC-7/AC-13: a cached answer arrives as a normal SSE stream."""
+    messages = [{"role": "user", "content": "cache me from python"}]
+    first = client.chat.completions.with_raw_response.create(
+        model="fast", temperature=0, messages=messages
+    )
+    assert first.headers["x-switchyard-cache"] == "miss"
+    stored = first.parse()
+
+    with client.chat.completions.with_streaming_response.create(
+        model="fast",
+        temperature=0,
+        messages=messages,
+        stream=True,
+        stream_options={"include_usage": True},
+    ) as res:
+        assert res.headers["x-switchyard-cache"] == "hit"
+        text = ""
+        finish = None
+        usage = None
+        for chunk in res.parse():
+            if chunk.choices and chunk.choices[0].delta.content:
+                text += chunk.choices[0].delta.content
+            if chunk.choices and chunk.choices[0].finish_reason:
+                finish = chunk.choices[0].finish_reason
+            if chunk.usage:
+                usage = chunk.usage
+    assert text == stored.choices[0].message.content
+    assert finish == stored.choices[0].finish_reason
+    assert usage is not None and usage.completion_tokens == stored.usage.completion_tokens
+
+
 def test_midstream_failure_raises_while_iterating(client: OpenAI) -> None:
     stream = client.chat.completions.create(
         model="mock/error-midstream",

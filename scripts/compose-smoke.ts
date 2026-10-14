@@ -160,6 +160,36 @@ try {
     if (!body.trimEnd().endsWith("data: [DONE]")) throw new Error(body.slice(-200));
   });
 
+  await step("the same temperature-0 request is a cache miss, then a hit (spec 009)", async () => {
+    // A fresh prompt per run, the same for both requests.
+    const content = `smoke cache ${Date.now()}`;
+    const ask = () =>
+      fetch(`${GATEWAY}/v1/chat/completions`, {
+        method: "POST",
+        headers: authed(),
+        body: JSON.stringify({
+          model: "mock/smoke",
+          temperature: 0,
+          messages: [{ role: "user", content }],
+        }),
+      });
+    const first = await ask();
+    if (first.status !== 200) throw new Error(`${first.status} ${await first.text()}`);
+    if (first.headers.get("x-switchyard-cache") !== "miss") {
+      throw new Error(`first: x-switchyard-cache ${first.headers.get("x-switchyard-cache")}`);
+    }
+    await first.text();
+    // The write happens after the response: allow it a moment to land in Redis.
+    let status: string | null = null;
+    for (let i = 0; i < 20 && status !== "hit"; i += 1) {
+      const again = await ask();
+      status = again.headers.get("x-switchyard-cache");
+      await again.text();
+      if (status !== "hit") await new Promise((r) => setTimeout(r, 250));
+    }
+    if (status !== "hit") throw new Error(`second: x-switchyard-cache ${status}`);
+  });
+
   await step("POST /v1/embeddings through the mock provider returns 768-dim vectors", async () => {
     const res = await fetch(`${GATEWAY}/v1/embeddings`, {
       method: "POST",

@@ -67,6 +67,10 @@ Every request admitted by the rate limiter gets an **outcome tracker** (`src/mod
 
 Every `/v1` request reads the live config once, at its start (`request.snapshot`: config + provider registry, `src/modules/config/runtime.ts`), so a hot reload (ADR-0018) only affects new requests. Chat, embeddings and messages all go through one attempt loop (`src/modules/proxy/attempts.ts`, spec 008): candidates allowed for the key, ordered by the alias strategy, tried with retries, full-jitter backoff and per-candidate circuit breakers (`src/modules/routing/`) until the first byte. Each attempt is a `switchyard.upstream` span; the request is admitted, reconciled and recorded once.
 
+### Response cache
+
+Chat completions pass through the cache stage (`src/modules/cache/stage.ts`, spec 009) after admission and the PII stage, so keys and embeddings are computed from the masked request. The exact layer (`ExactCacheStore`, Redis `MGET`/`SET EX`) is checked for every allowed candidate in strategy order in one round trip; the semantic layer (`SemanticCacheStore`, pgvector with HNSW iterative scans) embeds the final user message through the configured embedding provider under a `lookupTimeoutMs` deadline. A hit is served by `src/modules/proxy/cached.ts` without an attempt (JSON, or re-chunked SSE); a successful miss is stored in the background from the response or the assembled stream. A failing layer is skipped and the request continues as a miss. `/v1/embeddings` and `/v1/messages` do not use the cache (`cacheStatus: "bypass"`).
+
 ## Code layout
 
 ```
