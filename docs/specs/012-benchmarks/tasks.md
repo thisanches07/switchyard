@@ -40,7 +40,7 @@ One commit per task, ending in `[spec-012]`. Lint, typecheck and the task's test
   - Do: `bench/lib/runs.ts`, `bench/lib/render.ts`, `bench/report.ts`, `bench/target-issues.json`, markers in `docs/benchmarks.md` and README; fixtures in `test/fixtures/bench/`.
   - Test: `render.test.ts` › no runs → "No published run yet" and no digits in the tables; fixture runs: T1/T2 met and missed, issue link or "issue required", server overhead "not available", median of a batch, batch under three runs noted, smoke/dirty/fixture runs excluded; `published-tables.test.ts` › committed docs and README sections equal the generator's output.
 
-- [ ] **T8. Orchestrator `pnpm bench`**
+- [x] **T8. Orchestrator `pnpm bench`**
   - ACs: AC-2, AC-5
   - Do: `bench/run.ts`, `bench/lib/plan.ts`, `package.json` scripts, `.gitignore`.
   - Test: `run-plan.test.ts` › scenario plan (direct before gateway for `no-cache` and `streaming`; k6 env per pass); k6 exit codes mapped to correctness vs harness errors. End to end: CI `bench-smoke`.

@@ -26,6 +26,7 @@
     "demo:traffic": "node --import tsx scripts/demo-traffic.ts",
     "test:contract": "vitest run --project contract",
     "test:contract:py": "node --import tsx scripts/contract-python.ts",
+    "bench": "node bench/run.ts",
     "bench:report": "node bench/report.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node --env-file-if-exists=.env --import tsx scripts/db-migrate.ts"
