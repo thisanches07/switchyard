@@ -54,6 +54,8 @@ export function recordPiiScan(request: FastifyRequest, result: PiiRequestResult)
   );
 }
 
+const HOLD_BUCKETS = [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1];
+
 let streamInstruments: { provider: MeterProvider; hold: Histogram; failures: Counter } | undefined;
 
 function streamRestoreInstruments() {
@@ -65,6 +67,9 @@ function streamRestoreInstruments() {
       hold: meter.createHistogram("switchyard_pii_stream_hold_seconds", {
         description: "Time streamed text was held back while it could still be a PII placeholder",
         unit: "s",
+        // Holds are bounded by pii.streamRestore.maxHoldMs (250 ms by default): the SDK's default
+        // buckets are millisecond-sized and would put every sample in the first one.
+        advice: { explicitBucketBoundaries: HOLD_BUCKETS },
       }),
       failures: meter.createCounter("switchyard_pii_stream_restore_failures_total", {
         description: "Held stream fragments released unrestored, by reason",

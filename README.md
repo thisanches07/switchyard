@@ -37,7 +37,7 @@
 <br>
 
 > [!NOTE]
-> **Status: v0.1 in progress.** Chat completions (including **SSE streaming**), embeddings, model listing, provider adapters, error mapping, tracing and metrics are **working and tested today**, plus **virtual API keys with teams**, an admin API, **per-minute rate limits** shared across instances and a **usage event pipeline** (Kafka → idempotent worker → Postgres), **cost per request and monthly budgets**, contract-tested with the official OpenAI Node and Python SDKs. Fallback and caching are specified and on the [roadmap](#%EF%B8%8F-roadmap).
+> **Status: feature-complete, preparing the first release (`0.1.0`).** Every planned spec is implemented and tested: OpenAI- and Anthropic-compatible APIs with streaming, virtual keys and teams, rate limits, usage events through Kafka, cost and budgets, fallback with circuit breakers, exact and semantic caching, PII redaction, dashboards as code, a benchmark harness and a Terraform deploy. Still pending: dashboard screenshots and the first published benchmark run, both measured on real hardware.
 
 > [!WARNING]
 > Docker Compose ships `dev-only` defaults for `ADMIN_TOKEN` and `KEY_PEPPER` so it works out of the box, and publishes every port on `127.0.0.1` only. Set real secrets in `.env` before exposing the gateway; it logs a warning while dev-only values are in use.
@@ -68,7 +68,7 @@ Teams shipping LLM features hit the same walls:
 | 🧯 | Consistent OpenAI-shaped errors (400 / 404 / 413 / 415 / 429 / 502 / 504) with upstream internals never leaked | ✅ |
 | ⏱️ | Connect, time-to-first-byte and total timeouts on every upstream call | ✅ |
 | 🔭 | Upstream spans following the OpenTelemetry **GenAI conventions**, request duration and **gateway overhead** metrics, `x-switchyard-*` headers | ✅ |
-| 📊 | **Grafana dashboards and alert rules as code** (Overview, Cost, Providers), loaded on `docker compose up`, checked in CI against the metrics the code emits; `pnpm demo:traffic` | ✅ |
+| 📊 | **Grafana dashboards and alert rules as code** (Overview, Cost, Providers, Cache), loaded on `docker compose up`, checked in CI against the metrics the code emits; `pnpm demo:traffic` | ✅ |
 | ❤️ | `/healthz`, `/readyz` with time-bounded dependency checks, graceful shutdown | ✅ |
 | 🔑 | **Virtual API keys** (`sk-sy-…`, stored only as peppered hashes), teams, per-key model allow-lists, revocation | ✅ |
 | 🚥 | **Rate limits** in requests and tokens per minute, per key and per team, atomic in Redis (Lua), OpenAI-style `429` + `x-ratelimit-*` | ✅ |
@@ -251,7 +251,7 @@ flowchart LR
     PII["PII mask / block"]
     BUD["Budgets<br/>Redis spend counters"]
     CACHE["Exact + semantic cache<br/>Redis · pgvector"]
-    FB["Fallback · circuit breaker"]:::planned
+    FB["Fallback · circuit breaker"]
   end
 
   SDK -->|"POST /v1/chat/completions"| AUTH
@@ -272,10 +272,8 @@ flowchart LR
   EV -->|async| KF --> WK --> PG
   GW -. "OTLP · health" .-> Infra
 
-  classDef planned stroke-dasharray: 5 5,opacity:0.6
 ```
 
-<sub>Dashed boxes are specified but not built yet. See the [roadmap](#%EF%B8%8F-roadmap).</sub>
 
 ### Life of a request (today)
 
@@ -801,7 +799,9 @@ Each spec ends with a verification table, for example [spec 002](docs/specs/002-
 
 ## 🗺️ Roadmap
 
-**v0.1: a working gateway**
+Every spec below is implemented, tested and merged; the release ships them together as `0.1.0`.
+
+**A working gateway**
 - [x] [001](docs/specs/001-bootstrap/spec.md) Bootstrap: validated config, health/readiness, traces + correlated logs, graceful shutdown, Compose, CI
 - [x] [002](docs/specs/002-chat-proxy/spec.md) Chat proxy: `/v1/chat/completions`, `/v1/models`, adapters, error mapping, upstream telemetry, SDK contract tests
 - [x] [003](docs/specs/003-streaming/spec.md) Streaming (SSE) and `/v1/embeddings`, Node + Python SDK contract tests
@@ -812,12 +812,15 @@ Each spec ends with a verification table, for example [spec 002](docs/specs/002-
 - [x] [008](docs/specs/008-routing-resilience/spec.md) Routing strategies, retries, fallback, circuit breakers, timeouts and config hot reload
 - [x] [014](docs/specs/014-anthropic/spec.md) Anthropic adapter and `/v1/messages`: Claude behind the OpenAI API, the Anthropic SDKs in front of any provider
 
-**v0.2: savings and safety:** exact and semantic cache, PII redaction
+**Savings and safety**
 - [x] [009](docs/specs/009-caching/spec.md) Exact and semantic response caching: Redis and pgvector, team-scoped, SSE replay of hits, savings metrics
+- [x] [010](docs/specs/010-pii-redaction/spec.md) PII redaction: `mask` / `block` per key, validated detectors (CPF, CNPJ, Luhn, …), restore in answers
+- [x] [015](docs/specs/015-pii-streaming-restore/spec.md) PII restore in streamed answers, with bounded holding
 
-**v0.3: proof and production**
+**Proof and production**
+- [x] [011](docs/specs/011-observability/spec.md) Grafana dashboards and alerts as code, GenAI span conventions, gateway overhead metric (README screenshots pending)
+- [x] [012](docs/specs/012-benchmarks/spec.md) k6 benchmark harness with generated, reproducible reports (first published run pending)
 - [x] [013](docs/specs/013-deploy/spec.md) Deploy: multi-arch images on GHCR, tag-driven releases, production Compose behind Caddy, `pnpm demo:key`, Terraform + cloud-init for Oracle Cloud Always Free ([runbook](docs/deploy.md))
-- Grafana dashboards as code, published k6 benchmarks
 
 Full scope and dependencies: [spec backlog](docs/specs/README.md).
 
