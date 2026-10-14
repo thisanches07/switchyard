@@ -130,6 +130,11 @@ services:
       - "127.0.0.1:4318:4318"
     volumes:
       - lgtm-data:/data
+      # Dashboards and alert rules as code (spec 011, ADR-0020): read-only, outside /data, so they
+      # load on fresh and existing volumes and edits apply after a restart.
+      - ./deploy/grafana/provisioning/dashboards/switchyard.yaml:/otel-lgtm/grafana/conf/provisioning/dashboards/switchyard.yaml:ro
+      - ./deploy/grafana/dashboards:/otel-lgtm/switchyard/dashboards:ro
+      - ./deploy/grafana/alerting:/otel-lgtm/grafana/conf/provisioning/alerting:ro
 
   ollama:
     image: ollama/ollama:0.40.2

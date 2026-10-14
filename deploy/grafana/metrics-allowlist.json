@@ -1,0 +1,4 @@
+{
+  "$comment": "Non-Switchyard series that dashboards and alert rules may query (spec 011, AC-8). Everything else must be emitted by src/.",
+  "metrics": ["up", "target_info"]
+}

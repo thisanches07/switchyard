@@ -6,7 +6,7 @@ import { runAttempts } from "../../../src/modules/proxy/attempts.js";
 import { CandidateHealthRegistry } from "../../../src/modules/routing/health.js";
 import { installTestMetrics } from "../../helpers/metrics.js";
 import { manualTimers } from "../../helpers/routing.js";
-import { installInMemoryTracing } from "../../helpers/telemetry.js";
+import { installInMemoryTracing, isUpstreamSpan } from "../../helpers/telemetry.js";
 
 /** A provider failing with the given errors, then answering. */
 function provider(name: string, failures: Error[]): ChatProvider {
@@ -77,9 +77,7 @@ describe("attempt telemetry (spec 008, AC-14)", () => {
 
   it("records one span per attempt with candidate, attempt, outcome and backoff", async () => {
     await run([provider("tel-a", [upstreamError("tel-a"), upstreamError("tel-a")])], 3);
-    const spans = tracing.exporter
-      .getFinishedSpans()
-      .filter((s) => s.name === "switchyard.upstream");
+    const spans = tracing.exporter.getFinishedSpans().filter(isUpstreamSpan);
     expect(spans.map((s) => s.attributes)).toEqual([
       expect.objectContaining({
         "switchyard.candidate": "tel-a/m",

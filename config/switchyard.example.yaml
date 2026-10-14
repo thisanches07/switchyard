@@ -18,10 +18,12 @@ providers:
     type: openai-compatible
     baseUrl: https://api.groq.com/openai/v1
     apiKeyEnv: GROQ_API_KEY
+    genAiProviderName: groq              # gen_ai.provider.name on traces (spec 011); default: the config name
   gemini:
     type: openai-compatible
     baseUrl: https://generativelanguage.googleapis.com/v1beta/openai
     apiKeyEnv: GEMINI_API_KEY
+    genAiProviderName: gcp.gemini
   claude:
     type: anthropic                      # also serves POST /v1/messages natively (spec 014)
     apiKeyEnv: ANTHROPIC_API_KEY

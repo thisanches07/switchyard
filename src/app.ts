@@ -47,6 +47,7 @@ import { aliasCandidates } from "./modules/routing/resolve.js";
 import { systemTimers, type Timers } from "./modules/routing/timers.js";
 import { createOutcomeHook } from "./modules/usage/outcome.js";
 import { fanOut, noopRecorder } from "./modules/usage/recorders.js";
+import { tokenMetricsRecorder } from "./modules/usage/token-metrics.js";
 
 export interface AppDeps {
   logger: FastifyBaseLogger;
@@ -190,7 +191,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   // The request-outcome hook (spec 006); later specs extend the recorder, not the routes.
   // Spec 007: every event is priced, then charged to the budget counters and published.
   const outcomes = createOutcomeHook({
-    recorder: fanOut(budgets.charger, deps.usageRecorder ?? noopRecorder),
+    // Spec 011: token counter from the same events.
+    recorder: fanOut(budgets.charger, tokenMetricsRecorder, deps.usageRecorder ?? noopRecorder),
     logger: deps.logger,
     price: priceEvent(
       deps.costEstimator instanceof PriceTable ? deps.costEstimator : PriceTable.empty(),

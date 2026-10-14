@@ -4,9 +4,10 @@ import { upstreamTimeout } from "../../../src/core/errors.js";
 import { createLogger } from "../../../src/infra/logger.js";
 import { startUpstreamSpan, tracedUpstreamCall } from "../../../src/modules/proxy/telemetry.js";
 import { testApp } from "../../helpers/app.js";
+import { testConfig } from "../../helpers/config.js";
 import { installTestMetrics } from "../../helpers/metrics.js";
 import { spiedRegistry } from "../../helpers/providers.js";
-import { installInMemoryTracing } from "../../helpers/telemetry.js";
+import { installInMemoryTracing, isUpstreamSpan } from "../../helpers/telemetry.js";
 
 const SECRET = "my card is 4111111111111111";
 
@@ -35,7 +36,7 @@ describe("upstream telemetry", () => {
       payload: { model, messages: [{ role: "user", content: SECRET }] },
     });
     await app.close();
-    const span = tracing.exporter.getFinishedSpans().find((s) => s.name === "switchyard.upstream");
+    const span = tracing.exporter.getFinishedSpans().find(isUpstreamSpan);
     return { res, span, logs };
   }
 
@@ -43,22 +44,29 @@ describe("upstream telemetry", () => {
     const { res, span } = await call("fast");
     expect(res.statusCode).toBe(200);
     expect(span?.kind).toBe(SpanKind.CLIENT);
+    // GenAI semantic conventions (spec 011, AC-4): name `{operation} {model}`.
+    expect(span?.name).toBe("chat fast-model");
     expect(span?.attributes).toMatchObject({
       "gen_ai.operation.name": "chat",
-      "gen_ai.system": "mock",
+      "gen_ai.provider.name": "mock",
       "gen_ai.request.model": "fast-model",
       "gen_ai.response.model": "fast-model",
       "gen_ai.usage.input_tokens": 7,
       "gen_ai.usage.output_tokens": 6,
+      "switchyard.stage": "upstream",
+      "switchyard.provider.name": "mock",
       "switchyard.provider.type": "mock",
       "http.response.status_code": 200,
     });
+    expect(span?.attributes).not.toHaveProperty("gen_ai.system");
+    expect(span?.attributes).not.toHaveProperty("error.type");
     expect(span?.parentSpanContext).toBeDefined();
   });
 
   it("marks the span as error on upstream failure and logs a warning", async () => {
     const { span, logs } = await call("mock/error-500");
     expect(span?.status).toEqual({ code: SpanStatusCode.ERROR, message: "upstream_error" });
+    expect(span?.attributes["error.type"]).toBe("upstream_error");
     expect(span?.attributes["http.response.status_code"]).toBe(502);
     const warn = logs.find((l) => l.msg === "upstream request failed");
     expect(warn).toMatchObject({ provider: "mock", model: "error-500", code: "upstream_error" });
@@ -201,11 +209,61 @@ describe("upstream span handle (streaming)", () => {
       { provider, model: "embed-model", logger, operation: "embeddings" },
       async () => ({ usage: { inputTokens: 4 } }),
     );
+    expect(lastSpan()?.name).toBe("embeddings embed-model");
     expect(lastSpan()?.attributes).toMatchObject({
       "gen_ai.operation.name": "embeddings",
       "gen_ai.usage.input_tokens": 4,
     });
     expect(lastSpan()?.attributes).not.toHaveProperty("gen_ai.usage.output_tokens");
+  });
+
+  it("names the GenAI provider: configured, anthropic by type, else the config name", async () => {
+    const { logger } = logs();
+    const names: unknown[] = [];
+    for (const info of [
+      { provider: { name: "gem", type: "openai-compatible" }, genAiProviderName: "gcp.gemini" },
+      { provider: { name: "claude", type: "anthropic" } },
+      { provider: { name: "ollama", type: "openai-compatible" } },
+    ]) {
+      await tracedUpstreamCall({ ...info, model: "m", logger }, async () => ({}));
+      const attributes = lastSpan()?.attributes ?? {};
+      names.push([attributes["gen_ai.provider.name"], attributes["switchyard.provider.name"]]);
+    }
+    expect(names).toEqual([
+      ["gcp.gemini", "gem"],
+      ["anthropic", "claude"],
+      ["ollama", "ollama"],
+    ]);
+  });
+
+  it("sets error.type to the gateway error code on mid-stream failures", async () => {
+    const { logger } = logs();
+    const upstream = startUpstreamSpan({ provider, model: "m", logger, stream: true });
+    upstream.firstChunk();
+    upstream.fail(upstreamTimeout("mock"), "midstream");
+    expect(lastSpan()?.attributes["error.type"]).toBe("upstream_timeout");
+  });
+
+  it("uses the provider name configured for the candidate through the app", async () => {
+    const config = testConfig();
+    config.providers.mock = {
+      type: "mock",
+      latencyMs: 0,
+      errorRate: 0,
+      chunkDelayMs: 0,
+      genAiProviderName: "openai",
+    };
+    const { app } = await testApp({ config });
+    tracing.exporter.reset();
+    await app.inject({
+      method: "POST",
+      url: "/v1/chat/completions",
+      payload: { model: "mock/x", messages: [{ role: "user", content: "hi" }] },
+    });
+    await app.close();
+    const span = tracing.exporter.getFinishedSpans().find(isUpstreamSpan);
+    expect(span?.attributes["gen_ai.provider.name"]).toBe("openai");
+    expect(span?.attributes["switchyard.provider.name"]).toBe("mock");
   });
 });
 
@@ -235,7 +293,7 @@ describe("team and key telemetry (spec 004)", () => {
     expect(res.statusCode).toBe(200);
 
     const spans = tracing.exporter.getFinishedSpans();
-    const upstream = spans.find((s) => s.name === "switchyard.upstream");
+    const upstream = spans.find(isUpstreamSpan);
     expect(upstream?.attributes).toMatchObject({
       "switchyard.team_id": team.id,
       "switchyard.key_id": record.id,

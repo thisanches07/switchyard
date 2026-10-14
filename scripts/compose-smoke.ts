@@ -1,13 +1,19 @@
 // Smoke test for the Docker Compose stack (spec 001: AC-1..AC-6, AC-9; specs 002-003: chat,
 // streaming and embeddings via the mock provider; spec 004: API keys through the admin API;
 // spec 005: per-minute rate limits; spec 006: usage events through Redpanda and the worker;
-// spec 010: PII block and mask; spec 008: alias fallback).
+// spec 010: PII block and mask; spec 008: alias fallback; spec 011: Grafana dashboards, alert
+// rules and Overview metrics).
 // Cross-platform: `node scripts/compose-smoke.ts [--down]` locally (Windows or Linux) and in CI.
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { dashboardMetrics } from "./lib/grafana-check.ts";
 import { totalMemoryBytes } from "./lib/stack-memory.ts";
 
 const GATEWAY = process.env.SMOKE_GATEWAY_URL ?? "http://localhost:8080";
+const GRAFANA = process.env.SMOKE_GRAFANA_URL ?? "http://localhost:3000";
+// otel-lgtm default login (also anonymous Admin); local stack only.
+const GRAFANA_AUTH = process.env.SMOKE_GRAFANA_AUTH ?? "admin:admin";
 const MAX_STACK_GIB = Number(process.env.SMOKE_MAX_STACK_GIB ?? "4");
 // Compose ships this dev-only default (spec 004); override with ADMIN_TOKEN like the stack does.
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN ?? "dev-only-admin-token-change-me";
@@ -78,6 +84,44 @@ async function createKey(settings: Record<string, unknown>): Promise<string> {
   });
   if (key.status !== 201) throw new Error(`key: ${key.status} ${await key.text()}`);
   return ((await key.json()) as { key: string }).key;
+}
+
+const DASHBOARD_UIDS = [
+  "switchyard-overview",
+  "switchyard-cost",
+  "switchyard-providers",
+  "switchyard-cache",
+];
+const ALERT_RULE_UIDS = [
+  "switchyard-high-error-rate",
+  "switchyard-circuit-open",
+  "switchyard-budget-near-limit",
+  "switchyard-usage-events-dropped",
+];
+
+async function grafanaGet(path: string): Promise<unknown> {
+  const res = await fetch(`${GRAFANA}${path}`, {
+    headers: { authorization: `Basic ${Buffer.from(GRAFANA_AUTH).toString("base64")}` },
+  });
+  if (res.status !== 200) throw new Error(`GET ${path}: ${res.status} ${await res.text()}`);
+  return res.json();
+}
+
+/** Polls a Grafana API path until `ready(body)` holds (Grafana boots after `up --wait`). */
+async function grafanaUntil(path: string, ready: (body: unknown) => boolean, timeoutMs = 120_000) {
+  const deadline = Date.now() + timeoutMs;
+  let last: unknown = "no response";
+  while (Date.now() < deadline) {
+    try {
+      const body = await grafanaGet(path);
+      if (ready(body)) return body;
+      last = body;
+    } catch (error) {
+      last = error instanceof Error ? error.message : String(error);
+    }
+    await new Promise((r) => setTimeout(r, 2_000));
+  }
+  throw new Error(`GET ${path} not ready: ${JSON.stringify(last).slice(0, 500)}`);
 }
 
 function chatWith(
@@ -336,6 +380,42 @@ try {
     if (attempts !== "2") throw new Error(`x-switchyard-attempts: ${attempts}`);
     if (model !== "smoke") throw new Error(`x-switchyard-model: ${model}`);
   });
+
+  await step(
+    "Grafana provisions the dashboards and alert rules; Overview metrics have series (spec 011)",
+    async () => {
+      // otel-lgtm has no healthcheck; it starts serving a little after `up --wait`.
+      const dashboards = await grafanaUntil("/api/search?type=dash-db&tag=switchyard", (body) => {
+        const uids = (body as { uid: string }[]).map((d) => d.uid);
+        return DASHBOARD_UIDS.every((uid) => uids.includes(uid));
+      });
+      const rules = await grafanaUntil("/api/v1/provisioning/alert-rules", (body) => {
+        const uids = (body as { uid: string }[]).map((r) => r.uid);
+        return ALERT_RULE_UIDS.every((uid) => uids.includes(uid));
+      });
+      console.log(
+        `  ${(dashboards as unknown[]).length} dashboards, ${(rules as unknown[]).length} alert rules`,
+      );
+      // Metrics are exported every 15 s; query Prometheus through Grafana (no extra port).
+      const overview = readFileSync(
+        resolve(root, "deploy/grafana/dashboards/overview.json"),
+        "utf8",
+      );
+      const missing = new Set(dashboardMetrics(overview));
+      const deadline = Date.now() + 90_000;
+      while (missing.size > 0 && Date.now() < deadline) {
+        for (const metric of [...missing]) {
+          const result = await grafanaGet(
+            `/api/datasources/proxy/uid/prometheus/api/v1/query?query=${encodeURIComponent(metric)}`,
+          ).catch(() => undefined);
+          const series = (result as { data?: { result?: unknown[] } } | undefined)?.data?.result;
+          if (series && series.length > 0) missing.delete(metric);
+        }
+        if (missing.size > 0) await new Promise((r) => setTimeout(r, 5_000));
+      }
+      if (missing.size > 0) throw new Error(`no series for ${[...missing].join(", ")}`);
+    },
+  );
 
   await step("ollama profile adds the ollama service", () => {
     const services = run(["compose", "--profile", "ollama", "config", "--services"]).stdout;

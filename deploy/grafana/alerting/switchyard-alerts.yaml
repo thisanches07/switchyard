@@ -1,0 +1,150 @@
+# Example alert rules as code (spec 011, ADR-0020), loaded by Grafana's file provisioning.
+# Thresholds are EXAMPLES to tune for your traffic, not recommendations. No contact point or
+# notification policy is committed: rules go to Grafana's default policy. To get notified, add a
+# contact point locally (docs/observability.md), never with real credentials in this repo.
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: switchyard
+    folder: Switchyard
+    interval: 1m
+    rules:
+      - uid: switchyard-high-error-rate
+        title: High /v1 error rate
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: >-
+                sum(rate(switchyard_request_duration_seconds_count{status="5xx"}[5m]))
+                / clamp_min(sum(rate(switchyard_request_duration_seconds_count[5m])), 1e-9)
+          - refId: B
+            datasourceUid: __expr__
+            model: { refId: B, type: reduce, expression: A, reducer: last }
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator: { type: gt, params: [0.05] }
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        labels: { severity: warning, service: switchyard }
+        annotations:
+          summary: More than 5 % of /v1 requests failed with a 5xx over the last 5 minutes.
+          description: >-
+            Example threshold (5 % for 5 minutes), tune it to your traffic. Check the Providers
+            dashboard for the failing provider and circuit state, the gateway logs for
+            "upstream request failed", and GET /admin/providers/health. A 503 no_healthy_upstream
+            means every breaker of an alias is open.
+
+      - uid: switchyard-circuit-open
+        title: Circuit breaker open
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 300, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: max(switchyard_circuit_state)
+          - refId: B
+            datasourceUid: __expr__
+            model: { refId: B, type: reduce, expression: A, reducer: last }
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                # 0 closed, 1 half-open, 2 open
+                - evaluator: { type: gt, params: [1.5] }
+        noDataState: OK
+        execErrState: Error
+        for: 1m
+        labels: { severity: warning, service: switchyard }
+        annotations:
+          summary: A provider/model candidate has its circuit breaker open.
+          description: >-
+            Example rule (open for 1 minute). Requests skip the candidate and fall back to the next
+            one of their alias. Check "Circuit state by candidate" on the Providers dashboard, the
+            breaker transition log lines, and GET /admin/providers/health for the candidate and
+            its recent errors. The breaker probes again after circuitBreaker.openMs.
+
+      - uid: switchyard-budget-near-limit
+        title: Budget near its limit
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: max(switchyard_budget_used_ratio)
+          - refId: B
+            datasourceUid: __expr__
+            model: { refId: B, type: reduce, expression: A, reducer: last }
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator: { type: gt, params: [0.9] }
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        labels: { severity: info, service: switchyard }
+        annotations:
+          summary: A team or key has used more than 90 % of its monthly budget.
+          description: >-
+            Example threshold (90 %), tune it per team. At 100 % requests get 429 budget_exceeded.
+            Check "Budget used (top 10)" on the Cost dashboard for the scope and id, then
+            GET /admin/teams/{id}/budget or /admin/keys/{id}/budget, and raise monthlyBudgetUsd
+            if the spend is expected.
+
+      - uid: switchyard-usage-events-dropped
+        title: Usage events dropped
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: sum(increase(switchyard_usage_events_dropped_total[5m]))
+          - refId: B
+            datasourceUid: __expr__
+            model: { refId: B, type: reduce, expression: A, reducer: last }
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        labels: { severity: warning, service: switchyard }
+        annotations:
+          summary: The gateway dropped usage events, so usage and spend records are missing.
+          description: >-
+            Example rule (any drop in 5 minutes). Events are dropped when the in-memory buffer is
+            full because Kafka is slow or down (reason buffer_full), at shutdown, or when invalid.
+            Check Redpanda health (docker compose ps, rpk cluster health), the gateway logs, and
+            switchyard_usage_buffer_events. Budget counters in Redis still count the requests.

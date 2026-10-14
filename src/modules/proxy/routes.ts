@@ -34,13 +34,16 @@ import { serveCachedChat } from "./cached.js";
 import { registerMessagesRoute } from "./messages.js";
 import { parseChatRequest, parseEmbeddingsRequest } from "./schema.js";
 import { streamChat } from "./stream.js";
-import type { UpstreamOutcome } from "./telemetry.js";
+import { recordRequestTiming, type UpstreamOutcome } from "./telemetry.js";
+import { createRequestTiming, type RequestTiming } from "./timing.js";
 import { estimateChatUsage } from "./usage.js";
 
 declare module "fastify" {
   interface FastifyRequest {
     /** Config and providers this request runs with, fixed at its start (spec 008 hot reload). */
     snapshot?: ConfigSnapshot;
+    /** Duration and overhead of the request (spec 011). */
+    timing?: RequestTiming;
   }
 }
 
@@ -89,8 +92,12 @@ export type AttemptFn = <T>(
 
 export async function proxyRoutes(app: FastifyInstance, opts: ProxyRoutesOptions): Promise<void> {
   // In-flight requests finish with the config they started with (spec 008, AC-12).
-  app.addHook("onRequest", async (request) => {
+  app.addHook("onRequest", async (request, reply) => {
     request.snapshot = opts.runtime.current();
+    // Spec 011: duration and overhead on the routing clock, recorded once the response closed.
+    const timing = createRequestTiming(opts.routing.timers.now, recordRequestTiming);
+    request.timing = timing;
+    reply.raw.once("close", () => timing.ended());
   });
   // Every /v1 route requires a valid key (spec 004); health routes live outside this plugin.
   app.addHook("onRequest", createAuthenticate(opts.auth));
@@ -141,11 +148,13 @@ export async function proxyRoutes(app: FastifyInstance, opts: ProxyRoutesOptions
         logger: request.log,
         stream: options.stream,
         principal: request.principal,
+        genAiProviderName: (name) => config.providers[name]?.genAiProviderName,
         ...(options.operation && { operation: options.operation }),
         ...(options.cache && { cache: options.cache }),
       },
       call: options.call,
       describe: options.describe,
+      timing: request.timing,
       report(candidate, attempts) {
         reply.header("x-switchyard-attempts", attempts);
         if (candidate) {
@@ -192,6 +201,7 @@ export async function proxyRoutes(app: FastifyInstance, opts: ProxyRoutesOptions
       provider: usage.resolved.provider,
       servedModel: usage.resolved.model,
       elapsedMs: () => reply.elapsedTime,
+      onEnd: (event) => request.timing?.outcome(event),
     });
     // Spec 009: no cache lookup unless a route says otherwise (only chat completions look up).
     request.outcome?.set({ cacheStatus: "bypass" });

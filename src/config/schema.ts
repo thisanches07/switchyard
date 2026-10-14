@@ -5,6 +5,12 @@ const positiveInt = z.number().int().positive();
 const envVarName = z.string().regex(/^[A-Z_][A-Z0-9_]*$/, "must be an environment variable name");
 
 /** `provider/model`; the model part may itself contain slashes (e.g. OpenRouter IDs). */
+/** Value of `gen_ai.provider.name` on upstream spans (spec 011), e.g. `groq`, `gcp.gemini`. */
+const genAiProviderName = z
+  .string()
+  .regex(/^[a-z0-9][a-z0-9._-]*$/, "must be a lower-case GenAI provider name such as gcp.gemini")
+  .optional();
+
 const modelRef = z.string().regex(/^[a-z0-9][a-z0-9-]*\/.+$/, "must be in the form provider/model");
 
 const openAiCompatibleProvider = z
@@ -13,6 +19,7 @@ const openAiCompatibleProvider = z
     baseUrl: z.url().optional(),
     baseUrlEnv: envVarName.optional(),
     apiKeyEnv: envVarName.optional(),
+    genAiProviderName,
   })
   .refine((p) => (p.baseUrl === undefined) !== (p.baseUrlEnv === undefined), {
     message: "set exactly one of baseUrl or baseUrlEnv",
@@ -24,6 +31,7 @@ const anthropicProvider = z.strictObject({
   apiKeyEnv: envVarName,
   /** `max_tokens` sent when an OpenAI request sets none; Anthropic requires it (spec 014). */
   defaultMaxTokens: positiveInt.default(4096),
+  genAiProviderName,
 });
 
 const mockProvider = z.strictObject({
@@ -32,6 +40,7 @@ const mockProvider = z.strictObject({
   errorRate: z.number().min(0).max(1).default(0),
   /** Delay between streamed chunks. */
   chunkDelayMs: z.number().int().nonnegative().default(0),
+  genAiProviderName,
 });
 
 const providerSchema = z.discriminatedUnion("type", [

@@ -65,7 +65,7 @@ Every request admitted by the rate limiter gets an **outcome tracker** (`src/mod
 
 ### Routing and config snapshots
 
-Every `/v1` request reads the live config once, at its start (`request.snapshot`: config + provider registry, `src/modules/config/runtime.ts`), so a hot reload (ADR-0018) only affects new requests. Chat, embeddings and messages all go through one attempt loop (`src/modules/proxy/attempts.ts`, spec 008): candidates allowed for the key, ordered by the alias strategy, tried with retries, full-jitter backoff and per-candidate circuit breakers (`src/modules/routing/`) until the first byte. Each attempt is a `switchyard.upstream` span; the request is admitted, reconciled and recorded once.
+Every `/v1` request reads the live config once, at its start (`request.snapshot`: config + provider registry, `src/modules/config/runtime.ts`), so a hot reload (ADR-0018) only affects new requests. Chat, embeddings and messages all go through one attempt loop (`src/modules/proxy/attempts.ts`, spec 008): candidates allowed for the key, ordered by the alias strategy, tried with retries, full-jitter backoff and per-candidate circuit breakers (`src/modules/routing/`) until the first byte. Each attempt is an upstream span named after the OpenTelemetry GenAI conventions (`chat llama3.2`, with `switchyard.stage: upstream`); the request is admitted, reconciled and recorded once, and its duration and gateway overhead (duration minus attempt and backoff time; to the first byte for streams) are recorded when the response closes (spec 011, [observability guide](observability.md)).
 
 ### Response cache
 

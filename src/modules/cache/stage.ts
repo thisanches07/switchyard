@@ -162,7 +162,9 @@ export function createCacheStage(deps: CacheStageDeps) {
       kind: SpanKind.INTERNAL,
       attributes: {
         "gen_ai.operation.name": "embeddings",
-        "gen_ai.system": ref.provider,
+        // Spec 011: gen_ai.provider.name replaces the deprecated gen_ai.system.
+        "gen_ai.provider.name": ref.provider,
+        "switchyard.provider.name": ref.provider,
         "gen_ai.request.model": ref.model,
       },
     });

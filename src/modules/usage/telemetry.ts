@@ -1,6 +1,7 @@
 import { type Counter, type MeterProvider, metrics } from "@opentelemetry/api";
 
-export type DropReason = "buffer_full" | "shutdown" | "invalid";
+const DROP_REASONS = ["buffer_full", "shutdown", "invalid"] as const;
+export type DropReason = (typeof DROP_REASONS)[number];
 export type WorkerResult = "inserted" | "duplicate" | "dlq";
 
 interface Instruments {
@@ -40,6 +41,8 @@ function getInstruments(): Instruments {
         description: "Usage events handled by the worker, by result",
       }),
     };
+    // A series per reason from the start, so dashboards and alerts see 0, not "no data" (spec 011).
+    for (const reason of DROP_REASONS) instruments.dropped.add(0, { reason });
   }
   return instruments;
 }

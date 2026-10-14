@@ -13,13 +13,22 @@ import type { FastifyBaseLogger } from "fastify";
 import type { Principal } from "../../core/auth.js";
 import { GatewayError } from "../../core/errors.js";
 import type { CacheStatus } from "../../core/usage.js";
+import type { TimingRecord } from "./timing.js";
 
 interface Instruments {
   provider: MeterProvider;
   requests: Counter;
   upstreamDuration: Histogram;
   ttfb: Histogram;
+  requestDuration: Histogram;
+  gatewayOverhead: Histogram;
 }
+
+/** Second-valued buckets (the SDK default `0 … 10000` is meant for milliseconds). Spec 011. */
+const DURATION_BUCKETS = [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120];
+const OVERHEAD_BUCKETS = [
+  0.0001, 0.00025, 0.0005, 0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1,
+];
 let instruments: Instruments | undefined;
 
 /** Instruments are bound to the current global MeterProvider (tests may swap it). */
@@ -35,10 +44,23 @@ function getInstruments(): Instruments {
       upstreamDuration: meter.createHistogram("switchyard_upstream_duration_seconds", {
         description: "Time spent waiting for the provider (whole stream for streaming calls)",
         unit: "s",
+        advice: { explicitBucketBoundaries: DURATION_BUCKETS },
       }),
       ttfb: meter.createHistogram("switchyard_ttfb_seconds", {
         description: "Time from the upstream request to the first streamed chunk",
         unit: "s",
+        advice: { explicitBucketBoundaries: DURATION_BUCKETS },
+      }),
+      requestDuration: meter.createHistogram("switchyard_request_duration_seconds", {
+        description: "Admitted /v1 requests from arrival to the last response byte (spec 011)",
+        unit: "s",
+        advice: { explicitBucketBoundaries: DURATION_BUCKETS },
+      }),
+      gatewayOverhead: meter.createHistogram("switchyard_gateway_overhead_seconds", {
+        description:
+          "Time the gateway adds: duration minus upstream time and backoff (to first byte for streams)",
+        unit: "s",
+        advice: { explicitBucketBoundaries: OVERHEAD_BUCKETS },
       }),
     };
   }
@@ -47,6 +69,8 @@ function getInstruments(): Instruments {
 
 export interface UpstreamCallInfo {
   provider: { name: string; type: string };
+  /** `gen_ai.provider.name` from config (spec 011); see `genAiProviderName()` for the default. */
+  genAiProviderName?: string | undefined;
   model: string;
   logger: FastifyBaseLogger;
   operation?: "chat" | "embeddings";
@@ -94,6 +118,14 @@ export interface UpstreamSpan {
   annotate(attributes: Record<string, string | number | boolean>): void;
 }
 
+/** Records request duration and gateway overhead (spec 011, AC-1); labels stay low-cardinality. */
+export function recordRequestTiming(record: TimingRecord): void {
+  const { requestDuration, gatewayOverhead } = getInstruments();
+  const labels = { ...record.labels };
+  requestDuration.record(record.durationMs / 1000, labels);
+  gatewayOverhead.record(record.overheadMs / 1000, labels);
+}
+
 /** Counts one client request against `switchyard_requests_total` (final failed attempt, spec 008). */
 export function countUpstreamRequest(info: UpstreamCallInfo, status: string): void {
   getInstruments().requests.add(1, {
@@ -115,20 +147,30 @@ export function countCachedRequest(labels: {
   getInstruments().requests.add(1, { ...labels, status: "200" });
 }
 
+/** `gen_ai.provider.name`: configured, else `anthropic` for that type, else the config name. */
+export function genAiProviderName(info: Pick<UpstreamCallInfo, "provider" | "genAiProviderName">) {
+  if (info.genAiProviderName) return info.genAiProviderName;
+  return info.provider.type === "anthropic" ? "anthropic" : info.provider.name;
+}
+
 /**
- * Starts a `switchyard.upstream` span (spec 002 AC-9, spec 003 AC-8).
- * Only metadata is recorded: never message content (ADR-0010).
+ * Starts the upstream span (spec 002 AC-9, spec 003 AC-8), named and attributed after the
+ * OpenTelemetry GenAI conventions (spec 011, AC-4): `{operation} {model}`, kind CLIENT, with
+ * `switchyard.stage: "upstream"` for searches by stage.
+ * Only metadata is recorded: never message content (ADR-0010, spec 011 AC-5).
  */
 export function startUpstreamSpan(info: UpstreamCallInfo): UpstreamSpan {
   const { provider, model, logger } = info;
   const operation = info.operation ?? "chat";
   // Looked up per call so a swapped global provider (tests) is always honoured.
-  const span: Span = trace.getTracer("switchyard").startSpan("switchyard.upstream", {
+  const span: Span = trace.getTracer("switchyard").startSpan(`${operation} ${model}`, {
     kind: SpanKind.CLIENT,
     attributes: {
       "gen_ai.operation.name": operation,
-      "gen_ai.system": provider.name,
+      "gen_ai.provider.name": genAiProviderName(info),
       "gen_ai.request.model": model,
+      "switchyard.stage": "upstream",
+      "switchyard.provider.name": provider.name,
       "switchyard.provider.type": provider.type,
       "switchyard.stream": info.stream ?? false,
       ...(info.principal && {
@@ -189,6 +231,7 @@ export function startUpstreamSpan(info: UpstreamCallInfo): UpstreamSpan {
       const code = error instanceof GatewayError ? error.code : "internal_error";
       const outcome = code === "upstream_timeout" ? "timeout" : "error";
       span.setStatus({ code: SpanStatusCode.ERROR, message: code });
+      span.setAttribute("error.type", code);
       if (phase === "midstream") {
         // Headers (200) were already sent; ADR-0008 forbids retrying from here.
         span.setAttribute("switchyard.midstream_error", true);

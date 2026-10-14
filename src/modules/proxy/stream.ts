@@ -106,6 +106,8 @@ export async function streamChat({
   }
 
   const { upstream, provider } = served;
+  // First byte for the overhead metric (spec 011): headers and the first chunk go out next.
+  reply.request.timing?.firstByte();
   const { iterator, first } = served.value;
   const ttfbMs = upstream.firstChunk();
   const responseModel = first.done ? undefined : modelOf(first.value);
