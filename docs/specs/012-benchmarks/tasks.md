@@ -30,7 +30,7 @@ One commit per task, ending in `[spec-012]`. Lint, typecheck and the task's test
   - Do: `bench/lib/environment.ts`, `bench/lib/args.ts`.
   - Test: `environment.test.ts` › run id; dirty and smoke runs not publishable and routed to `results/local`; Docker info and image digests shaped. `args.test.ts` › `--scenario`, `--smoke`, `--keep`, bare `--`, unknown scenario.
 
-- [ ] **T6. Server-side overhead collector**
+- [x] **T6. Server-side overhead collector**
   - ACs: AC-7
   - Do: `bench/lib/metrics.ts`.
   - Test: `metrics.test.ts` › PromQL for each quantile and the count with the configured selector and window; Prometheus vector parsed to ms; empty result → `null` with "metric not exported".
