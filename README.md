@@ -643,7 +643,7 @@ x-switchyard-upstream-ms: 986
 | Signal | Name | Details |
 |---|---|---|
 | Span | `{operation} {model}` (e.g. `chat llama3.2`), kind `CLIENT` | one per upstream attempt, [GenAI conventions](https://github.com/open-telemetry/semantic-conventions-genai): `gen_ai.operation.name`, `gen_ai.provider.name`, `gen_ai.request.model`, `gen_ai.response.model`, `gen_ai.usage.input_tokens` / `output_tokens`, `error.type`; plus `switchyard.stage: upstream`, `switchyard.provider.name`, `switchyard.candidate`, `switchyard.attempt`, `switchyard.attempt.outcome`, `switchyard.backoff_ms` |
-| Histogram | `switchyard_request_duration_seconds` | whole request, arrival to last byte, by `operation`, `stream`, `status` class |
+| Histogram | `switchyard_request_duration_seconds` | whole request, arrival to last byte, by `operation`, `stream`, `status` class, `cache` |
 | Histogram | `switchyard_gateway_overhead_seconds` | time the gateway adds: duration − upstream time − backoff (to the first byte for streams), same labels |
 | Counter | `switchyard_tokens_total` | by `direction` (`input`, `output`), `provider`, `model`; matches the usage events |
 | Counter | `switchyard_requests_total` | by `provider`, `model`, `status`, `team`; one per client request (the attempt that served or failed last) |
@@ -669,7 +669,7 @@ x-switchyard-upstream-ms: 986
 > [!IMPORTANT]
 > Prompt and response **content is never written to logs or spans** ([ADR-0010](docs/adr/0010-no-prompt-persistence.md)). Only metadata such as tokens, latency and status is recorded.
 
-**Dashboards and alerts:** `docker compose up -d`, then `pnpm demo:traffic` (mock provider only) and open Grafana at <http://localhost:3000> → **Dashboards → Switchyard**: **Overview** (traffic, errors, duration, overhead, TTFB, tokens, rejections, dropped events), **Cost** (spend by model, requests by team, unknown costs, budgets), **Providers** (per-provider errors and latency, retries, circuit state) and **Cache** (with spec 009). Four example alert rules (error rate, breaker open, budget near limit, usage events dropped) load with them; add your own contact point in Grafana. Everything lives in [`deploy/grafana/`](deploy/grafana) and `pnpm verify` fails if a panel queries a metric the code does not emit. Definitions, panels, rules and the rule for new metrics: [docs/observability.md](docs/observability.md).
+**Dashboards and alerts:** `docker compose up -d`, then `pnpm demo:traffic` (mock provider only) and open Grafana at <http://localhost:3000> → **Dashboards → Switchyard**: **Overview** (traffic, errors, duration, overhead, TTFB, tokens, rejections, dropped events), **Cost** (spend by model, requests by team, unknown costs, budgets), **Providers** (per-provider errors and latency, retries, circuit state) and **Cache** (hit ratio, lookups, USD saved, errors). Four example alert rules (error rate, breaker open, budget near limit, usage events dropped) load with them; add your own contact point in Grafana. Everything lives in [`deploy/grafana/`](deploy/grafana) and `pnpm verify` fails if a panel queries a metric the code does not emit. Definitions, panels, rules and the rule for new metrics: [docs/observability.md](docs/observability.md).
 
 <!-- Screenshots (spec 011, AC-11): captured by the owner following docs/observability.md § Screenshots.
 ![Grafana Overview dashboard](docs/assets/dashboard-overview.png)

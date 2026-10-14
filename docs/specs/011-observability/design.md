@@ -55,7 +55,7 @@ No other config. Dashboards and alerts are files, not config.
 | `switchyard_gateway_overhead_seconds` | histogram | same | s; `0.0001 … 1` |
 | `switchyard_tokens_total` | counter | `direction` (`input`·`output`), `provider`, `model` (served model; `none` when no upstream) | tokens |
 
-`cache` is added to the two histograms by spec 009 when it lands (the integrator adds it on rebase; a label is not part of the AC-8 catalogue). Neither histogram carries team, key or model.
+`cache` (the usage event's `cacheStatus`: `hit`, `semantic_hit`, `miss`, `bypass`) was added after rebasing on spec 009. Neither histogram carries team, key or model.
 
 Explicit bucket boundaries are set through the instrument `advice` (the SDK default buckets `0 … 10000` are meant for milliseconds and put every second-valued sample in the first bucket). The existing `switchyard_upstream_duration_seconds` and `switchyard_ttfb_seconds` get the duration buckets too, so the Providers and Overview percentiles mean something. Changing buckets does not change metric names.
 
@@ -145,7 +145,7 @@ All panels query the `prometheus` datasource with `$__rate_interval`. Variables:
 - **Overview**: request rate by status class; 5xx error ratio; request duration p50/p95/p99; gateway overhead p50/p95/p99; TTFB p50/p95; token throughput by direction; rate-limit rejections by scope; auth failures by reason; usage events dropped by reason.
 - **Cost**: cost by team (from requests × cost is not joinable, so cost by provider/model from `switchyard_cost_usd_total`, and request share by team from `switchyard_requests_total{team}`); cost by model; unknown-cost requests by model; budget rejections by scope; soft-limit requests; budget used ratio (top 10).
 - **Providers**: requests and error ratio by provider; attempts by candidate and outcome; upstream duration p95 by provider; circuit state by candidate (state timeline); TTFB p95 by provider.
-- **Cache**: skeleton (title, uid, a text panel naming the spec 009 metrics) until 009 lands; panels for hit ratio by status and USD saved come in the blocked task T14.
+- **Cache** (after spec 009, T14): hit ratio (hit + semantic_hit over eligible requests), requests by `cache` status, hit ratio and lookups by layer, USD saved by model and by team, unknown-price hits, cache errors by layer and stage.
 
 Note: "cost by team" from AC-6 cannot be a Prometheus query because `switchyard_cost_usd_total` has no `team` label (spec 007 chose `provider`, `model`) — see §8 item 3.
 

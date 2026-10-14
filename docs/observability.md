@@ -31,7 +31,7 @@ Provisioned dashboards cannot be saved from the Grafana UI. To change one: edit 
   - Served from cache (spec 009): the whole duration (there is no upstream time).
   - Never negative. All terms are read from one clock (`performance.timeOrigin + performance.now()`, sub-millisecond).
 
-Both histograms are labelled only by `operation` (`chat`, `embeddings`, `messages`), `stream` (`true`, `false`) and `status` class (`2xx`, `4xx`, `5xx`); spec 009 adds `cache`.
+Both histograms are labelled only by `operation` (`chat`, `embeddings`, `messages`), `stream` (`true`, `false`) `status` class (`2xx`, `4xx`, `5xx`) and `cache` (`hit`, `semantic_hit`, `miss`, `bypass`, spec 009).
 
 ## Metrics
 
@@ -49,6 +49,7 @@ Both histograms are labelled only by `operation` (`chat`, `embeddings`, `message
 | `switchyard_cost_usd_total`, `switchyard_cost_unknown_requests_total` | counter | `provider`, `model` | spec 007 |
 | `switchyard_budget_rejections_total`, `_soft_limit_requests_total`, `_fail_open_total`, `_charge_failures_total`, `switchyard_budget_used_ratio` | counters, gauge | `scope` (+ `id`) | spec 007 |
 | `switchyard_pii_detections_total` | counter | `type` | spec 010 |
+| `switchyard_cache_lookups_total`, `switchyard_cache_errors_total`, `switchyard_cache_savings_usd_total`, `switchyard_cache_savings_unknown_total` | counter | `layer` + `result` / `stage` / `model`, `team` | spec 009 |
 
 Histogram buckets are explicit (seconds): duration `0.005 … 120`, overhead `0.0001 … 1`. `switchyard_usage_events_dropped_total` starts at 0 for every reason, so a healthy stack shows 0 rather than "no data".
 
@@ -78,7 +79,7 @@ One span per upstream attempt, kind `CLIENT`, named after the [OpenTelemetry Gen
 | **Overview** (`switchyard-overview`) | Is the gateway healthy, how fast is it, and how much does it add? Request rate by status class, 5xx ratio, request duration and overhead p50/p95/p99, TTFB, token throughput, rate-limit and auth rejections, usage events dropped | `switchyard_request_duration_seconds_*`, `switchyard_gateway_overhead_seconds_bucket`, `switchyard_requests_total`, `switchyard_ttfb_seconds_bucket`, `switchyard_tokens_total`, `switchyard_ratelimit_rejections_total`, `switchyard_auth_failures_total`, `switchyard_usage_events_dropped_total` |
 | **Cost** (`switchyard-cost`) | What are we spending, on which models, which teams send the traffic, and who is near a budget? | `switchyard_cost_usd_total`, `switchyard_cost_unknown_requests_total`, `switchyard_requests_total{team}`, `switchyard_budget_*` |
 | **Providers** (`switchyard-providers`) | Which provider is slow or failing, how often do we retry, and which breakers are open? | `switchyard_requests_total`, `switchyard_upstream_duration_seconds_bucket`, `switchyard_ttfb_seconds_bucket`, `switchyard_upstream_attempts_total`, `switchyard_circuit_state` |
-| **Cache** (`switchyard-cache`) | Is the cache paying off? Hit ratio by status and USD saved | skeleton until spec 009 adds its metrics |
+| **Cache** (`switchyard-cache`) | Is the cache paying off? Hit ratio, requests by cache status, hit ratio and lookups by layer, USD saved by model and team, hits with an unknown price, cache errors by layer and stage | `switchyard_requests_total{cache}`, `switchyard_cache_lookups_total`, `switchyard_cache_savings_usd_total`, `switchyard_cache_savings_unknown_total`, `switchyard_cache_errors_total` |
 
 Cost per team is not a Prometheus query: `switchyard_cost_usd_total` is labelled by provider and model only (spec 007). The Cost dashboard shows each team's share of requests; exact spend per team comes from `GET /admin/usage?groupBy=team`.
 

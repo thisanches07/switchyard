@@ -139,6 +139,27 @@ describe("deploy/grafana (spec 011)", () => {
     }
   });
 
+  it("Cache shows hit ratio by status, lookups, USD saved, unknown prices and errors (spec 009)", () => {
+    expect(titles(dashboard("cache.json").panels)).toEqual(
+      expect.arrayContaining([
+        "Hit ratio",
+        "Requests by cache status",
+        "Hit ratio by layer",
+        "Lookups by layer and result",
+        "USD saved by model in range",
+        "Unknown-price hits by model",
+        "Cache errors by layer and stage",
+      ]),
+    );
+    expect(dashboardMetrics(read("dashboards", "cache.json")).sort()).toEqual([
+      "switchyard_cache_errors_total",
+      "switchyard_cache_lookups_total",
+      "switchyard_cache_savings_unknown_total",
+      "switchyard_cache_savings_usd_total",
+      "switchyard_requests_total",
+    ]);
+  });
+
   it("the dashboard provider points Grafana at the mounted dashboards folder", () => {
     const provisioning = parse(read("provisioning", "dashboards", "switchyard.yaml")) as {
       providers: { name: string; folder: string; options: { path: string } }[];
