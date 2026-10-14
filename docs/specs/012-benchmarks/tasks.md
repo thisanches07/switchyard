@@ -45,7 +45,7 @@ One commit per task, ending in `[spec-012]`. Lint, typecheck and the task's test
   - Do: `bench/run.ts`, `bench/lib/plan.ts`, `package.json` scripts, `.gitignore`.
   - Test: `run-plan.test.ts` › scenario plan (direct before gateway for `no-cache` and `streaming`; k6 env per pass); k6 exit codes mapped to correctness vs harness errors. End to end: CI `bench-smoke`.
 
-- [ ] **T9. CI benchmark smoke**
+- [x] **T9. CI benchmark smoke**
   - ACs: AC-10
   - Do: `.github/workflows/bench-smoke.yml`.
   - Test: CI job `bench-smoke` on a PR touching `bench/`, `src/` or `Dockerfile`.
