@@ -6,7 +6,7 @@
 import { randomUUID } from "node:crypto";
 import { Readable } from "node:stream";
 import type { FastifyReply, FastifyRequest } from "fastify";
-import type { ChatRequest } from "../../core/chat.js";
+import type { ChatChunk, ChatRequest } from "../../core/chat.js";
 import type { CostEstimator } from "../../core/pricing.js";
 import { rechunk } from "../cache/chunks.js";
 import { CACHE_HEADER } from "../cache/eligibility.js";
@@ -14,6 +14,7 @@ import type { CacheHit } from "../cache/stage.js";
 import { recordSavings, tagCacheSpan } from "../cache/telemetry.js";
 import type { RestoreMap } from "../pii/placeholder.js";
 import { restoreChatResponse } from "../pii/restore.js";
+import type { StreamRestore } from "../pii/stage.js";
 import type { Admission } from "../ratelimit/admission.js";
 import { splitModelRef } from "../routing/resolve.js";
 import { includeUsage, openAiEncoder } from "./stream.js";
@@ -28,6 +29,8 @@ export interface ServeCachedArgs {
   admission: Admission | undefined;
   /** This request's placeholder map (spec 010); restoration happens after the cache (AC-11). */
   restore: RestoreMap;
+  /** Masked streaming requests (spec 015): restores the re-chunked hit like a live stream. */
+  streamRestore?: StreamRestore | undefined;
   clock: () => number;
   costEstimator?: CostEstimator | undefined;
 }
@@ -82,12 +85,26 @@ export async function serveCachedChat(args: ServeCachedArgs): Promise<unknown> {
   };
   if (args.body.stream !== true) return restoreChatResponse(body, args.restore);
 
-  // Streamed hit (AC-7): placeholders stay, like any stream until spec 015.
+  // Streamed hit (AC-7): the stored chunks go through the same PII restore as a live stream
+  // (spec 015), so the client sees its own values and the cache keeps the placeholders.
   const encoder = openAiEncoder(includeUsage(args.body));
-  const events = [...rechunk(body, usage).flatMap((c) => encoder.chunk(c)), ...encoder.end(usage)];
+  const chunks = rechunk(body, usage);
+  const session = args.streamRestore?.open(chunks[0]);
+  async function* events(): AsyncGenerator<string> {
+    if (!session) {
+      for (const chunk of chunks) yield* encoder.chunk(chunk);
+    } else {
+      const iterator = chunks[Symbol.iterator]();
+      const source: AsyncIterator<ChatChunk> = { next: async () => iterator.next() };
+      for await (const step of session.steps(await source.next(), source)) {
+        for (const chunk of step.out) yield* encoder.chunk(chunk);
+      }
+    }
+    yield* encoder.end(usage);
+  }
   reply
     .header("content-type", "text/event-stream; charset=utf-8")
     .header("cache-control", "no-cache")
     .header("x-accel-buffering", "no");
-  return reply.send(Readable.from(events));
+  return reply.send(Readable.from(events()));
 }

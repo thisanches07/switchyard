@@ -266,6 +266,7 @@ export async function proxyRoutes(app: FastifyInstance, opts: ProxyRoutesOptions
         body: masked.body,
         admission,
         restore: masked.restore,
+        streamRestore: masked.stream,
         clock,
         costEstimator: opts.routing.costEstimator,
       });
