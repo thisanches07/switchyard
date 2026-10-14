@@ -3,7 +3,7 @@
 Design: [design.md](design.md). Each task ends with lint, typecheck and its related tests;
 the full `pnpm verify` runs once at the end. Docker- and Terraform-heavy checks run in CI.
 
-- [ ] **T1. Release preflight (version + changelog)** — AC-1, AC-3
+- [x] **T1. Release preflight (version + changelog)** — AC-1, AC-3
   - Test: `test/unit/scripts/release.test.ts` ("accepts v0.1.0 matching package.json", "rejects a mismatching tag", "extracts the changelog section", "fails without a section", "flags pre-releases").
   - Files: `scripts/lib/release.ts`, `scripts/release-check.ts`, `package.json` (version `0.1.0`), `CHANGELOG.md`.
 - [ ] **T2. Tracked-secrets check and .gitignore** — AC-10
