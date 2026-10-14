@@ -24,6 +24,8 @@ jobs:
           node-version-file: .nvmrc
       - run: corepack enable
       - run: pnpm install --frozen-lockfile
+      # Spec 013, AC-10: no Terraform state, tfvars or environment files in git.
+      - run: node scripts/check-tracked-secrets.ts
       - run: pnpm verify
       - run: pnpm test:contract
 
