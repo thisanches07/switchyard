@@ -23,14 +23,14 @@ Status: `planned` → `draft` → `approved` → `in progress` → `done`.
 
 | # | Spec | Scope | Depends on | Status |
 |---|---|---|---|---|
-| 009 | caching | Exact cache in Redis (temperature 0 or forced), semantic cache in pgvector with scoping from ADR-0009, cached responses re-chunked as streams, hit-rate and USD-saved metrics, cross-tenant isolation test | 007, 008 | approved |
+| 009 | caching | Exact cache in Redis (temperature 0 or forced), semantic cache in pgvector with scoping from ADR-0009, cached responses re-chunked as streams, hit-rate and USD-saved metrics, cross-tenant isolation test | 007, 008 | done |
 | 010 | pii-redaction | Detectors (email, phone BR/E.164, card with Luhn, CPF/CNPJ with check digits, IP, custom deny-list), modes `off/mask/block` per key, `mask` replaces values in the request (streaming included) and restores them in **non-streaming** responses; streaming responses are restored by spec 015; `block` is a separate opt-in, detection metrics, no raw values in logs | 004 | done |
 
 ## v0.3: proof and production
 
 | # | Spec | Scope | Depends on | Status |
 |---|---|---|---|---|
-| 011 | observability | Grafana dashboards as code (overview, cost, providers, cache), GenAI semantic conventions on spans, alert rules examples, screenshots in README | 008 | approved |
+| 011 | observability | Grafana dashboards as code (overview, cost, providers, cache), GenAI semantic conventions on spans, alert rules examples, screenshots in README | 008 | in progress |
 | 012 | benchmarks | k6 scenarios (`no-cache`, `exact-cache`, `streaming`, `rate-limited`, `chaos`), mock provider tuning, methodology and hardware in `docs/benchmarks.md`, numbers published in README | 009, 011 | approved |
 | 013 | deploy | Multi-arch Docker images to GHCR, Terraform for Oracle Always Free (ADR-0012), cloud-init + Compose, demo key with hard budget, release workflow | 012 | approved |
 
