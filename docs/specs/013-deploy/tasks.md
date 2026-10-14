@@ -33,7 +33,7 @@ the full `pnpm verify` runs once at the end. Docker- and Terraform-heavy checks 
 - [x] **T10. cloud-init + renderer** — AC-9
   - Test: `test/unit/deploy/cloud-init.test.ts` ("renders only switchyard_version", "rejects unknown placeholders", "docker, unattended-upgrades, ssh hardening, systemd units"); CI `cloud-init` job (`cloud-init schema`).
   - Files: `deploy/terraform/cloud-init.yaml.tftpl`, `scripts/lib/cloud-init.ts`, `scripts/render-cloud-init.ts`.
-- [ ] **T11. Runbook, README, CHANGELOG, threat model** — AC-11, AC-12
+- [x] **T11. Runbook, README, CHANGELOG, threat model** — AC-11, AC-12
   - Test: `test/unit/repo/files.test.ts` ("deploy runbook covers every required topic", "README links the runbook", "CHANGELOG follows Keep a Changelog").
   - Files: `docs/deploy.md`, `README.md`, `CHANGELOG.md`, `docs/threat-model.md`, `docs/architecture.md` if needed.
 - [ ] **T12. Verify and close the spec** — all ACs

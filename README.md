@@ -209,6 +209,29 @@ curl -N localhost:8080/v1/chat/completions -H "content-type: application/json" \
 
 Any OpenAI-compatible client works the same way (LangChain, LlamaIndex, Vercel AI SDK, …).
 
+### Run the published images
+
+Each release tag publishes two multi-arch images to GHCR, for **`linux/amd64`** and **`linux/arm64`** (x86 servers, Apple Silicon, Raspberry Pi 4/5, Ampere VMs), tagged `X.Y.Z`, `X.Y` and `latest`:
+
+| Image | Default command |
+|---|---|
+| `ghcr.io/thisanches07/switchyard-gateway:<version>` | the gateway (port 8080, health check on `/healthz`) |
+| `ghcr.io/thisanches07/switchyard-worker:<version>` | the usage worker (spec 006) |
+
+```bash
+docker pull ghcr.io/thisanches07/switchyard-gateway:0.1.0
+docker pull ghcr.io/thisanches07/switchyard-worker:0.1.0
+```
+
+The production Compose profile in [`deploy/compose/`](deploy/compose/) runs them by version behind [Caddy](https://caddyserver.com) (automatic HTTPS), with only ports 80 and 443 published and every secret taken from an env file:
+
+```bash
+cp deploy/compose/switchyard.env.example switchyard.env   # replace every replace-me value
+docker compose -f deploy/compose/compose.yml --env-file switchyard.env up -d --wait
+```
+
+To run it on a free Oracle Cloud ARM VM with Terraform, follow the **[deploy runbook](docs/deploy.md)**. Release notes are in [CHANGELOG.md](CHANGELOG.md).
+
 ## 🏗 How it works
 
 ### Architecture
@@ -792,7 +815,9 @@ Each spec ends with a verification table, for example [spec 002](docs/specs/002-
 **v0.2: savings and safety:** exact and semantic cache, PII redaction
 - [x] [009](docs/specs/009-caching/spec.md) Exact and semantic response caching: Redis and pgvector, team-scoped, SSE replay of hits, savings metrics
 
-**v0.3: proof and production:** Grafana dashboards as code, published k6 benchmarks, Terraform deploy
+**v0.3: proof and production**
+- [x] [013](docs/specs/013-deploy/spec.md) Deploy: multi-arch images on GHCR, tag-driven releases, production Compose behind Caddy, `pnpm demo:key`, Terraform + cloud-init for Oracle Cloud Always Free ([runbook](docs/deploy.md))
+- Grafana dashboards as code, published k6 benchmarks
 
 Full scope and dependencies: [spec backlog](docs/specs/README.md).
 
@@ -804,6 +829,8 @@ Full scope and dependencies: [spec backlog](docs/specs/README.md).
 | 🧾 [Architecture Decision Records](docs/adr/README.md) | Why Fastify, why Kafka, why no retries after the first streamed byte, … |
 | 📐 [Specs](docs/specs/README.md) | Every feature with EARS acceptance criteria, design and tasks |
 | 🛡️ [Threat model](docs/threat-model.md) | STRIDE analysis and mitigations |
+| 🚢 [Deploy runbook](docs/deploy.md) | Releases, published images, production Compose, Terraform for Oracle Cloud Always Free |
+| 📝 [Changelog](CHANGELOG.md) | Changes in every released version |
 | 💰 [Budgets guide](docs/budgets.md) | Prices, cost per request, budgets, headers, overshoot bound, Redis failure policy |
 | 🔐 [PII redaction guide](docs/pii.md) | Modes, detectors, placeholders, headers and limits of `mask` / `block` |
 | 📊 [Observability guide](docs/observability.md) | Dashboards, alert rules, metric and span reference, duration and overhead definitions, demo traffic |
