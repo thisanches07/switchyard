@@ -1,0 +1,7 @@
+# Test-only override for the production Compose file (spec 013, AC-6), used by
+# scripts/deploy-smoke.ts in CI. Relative paths resolve from deploy/compose/.
+services:
+  gateway:
+    volumes:
+      # Prices `mock/*` high enough that a $1 budget is spent in a few requests.
+      - ../../test/deploy/pricing.test.yaml:/config/pricing.yaml:ro

@@ -21,7 +21,7 @@ the full `pnpm verify` runs once at the end. Docker- and Terraform-heavy checks 
 - [x] **T6. `pnpm demo:key`** — AC-6
   - Test: `test/unit/scripts/demo-key.test.ts` (args parsing, plan: create / reuse+patch / rotate, against a fake admin API).
   - Files: `scripts/lib/demo-key.ts`, `scripts/demo-key.ts`, `package.json`.
-- [ ] **T7. Production stack smoke test + deploy workflow** — AC-2, AC-4, AC-5, AC-6
+- [x] **T7. Production stack smoke test + deploy workflow** — AC-2, AC-4, AC-5, AC-6
   - Test: `scripts/deploy-smoke.ts` (CI job `prod-compose`), `test/deploy/{compose.test.yml,pricing.test.yaml}`.
   - Files: `.github/workflows/deploy.yml`.
 - [ ] **T8. Release workflow** — AC-1, AC-3

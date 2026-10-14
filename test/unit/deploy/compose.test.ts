@@ -136,6 +136,17 @@ describe("demo configuration (spec 013)", () => {
     }
   });
 
+  it("the CI-only pricing override is valid and prices the mock models (AC-6)", () => {
+    const pricing = loadPricing(resolve(root, "test/deploy/pricing.test.yaml"));
+    expect(unknownPriceCandidates(config.aliases, pricing)).toEqual([]);
+    const override = parse(readFileSync(resolve(root, "test/deploy/compose.test.yml"), "utf8")) as {
+      services: Record<string, { volumes: string[] }>;
+    };
+    expect(override.services.gateway?.volumes).toEqual([
+      "../../test/deploy/pricing.test.yaml:/config/pricing.yaml:ro",
+    ]);
+  });
+
   it("fails closed when Redis is down", () => {
     expect(config.limits.onRedisError).toBe("closed");
     expect(config.budgets.onRedisError).toBe("closed");
