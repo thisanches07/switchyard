@@ -15,7 +15,7 @@ One commit per task, ending in `[spec-012]`. Lint, typecheck and the task's test
   - Do: `bench/bench.config.json`, `bench/config/gateway.yaml`, `gateway-cache.yaml`, `bench/compose.bench.yml`, `bench/lib/config.ts`; ADR-0021 parameters section.
   - Test: `bench-config.test.ts` › both gateway configs parse with `parseConfig` and differ only in `cache.exact.enabled`; every scenario has full and smoke parameters; k6 image pinned by tag and digest; config hash stable and sensitive to changes.
 
-- [ ] **T3. k6 checks and scenarios**
+- [x] **T3. k6 checks and scenarios**
   - ACs: AC-3, AC-4
   - Do: `bench/k6/validate.js` (+ `.d.ts`), `bench/k6/lib.js`, one script per scenario.
   - Test: `validate.test.ts` › chat body, SSE stream (good, truncated, malformed, no `[DONE]`), error body, required gateway headers, cache header classification; expected content matches the mock provider.
