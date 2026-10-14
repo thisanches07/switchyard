@@ -83,7 +83,7 @@ One commit per task, ending in `[spec-011]`. T13 is blocked on a working local s
 
 `pnpm verify` green (lint, typecheck, `check:grafana` with 4 dashboards and 1 alert file, 1211 unit tests, lines 86 %, build). `pnpm test:int`: 80 of 81 passed; the one failure was `ratelimit.int.test.ts` › fractional balances, a wall-clock refill assertion in code this spec does not touch, green on rerun. `pnpm test:contract` green (live Anthropic suite skipped without a key). The Compose smoke step (AC-9) runs in CI only. `pnpm demo:traffic` was dry-run against an in-memory gateway (not a Compose stack). Spec stays Approved until T13 is done.
 
-After rebasing on spec 009 and 015 (T14): `cache` label on the two histograms, Cache dashboard panels from 009's real metrics, `gen_ai.provider.name` instead of `gen_ai.system` on 009's `switchyard.cache.embed` span. 015's `switchyard_pii_stream_hold_seconds` gets no panel: it uses the SDK default (millisecond) buckets, so percentiles of its second-valued samples would be meaningless; fix its buckets first.
+After rebasing on spec 009 and 015 (T14): `pnpm verify` green (1407 unit tests, lines 87.4 %); integration files on the touched paths (routing-chaos, streaming, upstream-http, usage-pipeline) green. Changes: `cache` label on the two histograms, Cache dashboard panels from 009's real metrics, `gen_ai.provider.name` instead of `gen_ai.system` on 009's `switchyard.cache.embed` span. 015's `switchyard_pii_stream_hold_seconds` gets no panel: it uses the SDK default (millisecond) buckets, so percentiles of its second-valued samples would be meaningless; fix its buckets first.
 
 | AC | Test(s) |
 |---|---|
