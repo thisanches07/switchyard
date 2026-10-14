@@ -23,6 +23,15 @@ describe("findDevSecrets (spec 013, AC-4)", () => {
     expect(JSON.stringify(issues)).not.toContain("dev-only-admin-token-change-me");
   });
 
+  it("rejects the replace-me placeholders of the production env example", () => {
+    const issues = findDevSecrets({
+      ADMIN_TOKEN: "replace-me-with-openssl-rand-hex-32",
+      KEY_PEPPER: "replace-me-with-openssl-rand-hex-32",
+      DATABASE_URL: "postgres://switchyard:replace-me-with-openssl-rand-hex-24@postgres:5432/db",
+    });
+    expect(issues.map((i) => i.path)).toEqual(["ADMIN_TOKEN", "KEY_PEPPER", "DATABASE_URL"]);
+  });
+
   it("requires an admin token", () => {
     expect(findDevSecrets({ ...real, ADMIN_TOKEN: undefined })).toEqual([
       { path: "ADMIN_TOKEN", message: "is required when SWITCHYARD_REQUIRE_SECRETS=true" },

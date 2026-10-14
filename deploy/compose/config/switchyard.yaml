@@ -1,0 +1,66 @@
+# Public demo configuration (spec 013). Free models only: the mock provider, and optionally a
+# small Ollama model on the VM's CPU (docs/deploy.md, "Serving a local model").
+# Hot-reloaded on change (spec 008): edit on the VM in /opt/switchyard/config/.
+
+server:
+  bodyLimitBytes: 65536        # demo prompts are small
+  trustProxy: true             # behind Caddy: client address from X-Forwarded-For
+  timeouts:
+    connectMs: 5000
+    ttfbMs: 30000
+    totalMs: 60000
+
+providers:
+  mock:
+    type: mock
+    latencyMs: 50
+    errorRate: 0
+  ollama:
+    type: openai-compatible
+    baseUrl: http://ollama:11434/v1    # the `ollama` Compose profile
+
+aliases:
+  # The only model the demo key may use (`pnpm demo:key --alias demo`). With the ollama profile
+  # running and the model pulled, switch to: [ollama/llama3.2:1b, mock/demo]
+  demo:
+    strategy: priority
+    candidates: [mock/demo]
+
+limits:                        # spec 005: defaults for keys and teams without their own limits
+  defaults:
+    rpm: 20
+    tpm: 20000
+  completionReserveTokens: 256
+  onRedisError: closed         # public endpoint: no unlimited traffic if Redis is down
+  authFailuresPerMinutePerIp: 30
+
+usage:
+  enabled: true
+  topic: usage.events.v1
+  dlqTopic: usage.events.dlq
+  bufferSize: 10000
+  flushIntervalMs: 200
+
+budgets:
+  onRedisError: closed
+  reconcileIntervalSeconds: 60
+
+pii:
+  defaultMode: off
+  detectors: [email, phone, card, cpf, cnpj, ip, term]
+  denyList: []
+
+retry:
+  maxAttempts: 2
+  baseDelayMs: 200
+  maxDelayMs: 2000
+
+circuitBreaker:
+  failureThreshold: 10
+  openMs: 10000
+
+routing:
+  ewmaAlpha: 0.3
+  hotReload: true
+
+pricingFile: /config/pricing.yaml

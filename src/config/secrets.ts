@@ -1,10 +1,14 @@
 import type { ConfigIssue } from "./errors.js";
 
+/** `dev-only-*` ships in docker-compose.yml; `replace-me-*` in deploy/compose/switchyard.env.example. */
+const isPlaceholder = (value: string) => /^(dev-only|replace-me)/.test(value);
+
 /**
  * Dev defaults a production deployment must not run with (spec 013, AC-4). `docker-compose.yml`
  * ships `dev-only-*` values for ADMIN_TOKEN and KEY_PEPPER and the database password
- * `switchyard`; the production Compose file sets SWITCHYARD_REQUIRE_SECRETS=true so the gateway
- * refuses to start with any of them. Messages never echo the values.
+ * `switchyard`; the production env example ships `replace-me-*` placeholders. The production
+ * Compose file sets SWITCHYARD_REQUIRE_SECRETS=true so the gateway refuses to start with any of
+ * them. Messages never echo the values.
  */
 export function findDevSecrets(env: {
   ADMIN_TOKEN?: string | undefined;
@@ -17,13 +21,14 @@ export function findDevSecrets(env: {
       path: "ADMIN_TOKEN",
       message: "is required when SWITCHYARD_REQUIRE_SECRETS=true",
     });
-  } else if (env.ADMIN_TOKEN.startsWith("dev-only")) {
+  } else if (isPlaceholder(env.ADMIN_TOKEN)) {
     issues.push({ path: "ADMIN_TOKEN", message: "is a dev-only default; set a random value" });
   }
-  if (env.KEY_PEPPER.startsWith("dev-only")) {
+  if (isPlaceholder(env.KEY_PEPPER)) {
     issues.push({ path: "KEY_PEPPER", message: "is a dev-only default; set a random value" });
   }
-  if (databasePassword(env.DATABASE_URL) === "switchyard") {
+  const password = databasePassword(env.DATABASE_URL);
+  if (password === "switchyard" || (password !== undefined && isPlaceholder(password))) {
     issues.push({
       path: "DATABASE_URL",
       message: "uses the dev database password from docker-compose.yml",

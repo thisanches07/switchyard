@@ -15,7 +15,7 @@ the full `pnpm verify` runs once at the end. Docker- and Terraform-heavy checks 
 - [x] **T4. Dockerfile targets + dev Compose images** — AC-1, AC-2
   - Test: `test/unit/deploy/dockerfile.test.ts` ("has gateway and worker targets", "build stage runs on BUILDPLATFORM", "gateway is the default target"); CI `images-*` jobs.
   - Files: `Dockerfile`, `docker-compose.yml`, `scripts/compose-smoke.ts`.
-- [ ] **T5. Production Compose, Caddy and demo config** — AC-4, AC-5
+- [x] **T5. Production Compose, Caddy and demo config** — AC-4, AC-5
   - Test: `test/unit/deploy/compose.test.ts` ("only caddy publishes 80 and 443", "no build", "versioned GHCR images", "secrets are required", "require-secrets flag on", "demo config loads").
   - Files: `deploy/compose/{compose.yml,Caddyfile,switchyard.env.example,config/*}`.
 - [ ] **T6. `pnpm demo:key`** — AC-6

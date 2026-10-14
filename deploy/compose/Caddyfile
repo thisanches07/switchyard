@@ -1,0 +1,23 @@
+# Caddy in front of the gateway (spec 013). Automatic HTTPS: Let's Encrypt for a public name
+# (e.g. 203-0-113-10.sslip.io), Caddy's internal CA for localhost; HTTP on :80 redirects to HTTPS.
+{
+	servers {
+		# TCP only: the host publishes 80/tcp and 443/tcp, nothing else.
+		protocols h1 h2
+	}
+}
+
+{$SWITCHYARD_HOSTNAME} {
+	# The admin API is not public: use an SSH tunnel to the gateway (docs/deploy.md).
+	handle /admin* {
+		header Content-Type application/json
+		respond `{"error":{"message":"Not found","type":"invalid_request_error","code":"not_found"}}` 404
+	}
+
+	handle {
+		reverse_proxy gateway:8080 {
+			# Stream SSE chunks as they arrive.
+			flush_interval -1
+		}
+	}
+}
