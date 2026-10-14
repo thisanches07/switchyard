@@ -2,8 +2,9 @@ import type { AddressInfo } from "node:net";
 import type { FastifyInstance } from "fastify";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ChatChunk } from "../../../src/core/chat.js";
+import type { ChatProvider } from "../../../src/core/provider.js";
+import type { UsageEvent } from "../../../src/core/usage.js";
 import { assembleCompletion } from "../../../src/modules/cache/chunks.js";
-import { createMockProvider } from "../../../src/modules/providers/mock.js";
 import { cacheApp, sseData } from "../../helpers/cache.js";
 
 const messages = [{ role: "user", content: "12345678" }];
@@ -97,11 +98,39 @@ describe("cache and streaming (spec 009, AC-4, AC-7)", () => {
   });
 
   it("stores nothing when the client leaves mid-stream (AC-4)", async () => {
-    const { app, registry, exact, events, key } = await setup();
-    registry.set(
-      "mock",
-      createMockProvider("mock", { latencyMs: 0, errorRate: 0, chunkDelayMs: 200 }),
-    );
+    // A stream that sends one chunk, then waits until the request is aborted: no timers involved.
+    const provider: ChatProvider = {
+      name: "mock",
+      type: "mock",
+      chat: async () => {
+        throw new Error("not used");
+      },
+      embeddings: async () => {
+        throw new Error("not used");
+      },
+      async chatStream(_request, ctx) {
+        return (async function* () {
+          yield {
+            id: "chatcmpl-held",
+            object: "chat.completion.chunk",
+            created: 1,
+            model: "held",
+            choices: [{ index: 0, delta: { role: "assistant", content: "partial" } }],
+          };
+          await new Promise((_, reject) => {
+            ctx.signal.addEventListener("abort", () => reject(ctx.signal.reason), { once: true });
+          });
+        })();
+      },
+    };
+    let recorded!: (event: UsageEvent) => void;
+    const event = new Promise<UsageEvent>((resolve) => {
+      recorded = resolve;
+    });
+    const { app, registry, exact, key } = await setup({
+      usageRecorder: { record: (e) => recorded(e) },
+    });
+    registry.set("mock", provider);
     await app.listen({ port: 0, host: "127.0.0.1" });
     const { port } = app.server.address() as AddressInfo;
     const controller = new AbortController();
@@ -109,14 +138,12 @@ describe("cache and streaming (spec 009, AC-4, AC-7)", () => {
       method: "POST",
       signal: controller.signal,
       headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
-      body: JSON.stringify(ask({ model: "mock/slow", stream: true })),
+      body: JSON.stringify(ask({ model: "mock/held", stream: true })),
     });
     await res.body?.getReader().read();
     controller.abort();
-    for (let i = 0; i < 100 && events.length === 0; i += 1) {
-      await new Promise((r) => setTimeout(r, 20));
-    }
-    expect(events[0]).toMatchObject({ outcome: "client_closed", cacheStatus: "miss" });
+    // The outcome is recorded exactly when the gateway sees the disconnect; nothing was stored.
+    expect(await event).toMatchObject({ outcome: "client_closed", cacheStatus: "miss" });
     expect(exact.size).toBe(0);
   });
 });
