@@ -1,6 +1,6 @@
 # Spec 011: Observability (dashboards, alerts and GenAI conventions as code)
 
-- **Status:** Approved (2026-10-13)
+- **Status:** Done (2026-10-14)
 - **Owner:** @thisanches07
 - **Release:** v0.3
 - **Depends on:** 008 (and the metrics of 006, 007 and 009, which merge before it; see [waves](../waves.md))

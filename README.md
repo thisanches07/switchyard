@@ -37,7 +37,7 @@
 <br>
 
 > [!NOTE]
-> **Status: feature-complete, preparing the first release (`0.1.0`).** Every planned spec is implemented and tested: OpenAI- and Anthropic-compatible APIs with streaming, virtual keys and teams, rate limits, usage events through Kafka, cost and budgets, fallback with circuit breakers, exact and semantic caching, PII redaction, dashboards as code, a benchmark harness and a Terraform deploy. Still pending: dashboard screenshots and the first published benchmark run, both measured on real hardware.
+> **Status: feature-complete, preparing the first release (`0.1.0`).** Every planned spec is implemented and tested: OpenAI- and Anthropic-compatible APIs with streaming, virtual keys and teams, rate limits, usage events through Kafka, cost and budgets, fallback with circuit breakers, exact and semantic caching, PII redaction, dashboards as code, a benchmark harness and a Terraform deploy. Still pending: the first published benchmark run on the reference machine.
 
 > [!WARNING]
 > Docker Compose ships `dev-only` defaults for `ADMIN_TOKEN` and `KEY_PEPPER` so it works out of the box, and publishes every port on `127.0.0.1` only. Set real secrets in `.env` before exposing the gateway; it logs a warning while dev-only values are in use.
@@ -692,12 +692,11 @@ x-switchyard-upstream-ms: 986
 
 **Dashboards and alerts:** `docker compose up -d`, then `pnpm demo:traffic` (mock provider only) and open Grafana at <http://localhost:3000> → **Dashboards → Switchyard**: **Overview** (traffic, errors, duration, overhead, TTFB, tokens, rejections, dropped events), **Cost** (spend by model, requests by team, unknown costs, budgets), **Providers** (per-provider errors and latency, retries, circuit state) and **Cache** (hit ratio, lookups, USD saved, errors). Four example alert rules (error rate, breaker open, budget near limit, usage events dropped) load with them; add your own contact point in Grafana. Everything lives in [`deploy/grafana/`](deploy/grafana) and `pnpm verify` fails if a panel queries a metric the code does not emit. Definitions, panels, rules and the rule for new metrics: [docs/observability.md](docs/observability.md).
 
-<!-- Screenshots (spec 011, AC-11): captured by the owner following docs/observability.md § Screenshots.
 ![Grafana Overview dashboard](docs/assets/dashboard-overview.png)
-*Grafana, Overview dashboard, fed by `pnpm demo:traffic` (mock provider). Captured at commit `<hash>`.*
+*Grafana, Overview dashboard, fed by `pnpm demo:traffic` (mock provider, local Compose stack; most demo traffic is deliberately rate-limited). Captured at commit `0fba4b3`.*
+
 ![Grafana Providers dashboard](docs/assets/dashboard-providers.png)
-*Grafana, Providers dashboard, fed by `pnpm demo:traffic` (mock provider). Captured at commit `<hash>`.*
--->
+*Grafana, Providers dashboard, fed by `pnpm demo:traffic` (mock provider). Captured at commit `0fba4b3`.*
 
 **See a trace:** open Grafana at <http://localhost:3000> → **Explore** → **Tempo** → search service `switchyard-gateway`; upstream calls carry `switchyard.stage = upstream`.
 
@@ -818,7 +817,7 @@ Every spec below is implemented, tested and merged; the release ships them toget
 - [x] [015](docs/specs/015-pii-streaming-restore/spec.md) PII restore in streamed answers, with bounded holding
 
 **Proof and production**
-- [x] [011](docs/specs/011-observability/spec.md) Grafana dashboards and alerts as code, GenAI span conventions, gateway overhead metric (README screenshots pending)
+- [x] [011](docs/specs/011-observability/spec.md) Grafana dashboards and alerts as code, GenAI span conventions, gateway overhead metric
 - [x] [012](docs/specs/012-benchmarks/spec.md) k6 benchmark harness with generated, reproducible reports (first published run pending)
 - [x] [013](docs/specs/013-deploy/spec.md) Deploy: multi-arch images on GHCR, tag-driven releases, production Compose behind Caddy, `pnpm demo:key`, Terraform + cloud-init for Oracle Cloud Always Free ([runbook](docs/deploy.md))
 
