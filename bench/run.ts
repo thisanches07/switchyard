@@ -147,7 +147,9 @@ function tail(text: string, lines: number): string {
 
 const startedAt = new Date();
 const commit = git(["rev-parse", "HEAD"]);
-const dirty = git(["status", "--porcelain"]).length > 0;
+// Earlier run folders are this command's own output: the publishing checklist runs it three
+// times before committing them, so they must not make later runs count as dirty.
+const dirty = git(["status", "--porcelain", "--", ".", ":(exclude)bench/results"]).length > 0;
 const id = runId(startedAt, commit);
 const publish = publishability(profile, dirty);
 const dir = runFolder(ROOT, id, profile, publish);
