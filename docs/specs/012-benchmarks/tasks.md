@@ -5,7 +5,7 @@
 
 One commit per task, ending in `[spec-012]`. Lint, typecheck and the task's tests before each commit; full `pnpm verify` at the end. Docker, k6 and `pnpm bench` are validated by the CI `bench-smoke` job, not locally. All tests below are under `test/unit/bench/`.
 
-- [ ] **T1. Mock upstream server**
+- [x] **T1. Mock upstream server**
   - ACs: AC-1
   - Do: `bench/mock-upstream/server.ts`, `main.ts`, `tsconfig.json`, `Dockerfile`; root `tsconfig.json` includes `bench`.
   - Test: `mock-upstream.test.ts` › config from env and flags; latency honoured; errors injected at the configured rate within tolerance (seeded random, and through the real `openai-compatible` provider); chunks spaced by the delay; SSE parsed by the gateway's adapter; `error-<status>` and `error-midstream`; embeddings and health.
