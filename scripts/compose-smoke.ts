@@ -137,7 +137,9 @@ function chatWith(
 
 try {
   await step("stack starts (docker compose up --wait)", () => {
-    run(["compose", "up", "-d", "--build", "--wait", "--wait-timeout", "300"]);
+    // SMOKE_NO_BUILD=1 runs prebuilt images named by SWITCHYARD_*_IMAGE (spec 013, AC-2).
+    const build = process.env.SMOKE_NO_BUILD === "1" ? "--no-build" : "--build";
+    run(["compose", "up", "-d", build, "--wait", "--wait-timeout", "300"]);
   });
 
   await step("GET /healthz returns 200", async () => {
@@ -274,6 +276,16 @@ try {
     if (Number(last?.headers.get("retry-after")) < 1) throw new Error("missing retry-after");
     if (last?.headers.get("x-ratelimit-remaining-requests") !== "0") {
       throw new Error("missing x-ratelimit-remaining-requests: 0");
+    }
+  });
+
+  await step("the usage worker reports it started (readiness, spec 006)", async () => {
+    const deadline = Date.now() + 60_000;
+    for (;;) {
+      const logs = run(["compose", "logs", "--no-color", "usage-worker"]).stdout;
+      if (logs.includes("usage worker started")) return;
+      if (Date.now() > deadline) throw new Error("no 'usage worker started' log line in 60 s");
+      await new Promise((r) => setTimeout(r, 2_000));
     }
   });
 

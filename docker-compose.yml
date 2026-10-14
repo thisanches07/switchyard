@@ -5,8 +5,11 @@ name: switchyard
 
 services:
   gateway:
-    build: .
-    image: switchyard-gateway:dev
+    build:
+      context: .
+      target: gateway
+    # CI substitutes prebuilt images (spec 013, AC-2): SWITCHYARD_GATEWAY_IMAGE=… up --no-build
+    image: ${SWITCHYARD_GATEWAY_IMAGE:-switchyard-gateway:dev}
     init: true
     ports:
       - "127.0.0.1:8080:8080"
@@ -45,12 +48,13 @@ services:
       retries: 10
     restart: unless-stopped
 
-  # Usage worker (spec 006): Kafka → Postgres, idempotent, DLQ. Same image as the gateway.
+  # Usage worker (spec 006): Kafka → Postgres, idempotent, DLQ. Same Dockerfile, `worker` target.
   usage-worker:
-    build: .
-    image: switchyard-gateway:dev
+    build:
+      context: .
+      target: worker
+    image: ${SWITCHYARD_WORKER_IMAGE:-switchyard-worker:dev}
     init: true
-    command: ["node", "--import", "./dist/infra/telemetry/register-worker.js", "dist/worker.js"]
     environment:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       SWITCHYARD_CONFIG: /app/config/${SWITCHYARD_CONFIG_NAME:-switchyard.example.yaml}

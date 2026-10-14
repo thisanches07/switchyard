@@ -12,7 +12,7 @@ the full `pnpm verify` runs once at the end. Docker- and Terraform-heavy checks 
 - [x] **T3. Gateway refuses dev secrets when required** — AC-4
   - Test: `test/unit/config/secrets.test.ts` ("lists dev-only ADMIN_TOKEN, KEY_PEPPER and the dev DB password", "accepts real values", "flag parsing").
   - Files: `src/config/secrets.ts`, `src/config/env.ts`, `src/server.ts`.
-- [ ] **T4. Dockerfile targets + dev Compose images** — AC-1, AC-2
+- [x] **T4. Dockerfile targets + dev Compose images** — AC-1, AC-2
   - Test: `test/unit/deploy/dockerfile.test.ts` ("has gateway and worker targets", "build stage runs on BUILDPLATFORM", "gateway is the default target"); CI `images-*` jobs.
   - Files: `Dockerfile`, `docker-compose.yml`, `scripts/compose-smoke.ts`.
 - [ ] **T5. Production Compose, Caddy and demo config** — AC-4, AC-5
