@@ -199,7 +199,7 @@ sequenceDiagram
 | `switchyard_requests_total` | + `cache` (`hit`·`semantic_hit`·`miss`·`bypass`) | existing counter; hits counted at the hit, misses on the upstream span |
 | `switchyard_cache_lookups_total` | `layer` (`exact`·`semantic`), `result` (`hit`·`miss`·`error`) | one per layer lookup |
 | `switchyard_cache_errors_total` | `layer`, `stage` (`lookup`·`write`) | failures, timeouts, wrong dimensions |
-| `switchyard_cache_savings_usd_total` | `layer`, `model` (stored `provider/model`), `team` | price of the stored usage at the current price table |
+| `switchyard_cache_savings_usd_total` (unit `{USD}`) | `layer`, `model` (stored `provider/model`), `team` | price of the stored usage at the current price table |
 | `switchyard_cache_savings_unknown_total` | `layer`, `model`, `team` | hits whose price is unknown (nothing added) |
 
 Request span attributes: `switchyard.cache.result` (status), `switchyard.cache.layer` (on hits), `switchyard.cache.similarity` (semantic hits). Never keys, hashes, embeddings or content (ADR-0010). `switchyard.cache.embed` span: `gen_ai.request.model`, `switchyard.cache.embedding_ms`.
@@ -208,17 +208,18 @@ Request span attributes: `switchyard.cache.result` (status), `switchyard.cache.l
 
 | AC | Component | Test |
 |---|---|---|
-| AC-1 | migration, schema, admin, auth, config | `test/integration/db.int.test.ts` › semantic cache migration; `test/unit/admin/admin-cache.test.ts`; `test/unit/config/schema.test.ts` › cache defaults |
-| AC-2 | eligibility, routes | `test/unit/cache/eligibility.test.ts`; `test/unit/proxy/cache-routes.test.ts` › eligibility and header |
-| AC-3 | stage, cached | `cache-routes.test.ts` › hit headers, alias order, allowed models, team scope |
-| AC-4 | chunks, stage, stream tap | `test/unit/cache/chunks.test.ts`; `cache-routes.test.ts` › writes and non-writes |
-| AC-5, AC-6 | stage, semantic store, cleanup | `test/unit/proxy/semantic-cache.test.ts`; `test/integration/semantic-cache.int.test.ts`; `test/unit/cache/cleanup.test.ts` |
-| AC-7 | chunks, cached | `chunks.test.ts` › rechunk round trip; contract tests |
-| AC-8, AC-9 | cached, telemetry | `test/unit/proxy/cache-accounting.test.ts` |
+| AC-1 | migration, schema, admin, auth, config | `test/integration/db.int.test.ts` › semantic cache opt-in and table with its indexes; `test/unit/admin/admin-cache.test.ts`; `test/unit/auth/authenticate.test.ts` › principal; `test/unit/config/schema.test.ts` › semantic defaults and bounds |
+| AC-2 | eligibility, routes | `test/unit/cache/eligibility.test.ts`; `test/unit/proxy/cache-routes.test.ts` › temperature, n, force, bypass, invalid header |
+| AC-3 | stage, cached | `cache-routes.test.ts` › miss then hit, strategy order (priority, lowest-cost), allowed models, other team |
+| AC-4 | chunks, stage, stream tap | `test/unit/cache/chunks.test.ts`; `cache-routes.test.ts` › upstream error, finish reasons; `test/unit/proxy/cache-stream.test.ts` › streamed miss stored, mid-stream failure and client close not stored |
+| AC-5 | stage, semantic store | `test/unit/proxy/semantic-cache.test.ts`; `test/integration/semantic-cache.int.test.ts` |
+| AC-6 | stage, cleanup | `semantic-cache.test.ts` › stores the miss with its embedding; `test/unit/cache/cleanup.test.ts`; `semantic-cache.int.test.ts` › expiry and deleteExpired |
+| AC-7 | chunks, cached | `chunks.test.ts` › rechunk round trip; `cache-stream.test.ts`; `test/contract/openai-sdk.contract.test.ts` › streamed cache hit; `test/contract/python/test_openai_sdk.py::test_streamed_cache_hit` |
+| AC-8, AC-9 | cached, telemetry | `test/unit/proxy/cache-accounting.test.ts`; `test/unit/cache/telemetry.test.ts` |
 | AC-10 | all | `test/integration/cache-isolation.int.test.ts`; `test/unit/cache/key.test.ts` |
 | AC-11 | routes order, key | `test/unit/proxy/cache-pii.test.ts` |
-| AC-12 | stage, telemetry | `test/unit/proxy/cache-failures.test.ts` |
-| AC-13 | telemetry, contract, smoke | `cache-accounting.test.ts` › spans; `test/contract/openai-sdk.contract.test.ts`, `test_openai_sdk.py`; `scripts/compose-smoke.ts` |
+| AC-12 | stage, telemetry | `test/unit/proxy/cache-failures.test.ts`; `semantic-cache.test.ts` › timeout, dimensions, errors; `cache-isolation.int.test.ts` › Redis down |
+| AC-13 | telemetry, contract, smoke | `cache-accounting.test.ts` › request span; contract tests above; `scripts/compose-smoke.ts` › miss then hit |
 
 ## 11. Risks
 
@@ -227,3 +228,13 @@ Request span attributes: `switchyard.cache.result` (status), `switchyard.cache.l
 - **Write races**: two identical misses both write; last write wins, both valid.
 - **Large responses in Redis**: bounded by TTL; Redis `maxmemory` policy is the operator's (README).
 - **Merge with 015**: both touch `stream.ts`; edits are additive (`tap`).
+
+## 12. Verification (2026-10-13)
+
+| Check | Result |
+|---|---|
+| `pnpm verify` (lint, typecheck, unit tests with coverage, build) | ✅ 1297 passed, 1 skipped; lines 86.6 % |
+| `pnpm test:int` | ✅ cache, semantic, db and usage-pipeline files re-run green after fixes; first full run had a Redpanda container start failure (`usage-pipeline`, unrelated, passed on re-run) |
+| `pnpm test:contract` (OpenAI Node SDK file) | ✅ 21 passed, incl. streamed cache hits (text, tool calls) |
+| `pnpm test:contract:py` | not run locally (pytest not installed); runs in CI |
+| Compose smoke (miss → hit step) | not run locally (owner rule); runs in CI |

@@ -1,6 +1,6 @@
 # Tasks 009: Exact and semantic response caching
 
-- **Status:** In progress
+- **Status:** Done (2026-10-13)
 - **Spec:** [spec.md](spec.md) · **Design:** [design.md](design.md)
 
 One commit per task, ending in `[spec-009]`. Lint, typecheck and the task's tests at each commit; full `pnpm verify` and integration suite at the end.
@@ -62,6 +62,6 @@ One commit per task, ending in `[spec-009]`. Lint, typecheck and the task's test
   - Test: `test/contract/openai-sdk.contract.test.ts` › streamed cache hit; `test/contract/python/test_openai_sdk.py` › streamed cache hit; `scripts/compose-smoke.ts` › miss then hit.
   - Files: those, `scripts/contract-python.ts`
 
-- [ ] **T12. Docs and verification**
+- [x] **T12. Docs and verification**
   - Do: README caching section and roadmap, `docs/architecture.md`, threat-model cross-tenant row, example config, OpenAPI; verification table; spec `Done`.
   - Files: `README.md`, `docs/**`, `config/switchyard.example.yaml`

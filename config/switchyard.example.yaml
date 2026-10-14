@@ -88,14 +88,16 @@ routing:                     # spec 008
   ewmaAlpha: 0.3             # weight of the newest latency sample (lowest-latency aliases)
   hotReload: true            # poll this file every 2 s; also POST /admin/config/reload, SIGHUP
 
-cache:
+cache:                       # spec 009: /v1/chat/completions only
   exact:
-    enabled: true
+    enabled: true            # temperature 0 (or x-switchyard-cache: force), n absent or 1
     ttlSeconds: 3600
   semantic:
-    enabled: false           # opt-in per key as well
-    embeddingModel: ollama/nomic-embed-text   # 768 dims, see ADR-0005
-    similarityThreshold: 0.95
+    enabled: false           # opt-in per key as well (semanticCacheEnabled)
+    embeddingModel: ollama/nomic-embed-text   # must return 768 dims, see ADR-0005
+    similarityThreshold: 0.95  # cosine similarity
     ttlSeconds: 86400
+    maxTemperature: 0.3      # temperature must be present and at most this
+    lookupTimeoutMs: 300     # embedding + search; the layer is skipped when exceeded
 
 pricingFile: config/pricing.yaml   # spec 007: USD per 1M tokens; unverified prices stay TODO
