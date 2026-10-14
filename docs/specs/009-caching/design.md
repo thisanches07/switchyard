@@ -128,7 +128,7 @@ Implementations: `infra/redis/exact-cache.ts` (`MGET`, `SET … EX`), `infra/db/
 
 ### 4.3 Serving a hit
 
-Non-streaming: reconcile the TPM reservation to the stored usage and `outcome.succeed` with it (the same steps as `settle()`, done directly since no attempt runs), then `restoreChatResponse` with the request's own restore map (AC-11). Streaming: SSE with `rechunk()` through `openAiEncoder(include_usage)`, which drops the usage chunk when the client did not ask for it; placeholders stay, like any stream until spec 015 (`x-switchyard-pii: masked-unrestored` is already set by the PII stage). No upstream span: hits are counted with `countCachedRequest` on the shared `switchyard_requests_total` instrument.
+Non-streaming: reconcile the TPM reservation to the stored usage and `outcome.succeed` with it (the same steps as `settle()`, done directly since no attempt runs), then `restoreChatResponse` with the request's own restore map (AC-11). Streaming: SSE with `rechunk()` through `openAiEncoder(include_usage)`, which drops the usage chunk when the client did not ask for it. With PII `mask`, the re-chunked stream goes through spec 015's stream restorer (`StreamRestore.open(first).steps(...)`), exactly like a live stream: the client gets its own values and `x-switchyard-pii: masked`, the stored entry keeps the placeholders. No upstream span: hits are counted with `countCachedRequest` on the shared `switchyard_requests_total` instrument.
 
 ## 5. Data (migration `0005_semantic_cache`, AC-1)
 
@@ -185,7 +185,7 @@ sequenceDiagram
 ## 8. Open decisions (recommendations taken; reversible)
 
 1. **`/v1/messages` does not use the cache** in this spec: its responses are converted per route and it has its own native pass-through. It reports `cacheStatus: "bypass"`. A later spec can key on the canonical request.
-2. **Streamed hits are not PII-restored**, like streamed misses until spec 015. Spec 015 (parallel) restores streams inside `streamChat`; the hit SSE writer in `proxy/cached.ts` is a second place it must cover (noted for the integrator).
+2. **Streamed hits are PII-restored with spec 015's restorer** (added when rebasing on 015): `proxy/cached.ts` opens the request's `StreamRestore` on the re-chunked hit. The stream cache tap records the upstream (masked) chunks, never the restored ones.
 3. **Metric label values use the usage-event spelling** (`semantic_hit`), the response header the spec's `semantic-hit`.
 4. **Exact layer default store** is in memory per instance (`AppDeps.exactCache`); `server.ts` always wires Redis. Semantic layer has no default (off without Postgres).
 5. **Cleanup runs in every gateway instance** hourly (and once at start); the `DELETE` is idempotent.
@@ -229,12 +229,12 @@ Request span attributes: `switchyard.cache.result` (status), `switchyard.cache.l
 - **Large responses in Redis**: bounded by TTL; Redis `maxmemory` policy is the operator's (README).
 - **Merge with 015**: both touch `stream.ts`; edits are additive (`tap`).
 
-## 12. Verification (2026-10-13)
+## 12. Verification (2026-10-13, after rebasing on main with spec 015)
 
 | Check | Result |
 |---|---|
-| `pnpm verify` (lint, typecheck, unit tests with coverage, build) | ✅ 1297 passed, 1 skipped; lines 86.6 % |
-| `pnpm test:int` | ✅ cache, semantic, db and usage-pipeline files re-run green after fixes; first full run had a Redpanda container start failure (`usage-pipeline`, unrelated, passed on re-run) |
+| `pnpm verify` (lint, typecheck, unit tests with coverage, build) | ✅ 1348 passed, 1 skipped; lines 87.3 % |
+| `pnpm test:int` (full suite, once, under the Docker lock) | ✅ 16 files, 91 passed |
 | `pnpm test:contract` | ✅ 36 passed, 3 skipped (Ollama-only), incl. streamed cache hits (text, tool calls) |
 | `pnpm test:contract:py` | ✅ OpenAI Python SDK file: 12 passed incl. `test_streamed_cache_hit` (scratch venv; the Anthropic Python file was skipped locally because its package install was broken on this machine, CI runs it) |
 | Compose smoke (miss → hit step) | not run locally (owner rule); runs in CI |
