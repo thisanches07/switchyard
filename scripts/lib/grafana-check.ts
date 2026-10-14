@@ -3,7 +3,12 @@
  * JSON/YAML, unique dashboard uids, only provisioned datasources, and only metric names the code
  * emits (the catalogue) or that are allowlisted. Pure: files and catalogue are passed in.
  */
-import { parse as parseYaml } from "yaml";
+import { createRequire } from "node:module";
+
+// Loaded on first use: the Compose smoke test imports `dashboardMetrics` from this file and runs
+// from a clean clone without `pnpm install`, so a top-level import of a package would break it.
+const require = createRequire(import.meta.url);
+const parseYaml = (text: string): unknown => (require("yaml") as typeof import("yaml")).parse(text);
 
 export interface GrafanaFile {
   path: string;
