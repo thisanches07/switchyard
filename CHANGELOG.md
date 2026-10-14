@@ -31,7 +31,9 @@ Nothing yet beyond the planned 0.1.0 below.
   circuit breakers, timeouts and config hot reload (spec 008).
 - PII redaction (`off`, `mask`, `block` per key), including restoring masked values in streamed
   answers (specs 010, 015).
-- OpenTelemetry traces and metrics, Docker Compose stack for local development (spec 001).
+- Exact cache in Redis and opt-in semantic cache in pgvector, with streamed hits (spec 009).
+- OpenTelemetry traces and metrics following the GenAI conventions, Grafana dashboards and alert
+  rules as code (specs 001, 011), and a Docker Compose stack for local development.
 - Multi-arch (`linux/amd64`, `linux/arm64`) images `ghcr.io/thisanches07/switchyard-gateway` and
   `ghcr.io/thisanches07/switchyard-worker`, a tag-driven release workflow, a production Compose
   profile behind Caddy (TLS), `pnpm demo:key`, Terraform and cloud-init for Oracle Cloud Always
