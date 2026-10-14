@@ -2,6 +2,7 @@ import { buildApp } from "./app.js";
 import { loadEnv } from "./config/env.js";
 import { ConfigError, formatConfigError } from "./config/errors.js";
 import { type LoadedConfig, loadConfig } from "./config/load.js";
+import { findDevSecrets } from "./config/secrets.js";
 import { DrizzleBudgetStore } from "./infra/db/budget-store.js";
 import { createDatabase } from "./infra/db/client.js";
 import { DrizzleKeyStore } from "./infra/db/key-store.js";
@@ -29,6 +30,10 @@ import { createUsagePublisher } from "./modules/usage/publisher.js";
 function loadSettings() {
   try {
     const env = loadEnv(process.env);
+    if (env.SWITCHYARD_REQUIRE_SECRETS) {
+      const issues = findDevSecrets(env);
+      if (issues.length > 0) throw new ConfigError("environment", issues);
+    }
     const config = loadConfig(env.SWITCHYARD_CONFIG, process.env);
     if (config.usage.enabled && !env.KAFKA_BROKERS) {
       throw new ConfigError("environment", [

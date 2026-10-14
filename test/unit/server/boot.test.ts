@@ -82,6 +82,20 @@ describe("server boot", () => {
     expect(run.output().stderr).toContain("KAFKA_BROKERS: is required when usage.enabled is true");
   }, 60_000);
 
+  it("refuses the dev defaults when SWITCHYARD_REQUIRE_SECRETS=true (spec 013)", async () => {
+    const run = start({
+      ...baseEnv,
+      SWITCHYARD_REQUIRE_SECRETS: "true",
+      ADMIN_TOKEN: "dev-only-admin-token-change-me",
+    });
+    expect(await run.exited).toBe(1);
+    const { stderr } = run.output();
+    expect(stderr).toContain("Invalid configuration in environment");
+    expect(stderr).toContain("ADMIN_TOKEN: is a dev-only default");
+    expect(stderr).toContain("DATABASE_URL: uses the dev database password");
+    expect(stderr).not.toContain("dev-only-admin-token-change-me");
+  }, 60_000);
+
   it("starts and serves /healthz even when dependencies are down", async () => {
     const run = start(baseEnv);
     const url = await new Promise<string>((resolveUrl, reject) => {

@@ -9,7 +9,7 @@ the full `pnpm verify` runs once at the end. Docker- and Terraform-heavy checks 
 - [x] **T2. Tracked-secrets check and .gitignore** — AC-10
   - Test: `test/unit/scripts/tracked-secrets.test.ts` ("flags state, .terraform, tfvars and env files", "allows examples and the lock file"), plus the repo's own `git ls-files` passes.
   - Files: `scripts/lib/tracked-secrets.ts`, `scripts/check-tracked-secrets.ts`, `.gitignore`, `.github/workflows/ci.yml`.
-- [ ] **T3. Gateway refuses dev secrets when required** — AC-4
+- [x] **T3. Gateway refuses dev secrets when required** — AC-4
   - Test: `test/unit/config/secrets.test.ts` ("lists dev-only ADMIN_TOKEN, KEY_PEPPER and the dev DB password", "accepts real values", "flag parsing").
   - Files: `src/config/secrets.ts`, `src/config/env.ts`, `src/server.ts`.
 - [ ] **T4. Dockerfile targets + dev Compose images** — AC-1, AC-2
