@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "runId": "fixture-20260101T000000Z-aaaaaaa",
+  "kind": "full",
+  "fixture": true,
+  "startedAt": "2026-01-01T00:00:00.000Z",
+  "finishedAt": "2026-01-01T00:20:00.000Z",
+  "host": {
+    "cpuModel": "FIXTURE CPU (not a real machine)",
+    "cpuCores": 4,
+    "ramBytes": 17179869184,
+    "os": {
+      "platform": "fixture",
+      "release": "0",
+      "version": "fixture"
+    }
+  },
+  "docker": {
+    "clientVersion": "0.0.0-fixture",
+    "serverVersion": "0.0.0-fixture",
+    "operatingSystem": "fixture",
+    "ncpu": 4,
+    "memTotalBytes": 8589934592
+  },
+  "node": "v24.0.0-fixture",
+  "k6": {
+    "image": "grafana/k6:fixture",
+    "digest": "sha256:fixture",
+    "version": "fixture"
+  },
+  "images": {
+    "gateway": "sha256:fixture-gateway",
+    "mockUpstream": "sha256:fixture-mock"
+  },
+  "git": {
+    "commit": "aaaaaaa0000000000000000000000000fixture0",
+    "dirty": false
+  },
+  "configHash": "sha256:fixture",
+  "publishable": true,
+  "notPublishableReasons": []
+}

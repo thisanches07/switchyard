@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "prometheusUrl": "http://fixture",
+  "scenarios": {
+    "no-cache": {
+      "p50": 2,
+      "p95": 4,
+      "p99": 6,
+      "count": 1000,
+      "reason": null,
+      "queries": []
+    },
+    "exact-cache": {
+      "p50": 1,
+      "p95": 2,
+      "p99": 3,
+      "count": 1000,
+      "reason": null,
+      "queries": []
+    },
+    "streaming": {
+      "p50": null,
+      "p95": null,
+      "p99": null,
+      "count": null,
+      "reason": "metric not exported",
+      "queries": []
+    }
+  }
+}

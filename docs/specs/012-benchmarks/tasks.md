@@ -35,7 +35,7 @@ One commit per task, ending in `[spec-012]`. Lint, typecheck and the task's test
   - Do: `bench/lib/metrics.ts`.
   - Test: `metrics.test.ts` › PromQL for each quantile and the count with the configured selector and window; Prometheus vector parsed to ms; empty result → `null` with "metric not exported".
 
-- [ ] **T7. Report generator and published tables**
+- [x] **T7. Report generator and published tables**
   - ACs: AC-6, AC-7, AC-8, AC-9
   - Do: `bench/lib/runs.ts`, `bench/lib/render.ts`, `bench/report.ts`, `bench/target-issues.json`, markers in `docs/benchmarks.md` and README; fixtures in `test/fixtures/bench/`.
   - Test: `render.test.ts` › no runs → "No published run yet" and no digits in the tables; fixture runs: T1/T2 met and missed, issue link or "issue required", server overhead "not available", median of a batch, batch under three runs noted, smoke/dirty/fixture runs excluded; `published-tables.test.ts` › committed docs and README sections equal the generator's output.
