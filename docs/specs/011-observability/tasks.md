@@ -1,9 +1,9 @@
 # Tasks 011: Observability (dashboards, alerts and GenAI conventions as code)
 
-- **Status:** In progress (T13 blocked)
+- **Status:** Done (2026-10-14)
 - **Spec:** [spec.md](spec.md) · **Design:** [design.md](design.md)
 
-One commit per task, ending in `[spec-011]`. T13 is blocked on a working local stack (owner); T14 was done after rebasing on spec 009.
+One commit per task, ending in `[spec-011]`. T13 was done by the owner on 2026-10-14 against the local Compose stack; T14 was done after rebasing on spec 009.
 
 - [x] **T1. Metric catalogue and Grafana file check**
   - ACs: AC-8
@@ -70,7 +70,7 @@ One commit per task, ending in `[spec-011]`. T13 is blocked on a working local s
   - ACs: all
   - Do: `pnpm verify`, `pnpm test:int` (if touched), contract tests; AC → test table below.
 
-- [ ] **T13. Screenshots** — *blocked: needs a working local stack (owner)*
+- [x] **T13. Screenshots** — captured from the local Compose stack fed by `pnpm demo:traffic` (headless Chrome, 1600 px wide, light theme, last 15 minutes) at commit `0fba4b3`
   - ACs: AC-11
   - Do: follow the checklist in `docs/observability.md` § Screenshots; commit `docs/assets/dashboard-overview.png` and `docs/assets/dashboard-providers.png`; in the README Observability section, uncomment the screenshot block and fill in the commit hash in both captions. Then mark spec 011 Done.
 
@@ -97,5 +97,5 @@ After rebasing on spec 009 and 015 (T14): `pnpm verify` green (1407 unit tests, 
 | AC-8 | `test/unit/scripts/grafana-check.test.ts`, `test/unit/scripts/metric-catalogue.test.ts`, `grafana-files.test.ts` › repo passes; `pnpm check:grafana` in `pnpm verify` |
 | AC-9 | `scripts/compose-smoke.ts` › "Grafana provisions the dashboards and alert rules; Overview metrics have series" (CI); `usage/token-metrics.test.ts` › dropped counter at 0 |
 | AC-10 | `test/unit/scripts/traffic-plan.test.ts` |
-| AC-11 | README text and caption template done; screenshots: T13 |
+| AC-11 | ✅ README screenshots `docs/assets/dashboard-{overview,providers}.png`, captured at `0fba4b3` |
 | AC-12 | `docs/observability.md` (review) |

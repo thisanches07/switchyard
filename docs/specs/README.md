@@ -30,7 +30,7 @@ Status: `planned` → `draft` → `approved` → `in progress` → `done`.
 
 | # | Spec | Scope | Depends on | Status |
 |---|---|---|---|---|
-| 011 | observability | Grafana dashboards as code (overview, cost, providers, cache), GenAI semantic conventions on spans, alert rules examples, screenshots in README | 008 | in progress |
+| 011 | observability | Grafana dashboards as code (overview, cost, providers, cache), GenAI semantic conventions on spans, alert rules examples, screenshots in README | 008 | done |
 | 012 | benchmarks | k6 scenarios (`no-cache`, `exact-cache`, `streaming`, `rate-limited`, `chaos`), mock provider tuning, methodology and hardware in `docs/benchmarks.md`, numbers published in README | 009, 011 | in progress |
 | 013 | deploy | Multi-arch Docker images to GHCR, Terraform for Oracle Always Free (ADR-0012), cloud-init + Compose, demo key with hard budget, release workflow | 012 | done |
 
