@@ -18,7 +18,7 @@ the full `pnpm verify` runs once at the end. Docker- and Terraform-heavy checks 
 - [x] **T5. Production Compose, Caddy and demo config** — AC-4, AC-5
   - Test: `test/unit/deploy/compose.test.ts` ("only caddy publishes 80 and 443", "no build", "versioned GHCR images", "secrets are required", "require-secrets flag on", "demo config loads").
   - Files: `deploy/compose/{compose.yml,Caddyfile,switchyard.env.example,config/*}`.
-- [ ] **T6. `pnpm demo:key`** — AC-6
+- [x] **T6. `pnpm demo:key`** — AC-6
   - Test: `test/unit/scripts/demo-key.test.ts` (args parsing, plan: create / reuse+patch / rotate, against a fake admin API).
   - Files: `scripts/lib/demo-key.ts`, `scripts/demo-key.ts`, `package.json`.
 - [ ] **T7. Production stack smoke test + deploy workflow** — AC-2, AC-4, AC-5, AC-6
