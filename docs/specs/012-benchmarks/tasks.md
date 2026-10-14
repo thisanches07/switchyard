@@ -50,7 +50,7 @@ One commit per task, ending in `[spec-012]`. Lint, typecheck and the task's test
   - Do: `.github/workflows/bench-smoke.yml`.
   - Test: CI job `bench-smoke` on a PR touching `bench/`, `src/` or `Dockerfile`.
 
-- [ ] **T10. Docs**
+- [x] **T10. Docs**
   - ACs: AC-11
   - Do: `docs/benchmarks.md` (methodology, how to run, how to read, publish checklist), README benchmark section and quality gates.
   - Test: `published-tables.test.ts` (generated parts unchanged).
