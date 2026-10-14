@@ -141,7 +141,7 @@ All tests are under `test/unit/bench/`.
 ## Risks
 - Same-host load generation and Docker Desktop's shared VM add noise (ADR-0021); the paired baseline and the server-side histogram are the mitigations, and the docs state it next to every table.
 - Server-side window precision: metrics are exported every 15 s, so the Prometheus window can include up to one export interval of warm-up, and histogram buckets make low-millisecond quantiles coarse. Published as a cross-check with that caveat; the target uses the client-side measure.
-- Until spec 009 lands, `exact-cache` measures only latency (no hit ratio) and runs with `requireCacheHeader` off.
+- `exact-cache` requires the spec 009 header (`requireCacheHeader: true`); its first requests are misses, so its percentiles include a few misses.
 
 ## Open decisions (proceeding with the recommended option; reversible)
 1. **Cache on/off between scenarios: second gateway vs hot reload.** Options: (a) a second gateway service with a cache-enabled config; (b) one gateway, flip `cache.exact.enabled` and `POST /admin/config/reload`; (c) restart the gateway between scenarios. Chosen (a): no runtime mutation, both configs are committed files covered by the config hash, and it does not depend on whether spec 009's cache honours hot reload. Cost: one more container (~100 MB) during the run.

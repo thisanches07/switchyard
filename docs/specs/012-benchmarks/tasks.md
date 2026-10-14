@@ -57,12 +57,12 @@ One commit per task, ending in `[spec-012]`. Lint, typecheck and the task's test
 
 ### Blocked (finish after the dependencies merge)
 
-- [ ] **T11. Exact-cache hit ratio (blocked by spec 009)**
+- [x] **T11. Exact-cache hit ratio (spec 009 merged; end-to-end check is the PR's CI smoke)**
   - ACs: AC-3 (`exact-cache`), AC-4
   - Do: set `requireCacheHeader` to `true` for `exact-cache` in both profiles of `bench/bench.config.json` once 009's `x-switchyard-cache` header is on `main`; confirm the CI smoke records hits after the first miss.
   - Test: CI `bench-smoke` with `REQUIRE_CACHE_HEADER=true`; `validate.test.ts` › cache header classification (already in place).
 
-- [ ] **T12. Server-side overhead from `switchyard_gateway_overhead_seconds` (blocked by spec 011)**
+- [x] **T12. Server-side overhead from `switchyard_gateway_overhead_seconds` (spec 011 merged; selectors use its `operation`, `stream`, `status`, `cache` labels; end-to-end check is the PR's CI smoke)**
   - ACs: AC-7
   - Do: align `serverMetrics.selectors` in `bench/bench.config.json` with 011's final labels and the Prometheus job label of each gateway; confirm the CI smoke's `server-metrics.json` has non-null quantiles.
   - Test: `metrics.test.ts` (in place); CI `bench-smoke` log shows the server-side overhead rows.

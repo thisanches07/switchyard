@@ -37,7 +37,8 @@ The full rationale is in [ADR-0021](adr/0021-benchmark-methodology.md); in short
 - **Same host, no isolation.** Docker Desktop runs every container in one WSL2 VM whose vCPUs Windows schedules alongside everything else: there is no CPU pinning. k6 competes with the gateway; the paired baseline cancels part of this, not all. Numbers describe the stated machine, not production.
 - **Difference of percentiles** approximates per-request overhead and can disagree with it in the tail; the server-side histogram is the cross-check.
 - **Server-side window.** The gateway exports metrics every 15 s, so the Prometheus window can include up to one export interval of warm-up, and histogram buckets make low-millisecond quantiles coarse.
-- **Exact-cache hit ratio** needs the `x-switchyard-cache` header of spec 009; until it is on `main` the scenario reports latency only and "hit ratio not measured".
+- **Exact-cache** responses must carry `x-switchyard-cache: hit|miss` (spec 009); the first requests are misses, so its latency percentiles mix a few misses with the hits, and the hit ratio is published next to them.
+- **Server-side labels.** The scenarios run one after the other, so the Prometheus window, not a per-gateway label, separates them; selectors use spec 011's `operation`, `stream`, `status` and `cache` labels (`cache="hit"` for `exact-cache`, `status="2xx"` for `rate-limited`, since rejected requests are never admitted).
 
 ## Running it
 
@@ -68,7 +69,7 @@ The command starts the stack, creates a team and keys through the admin API, run
 
 ## Reading the results
 - Each run table shows, per scenario, p50/p95/p99 and the achieved request rate of the steady phase through the gateway, the same for the direct baseline, the client-side overhead, the server-side overhead, and the ok / not-ok counts (failed plus rejected).
-- `n/a` or "not available" means the value was not measured (for example the server-side metric before spec 011); it is never shown as zero.
+- `n/a` or "not available" means the value was not measured (for example a server-side quantile with no series in the window); it is never shown as zero.
 - **Valid: no** means k6 could not keep the arrival rate (load generator saturated); such a run is published but does not count as a measurement of the gateway.
 - Targets show the measured value next to **met** or **missed**; a miss links its issue, or says an issue is still required.
 

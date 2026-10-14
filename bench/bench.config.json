@@ -13,12 +13,13 @@
   "serverMetrics": {
     "metric": "switchyard_gateway_overhead_seconds",
     "selectors": {
-      "no-cache": "job=\"switchyard-gateway\",stream=\"false\"",
-      "exact-cache": "job=\"switchyard-gateway-cache\"",
-      "streaming": "job=\"switchyard-gateway\",stream=\"true\"",
-      "rate-limited": "job=\"switchyard-gateway\",stream=\"false\"",
-      "chaos": "job=\"switchyard-gateway\",stream=\"false\""
-    }
+      "no-cache": "operation=\"chat\",stream=\"false\"",
+      "exact-cache": "operation=\"chat\",stream=\"false\",cache=\"hit\"",
+      "streaming": "operation=\"chat\",stream=\"true\"",
+      "rate-limited": "operation=\"chat\",stream=\"false\",status=\"2xx\"",
+      "chaos": "operation=\"chat\",stream=\"false\""
+    },
+    "$comment": "Labels of spec 011 (operation, stream, status class, cache). Scenarios run one at a time, so the time window separates them; the cache-enabled gateway only serves exact-cache."
   },
   "profiles": {
     "full": {
@@ -37,7 +38,7 @@
           "steadySeconds": 120,
           "preAllocatedVUs": 20,
           "maxVUs": 200,
-          "requireCacheHeader": false
+          "requireCacheHeader": true
         },
         "streaming": {
           "rate": 20,
@@ -79,7 +80,7 @@
           "steadySeconds": 5,
           "preAllocatedVUs": 5,
           "maxVUs": 20,
-          "requireCacheHeader": false
+          "requireCacheHeader": true
         },
         "streaming": {
           "rate": 5,

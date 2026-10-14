@@ -46,6 +46,16 @@ describe("bench.config.json (AC-3, ADR-0021)", () => {
     expect(config.profiles.full.scenarios["rate-limited"].rpm).toBeGreaterThan(0);
   });
 
+  it("requires the spec 009 cache header and queries spec 011's overhead labels", () => {
+    for (const profile of ["full", "smoke"] as const) {
+      expect(config.profiles[profile].scenarios["exact-cache"].requireCacheHeader).toBe(true);
+    }
+    expect(config.serverMetrics.metric).toBe("switchyard_gateway_overhead_seconds");
+    expect(config.serverMetrics.selectors["exact-cache"]).toContain('cache="hit"');
+    expect(config.serverMetrics.selectors.streaming).toContain('stream="true"');
+    expect(config.serverMetrics.selectors["rate-limited"]).toContain('status="2xx"');
+  });
+
   it("pins the k6 image by version tag and digest", () => {
     expect(config.k6Image).toMatch(/^grafana\/k6:\d+\.\d+\.\d+@sha256:[0-9a-f]{64}$/);
   });
