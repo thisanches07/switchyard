@@ -163,6 +163,10 @@ export function evaluateScenario(data: RunData, name: ScenarioName): ScenarioRes
   const direct = record && BASELINE_SCENARIOS.includes(name) ? stats("direct") : null;
   const serverOverhead = data.serverMetrics?.scenarios[name] ?? null;
   const clientOverhead = percentileDifference(gateway?.latency ?? null, direct?.latency ?? null);
+  const clientTtfbOverhead = percentileDifference(gateway?.ttfb ?? null, direct?.ttfb ?? null);
+  // Server-side overhead of a stream stops at the first byte (spec 011), so compare it with the
+  // client-side TTFB difference, not with the whole-stream difference.
+  const comparableClientOverhead = name === "streaming" ? clientTtfbOverhead : clientOverhead;
   const notes: string[] = [];
 
   for (const [target, pass] of [
@@ -175,8 +179,8 @@ export function evaluateScenario(data: RunData, name: ScenarioName): ScenarioRes
       );
     }
   }
-  if (clientOverhead && serverOverhead?.p95 != null) {
-    const gap = Math.abs(clientOverhead.p95 - serverOverhead.p95);
+  if (comparableClientOverhead && serverOverhead?.p95 != null) {
+    const gap = Math.abs(comparableClientOverhead.p95 - serverOverhead.p95);
     if (gap > DISAGREEMENT_MS) {
       notes.push(
         `client-side and server-side p95 overhead differ by ${gap.toFixed(1)} ms (> ${DISAGREEMENT_MS} ms)`,
@@ -192,7 +196,7 @@ export function evaluateScenario(data: RunData, name: ScenarioName): ScenarioRes
     gateway,
     direct,
     clientOverhead,
-    clientTtfbOverhead: percentileDifference(gateway?.ttfb ?? null, direct?.ttfb ?? null),
+    clientTtfbOverhead,
     serverOverhead,
     successPct: gateway && gateway.requests > 0 ? (gateway.ok / gateway.requests) * 100 : null,
     cacheHitRatio:
