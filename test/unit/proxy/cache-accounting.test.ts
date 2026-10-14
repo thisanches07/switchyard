@@ -97,7 +97,8 @@ describe("cache hits: accounting and observability (spec 009, AC-8, AC-9, AC-13)
 
   it("reconciles the hit's token reservation to the stored usage (AC-8)", async () => {
     const store = new MemoryKeyStore();
-    const limiter = new MemoryRateLimiter();
+    // A frozen clock: no refill between the two requests, so the difference is exact.
+    const limiter = new MemoryRateLimiter({ now: () => NOW });
     const { chat } = await setup({ store, limiter, authenticated: false });
     const { key, record } = await store.issueKey({ team: "tpm", limits: { tpm: 10_000 } });
     const auth = { authorization: `Bearer ${key}` };
@@ -107,8 +108,7 @@ describe("cache hits: accounting and observability (spec 009, AC-8, AC-9, AC-13)
     expect(hit.headers["x-switchyard-cache"]).toBe("hit");
     const afterHit = await limiter.peek(`sy:rl:key:${record.id}:tok`, 10_000);
     // Reserved 2 + 1000, reconciled to the stored 2 + 6.
-    expect(afterMiss - afterHit).toBeGreaterThan(7);
-    expect(afterMiss - afterHit).toBeLessThan(9);
+    expect(afterMiss - afterHit).toBe(8);
   });
 
   it("adds 0 to the budget, and an exhausted budget gets no hit (AC-8)", async () => {

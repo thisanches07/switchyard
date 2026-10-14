@@ -43,16 +43,19 @@ function tracked<T extends object>(store: T, writes: (keyof T)[]) {
 const QUESTION = "What is the capital of France?";
 const NEAR = "capital of France?";
 const embedder = () => fakeEmbedder({ [QUESTION]: vec(1, 0), [NEAR]: vec(1, 0.1) });
-const ask = (question: string, extra: Record<string, unknown> = {}) => ({
-  model: "fast",
-  temperature: 0,
-  max_tokens: 50,
-  messages: [
-    { role: "system", content: "Answer in one word." },
-    { role: "user", content: question },
-  ],
-  ...extra,
-});
+const ask = (question: string, extra: Record<string, unknown> = {}) => {
+  const { system = "Answer in one word.", ...params } = extra;
+  return {
+    model: "fast",
+    temperature: 0,
+    max_tokens: 50,
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: question },
+    ],
+    ...params,
+  };
+};
 
 describe("response cache isolation on Redis and Postgres (spec 009, AC-10, AC-12)", () => {
   let pg: StartedPostgreSqlContainer;
@@ -90,7 +93,8 @@ describe("response cache isolation on Redis and Postgres (spec 009, AC-10, AC-12
     const setup = await cacheApp({
       config: cacheConfig({
         exact: { enabled: true, ttlSeconds: 60 },
-        semantic: { enabled: true, similarityThreshold: 0.95 },
+        // Generous lookup budget: the timeout itself is unit-tested on a manual clock.
+        semantic: { enabled: true, similarityThreshold: 0.95, lookupTimeoutMs: 30_000 },
       }),
       store,
       exactCache: exact.store,
@@ -139,15 +143,7 @@ describe("response cache isolation on Redis and Postgres (spec 009, AC-10, AC-12
   it.each([
     ["max_tokens", { max_tokens: 51 }],
     ["response_format", { response_format: { type: "json_object" } }],
-    [
-      "system prompt",
-      {
-        messages: [
-          { role: "system", content: "Answer in two words." },
-          { role: "user", content: QUESTION },
-        ],
-      },
-    ],
+    ["system prompt", { system: "Answer in two words." }],
   ])("does not share entries within a team when %s differs (AC-10)", async (_name, extra) => {
     const { keyOf, spies } = await gateway();
     const team = await keyOf(`params-${_name}`);
