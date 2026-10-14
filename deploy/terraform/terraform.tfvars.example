@@ -1,0 +1,15 @@
+# Copy to terraform.tfvars (git-ignored) and replace the placeholders. No secrets belong here:
+# OCI credentials stay in ~/.oci/config and the app's secrets in the env file on the VM.
+
+region           = "sa-saopaulo-1"                                       # your tenancy's home region
+compartment_ocid = "ocid1.tenancy.oc1..replace-with-your-tenancy-or-compartment-ocid"
+operator_cidr    = "203.0.113.10/32"                                     # your public IP as a /32
+ssh_public_key   = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIReplaceWithYourPublicKey you@laptop"
+
+# Optional
+# oci_config_profile         = "DEFAULT"
+# switchyard_version         = "0.1.0"
+# availability_domain_number = 1
+# ocpus                      = 2
+# memory_in_gbs              = 12
+# boot_volume_size_in_gbs    = 50
