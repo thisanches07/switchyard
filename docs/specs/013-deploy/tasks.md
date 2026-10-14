@@ -41,7 +41,7 @@ the full `pnpm verify` runs once at the end. Docker- and Terraform-heavy checks 
 
 ## Verification (2026-10-13)
 
-Local: `pnpm verify` green (1322 unit tests); Terraform 1.16.5 `fmt -check`, `init -backend=false -lockfile=readonly`, `validate` and `terraform test` (9 runs, mocked provider) pass. Docker-based checks were not run locally (owner rule) and first run in the PR's CI.
+Local, after rebasing on specs 009 and 011: `pnpm verify` green (1527 unit tests); Terraform 1.16.5 `fmt -check`, `init -backend=false -lockfile=readonly`, `validate` and `terraform test` (9 runs, mocked provider) pass. Docker-based checks were not run locally (owner rule) and first run in the PR's CI.
 
 | AC | Proof | Where |
 |---|---|---|
