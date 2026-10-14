@@ -128,7 +128,7 @@ Implementations: `infra/redis/exact-cache.ts` (`MGET`, `SET … EX`), `infra/db/
 
 ### 4.3 Serving a hit
 
-Non-streaming: `settle()` with the stored result (reconciles TPM to stored usage, `outcome.succeed` with stored usage), then `restoreChatResponse` with the request's own restore map (AC-11). Streaming: SSE with `rechunk()` through `openAiEncoder(include_usage)`, which drops the usage chunk when the client did not ask for it; placeholders stay, like any stream until spec 015 (`x-switchyard-pii: masked-unrestored` is already set by the PII stage). No upstream span: hits are counted with `countCachedRequest` on the shared `switchyard_requests_total` instrument.
+Non-streaming: reconcile the TPM reservation to the stored usage and `outcome.succeed` with it (the same steps as `settle()`, done directly since no attempt runs), then `restoreChatResponse` with the request's own restore map (AC-11). Streaming: SSE with `rechunk()` through `openAiEncoder(include_usage)`, which drops the usage chunk when the client did not ask for it; placeholders stay, like any stream until spec 015 (`x-switchyard-pii: masked-unrestored` is already set by the PII stage). No upstream span: hits are counted with `countCachedRequest` on the shared `switchyard_requests_total` instrument.
 
 ## 5. Data (migration `0005_semantic_cache`, AC-1)
 
@@ -235,6 +235,6 @@ Request span attributes: `switchyard.cache.result` (status), `switchyard.cache.l
 |---|---|
 | `pnpm verify` (lint, typecheck, unit tests with coverage, build) | ✅ 1297 passed, 1 skipped; lines 86.6 % |
 | `pnpm test:int` | ✅ cache, semantic, db and usage-pipeline files re-run green after fixes; first full run had a Redpanda container start failure (`usage-pipeline`, unrelated, passed on re-run) |
-| `pnpm test:contract` (OpenAI Node SDK file) | ✅ 21 passed, incl. streamed cache hits (text, tool calls) |
-| `pnpm test:contract:py` | not run locally (pytest not installed); runs in CI |
+| `pnpm test:contract` | ✅ 36 passed, 3 skipped (Ollama-only), incl. streamed cache hits (text, tool calls) |
+| `pnpm test:contract:py` | ✅ OpenAI Python SDK file: 12 passed incl. `test_streamed_cache_hit` (scratch venv; the Anthropic Python file was skipped locally because its package install was broken on this machine, CI runs it) |
 | Compose smoke (miss → hit step) | not run locally (owner rule); runs in CI |
