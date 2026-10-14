@@ -62,7 +62,13 @@ describe("statusClass", () => {
 
 describe("RequestTiming", () => {
   const event = (overrides: Partial<UsageEvent> = {}) =>
-    ({ operation: "chat", stream: false, status: 200, ...overrides }) as UsageEvent;
+    ({
+      operation: "chat",
+      stream: false,
+      status: 200,
+      cacheStatus: "miss",
+      ...overrides,
+    }) as UsageEvent;
 
   function setup(start = 1_000) {
     let now = start;
@@ -89,7 +95,7 @@ describe("RequestTiming", () => {
       {
         durationMs: 26,
         overheadMs: 6,
-        labels: { operation: "chat", stream: "false", status: "2xx" },
+        labels: { operation: "chat", stream: "false", status: "2xx", cache: "miss" },
       },
     ]);
 
@@ -101,7 +107,7 @@ describe("RequestTiming", () => {
       {
         durationMs: 3,
         overheadMs: 3,
-        labels: { operation: "embeddings", stream: "false", status: "5xx" },
+        labels: { operation: "embeddings", stream: "false", status: "5xx", cache: "miss" },
       },
     ]);
   });
@@ -122,7 +128,7 @@ describe("RequestTiming", () => {
       {
         durationMs: 1_172,
         overheadMs: 2,
-        labels: { operation: "chat", stream: "true", status: "2xx" },
+        labels: { operation: "chat", stream: "true", status: "2xx", cache: "miss" },
       },
     ]);
   });

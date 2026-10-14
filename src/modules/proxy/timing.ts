@@ -35,6 +35,8 @@ export interface TimingLabels {
   operation: string;
   stream: string;
   status: string;
+  /** Spec 009 cache status: `hit`, `semantic_hit`, `miss` or `bypass`. */
+  cache: string;
 }
 
 export interface TimingRecord {
@@ -80,6 +82,7 @@ export function createRequestTiming(
         operation: event.operation,
         stream: String(event.stream),
         status: statusClass(event.status),
+        cache: event.cacheStatus,
       },
     });
   };

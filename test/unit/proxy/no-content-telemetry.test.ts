@@ -66,6 +66,8 @@ describe("no prompt or response content in telemetry (spec 011, AC-5, ADR-0010)"
       });
       expect(recorded, span.name).not.toContain(SENTINEL);
       for (const key of CONTENT_ATTRIBUTES) expect(span.attributes).not.toHaveProperty(key);
+      // Deprecated in favour of gen_ai.provider.name (spec 011, AC-4).
+      expect(span.attributes).not.toHaveProperty("gen_ai.system");
     }
     expect(logs.length).toBeGreaterThan(0);
     expect(JSON.stringify(logs)).not.toContain(SENTINEL);

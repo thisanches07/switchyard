@@ -4,6 +4,7 @@ import type { AuthRecord } from "../../../src/core/auth.js";
 import type { ChatChunk } from "../../../src/core/chat.js";
 import { upstreamError } from "../../../src/core/errors.js";
 import type { ChatProvider } from "../../../src/core/provider.js";
+import { MemoryExactCache } from "../../../src/infra/memory/exact-cache.js";
 import { testApp } from "../../helpers/app.js";
 import { testConfig } from "../../helpers/config.js";
 import { MemoryKeyStore } from "../../helpers/memory-key-store.js";
@@ -43,7 +44,16 @@ function scriptedProvider(timers: Timers, steps: Step[], chunkMs = 0): ChatProvi
     async chat() {
       next();
       return {
-        body: { id: "x", object: "chat.completion", choices: [] },
+        body: {
+          id: "chatcmpl-x",
+          object: "chat.completion",
+          created: 1,
+          model: "m",
+          choices: [
+            { index: 0, message: { role: "assistant", content: "ok" }, finish_reason: "stop" },
+          ],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        },
         usage: { inputTokens: 1, outputTokens: 1 },
       };
     },
@@ -92,24 +102,34 @@ describe("request duration and gateway overhead (spec 011, AC-1, AC-2)", () => {
   async function run(
     steps: Step[],
     payload: Record<string, unknown>,
-    options: { url?: string; chunkMs?: number } = {},
+    options: { url?: string; chunkMs?: number; times?: number } = {},
   ) {
     const timers = manualTimers();
     const provider = scriptedProvider(timers, steps, options.chunkMs);
     const { app } = await testApp({
       config: testConfig({
         retry: { maxAttempts: 2, baseDelayMs: 200, maxDelayMs: 2000 },
+        cache: { exact: { enabled: true, ttlSeconds: 60 } },
       }),
+      exactCache: new MemoryExactCache({ now: timers.now }),
       providers: new Map([["mock", provider]]),
       store: new SlowKeyStore(timers),
       usageRecorder: { record: () => timers.advance(RECORDER_MS) },
       routing: { timers, random: () => 0.5 },
     });
-    const res = await app.inject({
+    let res = await app.inject({
       method: "POST",
       url: options.url ?? "/v1/chat/completions",
       payload: { model: "mock/m", messages: [{ role: "user", content: "hi" }], ...payload },
     });
+    for (let i = 1; i < (options.times ?? 1); i += 1) {
+      await new Promise((resolve) => setImmediate(resolve));
+      res = await app.inject({
+        method: "POST",
+        url: options.url ?? "/v1/chat/completions",
+        payload: { model: "mock/m", messages: [{ role: "user", content: "hi" }], ...payload },
+      });
+    }
     // The response's `close` event follows on the next tick.
     await new Promise((resolve) => setImmediate(resolve));
     await app.close();
@@ -136,7 +156,12 @@ describe("request duration and gateway overhead (spec 011, AC-1, AC-2)", () => {
     expect(overhead.value.sum).toBeCloseTo(seconds(KEY_LOOKUP_MS + RECORDER_MS), TOLERANCE_DIGITS);
     expect(duration.value.count).toBe(1);
     // No team, key or model (AC-1).
-    expect(duration.attributes).toEqual({ operation: "chat", stream: "false", status: "2xx" });
+    expect(duration.attributes).toEqual({
+      operation: "chat",
+      stream: "false",
+      status: "2xx",
+      cache: "bypass",
+    });
     expect(overhead.attributes).toEqual(duration.attributes);
   });
 
@@ -151,7 +176,12 @@ describe("request duration and gateway overhead (spec 011, AC-1, AC-2)", () => {
       TOLERANCE_DIGITS,
     );
     expect(overhead.value.sum).toBeCloseTo(seconds(KEY_LOOKUP_MS), TOLERANCE_DIGITS);
-    expect(duration.attributes).toEqual({ operation: "chat", stream: "true", status: "2xx" });
+    expect(duration.attributes).toEqual({
+      operation: "chat",
+      stream: "true",
+      status: "2xx",
+      cache: "bypass",
+    });
   });
 
   it("one retry: both attempts and the backoff wait are excluded", async () => {
@@ -180,7 +210,12 @@ describe("request duration and gateway overhead (spec 011, AC-1, AC-2)", () => {
     );
     expect(res.statusCode).toBe(502);
     const overhead = await histogram("switchyard_gateway_overhead_seconds");
-    expect(overhead.attributes).toEqual({ operation: "chat", stream: "false", status: "5xx" });
+    expect(overhead.attributes).toEqual({
+      operation: "chat",
+      stream: "false",
+      status: "5xx",
+      cache: "bypass",
+    });
     expect(overhead.value.min).toBeGreaterThanOrEqual(0);
   });
 
@@ -191,7 +226,33 @@ describe("request duration and gateway overhead (spec 011, AC-1, AC-2)", () => {
       operation: "embeddings",
       stream: "false",
       status: "2xx",
+      cache: "bypass",
     });
+  });
+
+  it("a cache hit (spec 009) is all overhead: no upstream time", async () => {
+    const { res } = await run([{ ms: 100 }], { temperature: 0 }, { times: 2 });
+    expect(res.headers["x-switchyard-cache"]).toBe("hit");
+    const points = (await meters.points(
+      "switchyard_gateway_overhead_seconds",
+    )) as DataPoint<Histogram>[];
+    const durations = (await meters.points(
+      "switchyard_request_duration_seconds",
+    )) as DataPoint<Histogram>[];
+    const hit = (list: DataPoint<Histogram>[]) => list.find((p) => p.attributes.cache === "hit");
+    expect(hit(points)?.attributes).toEqual({
+      operation: "chat",
+      stream: "false",
+      status: "2xx",
+      cache: "hit",
+    });
+    // The key lookup is cached by then: the only gateway work is the usage recorder.
+    expect(hit(durations)?.value.sum).toBeCloseTo(seconds(RECORDER_MS), TOLERANCE_DIGITS);
+    expect(hit(points)?.value.sum).toBeCloseTo(seconds(RECORDER_MS), TOLERANCE_DIGITS);
+    expect(points.find((p) => p.attributes.cache === "miss")?.value.sum).toBeCloseTo(
+      seconds(KEY_LOOKUP_MS + RECORDER_MS),
+      TOLERANCE_DIGITS,
+    );
   });
 
   it("does not record requests rejected before admission", async () => {
