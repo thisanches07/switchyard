@@ -20,7 +20,7 @@ One commit per task, ending in `[spec-012]`. Lint, typecheck and the task's test
   - Do: `bench/k6/validate.js` (+ `.d.ts`), `bench/k6/lib.js`, one script per scenario.
   - Test: `validate.test.ts` › chat body, SSE stream (good, truncated, malformed, no `[DONE]`), error body, required gateway headers, cache header classification; expected content matches the mock provider.
 
-- [ ] **T4. Evaluation: statistics, overhead, targets, rate-limit bound**
+- [x] **T4. Evaluation: statistics, overhead, targets, rate-limit bound**
   - ACs: AC-4, AC-7, AC-8
   - Do: `bench/lib/k6-summary.ts`, `bench/lib/evaluate.ts`.
   - Test: `evaluate.test.ts` › summary extracted between markers; percentiles and achieved rate; client overhead as a difference of percentiles; T1/T2 met, missed and not evaluated; rate-limit bound; dropped iterations flagged.
