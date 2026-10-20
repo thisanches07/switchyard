@@ -105,7 +105,7 @@ services:
       retries: 10
 
   redpanda:
-    image: redpandadata/redpanda:v26.2.4
+    image: redpandadata/redpanda:v26.2.5
     command:
       - redpanda
       - start
