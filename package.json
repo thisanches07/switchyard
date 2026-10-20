@@ -68,7 +68,7 @@
     "@opentelemetry/sdk-node": "^0.223.0",
     "@opentelemetry/semantic-conventions": "^1.43.0",
     "drizzle-orm": "^0.45.4",
-    "fastify": "^5.12.5",
+    "fastify": "^5.12.7",
     "ioredis": "^6.0.0",
     "pg": "^8.23.1",
     "pino": "^10.4.0",
