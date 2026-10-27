@@ -141,7 +141,7 @@ services:
       - ./deploy/grafana/alerting:/otel-lgtm/grafana/conf/provisioning/alerting:ro
 
   ollama:
-    image: ollama/ollama:0.40.2
+    image: ollama/ollama:0.40.10
     profiles: [ollama]
     ports:
       - "127.0.0.1:11434:11434"
