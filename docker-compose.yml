@@ -92,7 +92,7 @@ services:
       retries: 10
 
   redis:
-    image: redis:7.4.11-alpine
+    image: redis:8.10.0-alpine
     command: ["redis-server", "--appendonly", "no", "--save", ""]
     ports:
       - "127.0.0.1:${REDIS_HOST_PORT:-6379}:6379"
